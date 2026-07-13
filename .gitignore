@@ -1,0 +1,76 @@
+﻿# =========================
+# Visual Studio / .NET
+# =========================
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# =========================
+# Flutter / Dart
+# =========================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/build/
+android/.gradle/
+android/local.properties
+ios/Flutter/ephemeral/
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# =========================
+# Android
+# =========================
+*.apk
+*.aab
+*.jks
+*.keystore
+key.properties
+local.properties
+
+# =========================
+# Configuración sensible
+# =========================
+appsettings.Development.json
+appsettings.Local.json
+.env
+.env.*
+secrets.json
+
+# =========================
+# Bases locales
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+
+# =========================
+# Logs y temporales
+# =========================
+*.log
+*.tmp
+*.temp
+error_flutter.txt
+
+# =========================
+# IDE
+# =========================
+.idea/
+.vscode/
+*.iml
+
+# =========================
+# Sistema operativo
+# =========================
+Thumbs.db
+Desktop.ini
+.DS_Store

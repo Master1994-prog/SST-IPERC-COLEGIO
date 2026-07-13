@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Audit\Interfaces\" />
+    <Folder Include="Audit\Enums\" />
+    <Folder Include="Audit\ValueObjects\" />
+    <Folder Include="IPERC\Interfaces\" />
+    <Folder Include="IPERC\ValueObjects\" />
+    <Folder Include="Maps\Interfaces\" />
+    <Folder Include="Maps\Enums\" />
+    <Folder Include="Maps\ValueObjects\" />
+    <Folder Include="Monitoring\Enums\" />
+    <Folder Include="Monitoring\Interfaces\" />
+    <Folder Include="Monitoring\ValueObjects\" />
+    <Folder Include="Organization\Interfaces\" />
+    <Folder Include="Organization\Enums\" />
+    <Folder Include="Organization\ValueObjects\" />
+    <Folder Include="Security\Interfaces\" />
+    <Folder Include="Security\Enums\" />
+    <Folder Include="Security\ValueObjects\" />
+    <Folder Include="SST\Interfaces\" />
+    <Folder Include="SST\Enums\" />
+    <Folder Include="SST\ValueObjects\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.17" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.17">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.17">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MySql.EntityFrameworkCore" Version="9.0.15" />
+  </ItemGroup>
+
+</Project>

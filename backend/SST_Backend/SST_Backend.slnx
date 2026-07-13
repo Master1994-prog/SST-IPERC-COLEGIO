@@ -1,0 +1,16 @@
+<Solution>
+  <Project Path="src/SST.Api/SST.Api.csproj" />
+  <Project Path="src/SST.Application/SST.Application.csproj">
+    <BuildDependency Project="src/SST.Domain/SST.Domain.csproj" />
+  </Project>
+  <Project Path="src/SST.Domain/SST.Domain.csproj" />
+  <Project Path="src/SST.Infrastructure/SST.Infrastructure.csproj">
+    <BuildDependency Project="src/SST.Application/SST.Application.csproj" />
+    <BuildDependency Project="src/SST.Domain/SST.Domain.csproj" />
+  </Project>
+  <Project Path="tests/SST.Tests/SST.Tests.csproj">
+    <BuildDependency Project="src/SST.Application/SST.Application.csproj" />
+    <BuildDependency Project="src/SST.Domain/SST.Domain.csproj" />
+    <BuildDependency Project="src/SST.Infrastructure/SST.Infrastructure.csproj" />
+  </Project>
+</Solution>
