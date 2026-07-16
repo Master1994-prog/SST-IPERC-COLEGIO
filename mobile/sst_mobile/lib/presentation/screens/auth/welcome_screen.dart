@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/sync_status_card.dart';
+import 'login_screen.dart';
+
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   void _goToLogin(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'La pantalla de inicio de sesión se creará en el siguiente paso.',
-        ),
-      ),
-    );
+    Navigator.pushNamed(context, LoginScreen.routeName);
   }
 
   @override
@@ -19,27 +16,27 @@ class WelcomeScreen extends StatelessWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: <Widget>[
-              const Spacer(),
+              const SizedBox(height: 16),
 
               Container(
-                width: 140,
-                height: 140,
+                width: 130,
+                height: 130,
                 decoration: BoxDecoration(
                   color: colors.primaryContainer,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   Icons.health_and_safety,
-                  size: 85,
+                  size: 78,
                   color: colors.primary,
                 ),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               Text(
                 'SST - IPERC',
@@ -50,7 +47,7 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               Text(
                 'Sistema móvil para la gestión de Seguridad y Salud '
@@ -58,14 +55,14 @@ class WelcomeScreen extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(
                   context,
-                ).textTheme.bodyLarge?.copyWith(height: 1.5),
+                ).textTheme.bodyLarge?.copyWith(height: 1.4),
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(18),
                   child: Column(
                     children: <Widget>[
                       _buildFeature(
@@ -74,7 +71,7 @@ class WelcomeScreen extends StatelessWidget {
                         title: 'Matrices IPERC',
                         description: 'Registrar peligros, riesgos y controles.',
                       ),
-                      const Divider(height: 28),
+                      const Divider(height: 26),
                       _buildFeature(
                         context,
                         icon: Icons.cloud_sync_outlined,
@@ -82,7 +79,7 @@ class WelcomeScreen extends StatelessWidget {
                         description:
                             'Trabajar sin internet y sincronizar después.',
                       ),
-                      const Divider(height: 28),
+                      const Divider(height: 26),
                       _buildFeature(
                         context,
                         icon: Icons.security_outlined,
@@ -95,7 +92,11 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 20),
+
+              const SyncStatusCard(),
+
+              const SizedBox(height: 20),
 
               FilledButton.icon(
                 onPressed: () => _goToLogin(context),
@@ -112,6 +113,8 @@ class WelcomeScreen extends StatelessWidget {
                 'Versión inicial 1.0.0',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+
+              const SizedBox(height: 12),
             ],
           ),
         ),
