@@ -18,4 +18,8 @@
     <PackageReference Include="MediatR" Version="14.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SST.Domain\SST.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

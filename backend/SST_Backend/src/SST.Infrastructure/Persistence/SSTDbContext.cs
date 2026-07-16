@@ -55,6 +55,10 @@ public class SSTDbContext : DbContext
 
     public DbSet<Usuario> Usuarios { get; set; }
 
+    public DbSet<Rol> Roles { get; set; }
+    public DbSet<UsuarioRol> UsuariosRoles { get; set; }
+
+
     #endregion
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

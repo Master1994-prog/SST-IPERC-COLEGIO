@@ -9,7 +9,6 @@
   <ItemGroup>
     <Folder Include="Identity\" />
     <Folder Include="Persistence\IPERC\" />
-    <Folder Include="Persistence\Security\" />
   </ItemGroup>
 
   <ItemGroup>
@@ -26,6 +25,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.9" />
     <PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.7" />
   </ItemGroup>
 

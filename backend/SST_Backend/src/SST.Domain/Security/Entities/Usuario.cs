@@ -63,6 +63,13 @@ public class Usuario : BaseAuditableEntity
 
     #endregion
 
+    #region Roles
+
+    public virtual ICollection<UsuarioRol> UsuariosRoles { get; set; }
+        = new List<UsuarioRol>();
+
+    #endregion
+
     #region Métodos de Dominio
 
     public void Activar()
