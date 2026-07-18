@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 
+import '../../../data/models/login_response_model.dart';
 import '../../../data/repositories/auth_repository.dart';
-// import '../home/home_screen.dart';
 import '../home/main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -23,8 +23,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final TextEditingController _passwordController = TextEditingController();
 
-  bool _ocultarPassword = true;
   bool _procesando = false;
+  bool _ocultarPassword = true;
 
   @override
   void dispose() {
@@ -33,40 +33,12 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  String? _validarUsuario(String? value) {
-    final String usuario = value?.trim() ?? '';
-
-    if (usuario.isEmpty) {
-      return 'Ingrese su usuario o correo';
-    }
-
-    if (usuario.length < 3) {
-      return 'Ingrese un usuario válido';
-    }
-
-    return null;
-  }
-
-  String? _validarPassword(String? value) {
-    final String password = value ?? '';
-
-    if (password.isEmpty) {
-      return 'Ingrese su contraseña';
-    }
-
-    if (password.length < 6) {
-      return 'La contraseña debe tener al menos 6 caracteres';
-    }
-
-    return null;
-  }
-
   Future<void> _iniciarSesion() async {
     FocusScope.of(context).unfocus();
 
     final bool formularioValido = _formKey.currentState?.validate() ?? false;
 
-    if (!formularioValido) {
+    if (!formularioValido || _procesando) {
       return;
     }
 
@@ -75,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await _authRepository.login(
+      final LoginResponseModel response = await _authRepository.login(
         usuario: _usuarioController.text.trim(),
         password: _passwordController.text,
       );
@@ -84,48 +56,30 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute<void>(
-          builder: (_) => MainNavigationScreen(
-            nombreUsuario: response.nombreUsuario,
-            rol: response.rol,
-          ),
-        ),
-        (Route<dynamic> route) => false,
+      _mostrarMensaje('Inicio de sesión correcto.');
+
+      _abrirPantallaPrincipal(
+        nombreUsuario: response.nombreUsuario,
+        rol: response.rol,
       );
     } on DioException catch (error) {
+      await _procesarErrorDio(error);
+    } on FormatException catch (error) {
       if (!mounted) {
         return;
       }
 
-      String mensaje = 'No se pudo conectar con el servidor.';
-
-      if (error.response?.statusCode == 401) {
-        mensaje = 'Usuario o contraseña incorrectos.';
-      } else if (error.response?.data is Map<String, dynamic>) {
-        final Map<String, dynamic> data =
-            error.response!.data as Map<String, dynamic>;
-
-        mensaje = data['mensaje']?.toString() ?? mensaje;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mensaje),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+      _mostrarMensaje(
+        'La respuesta del servidor no es válida: '
+        '${error.message}',
+        esError: true,
       );
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $error'),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      _mostrarMensaje('Ocurrió un error inesperado: $error', esError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -135,315 +89,394 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _recuperarPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('La recuperación de contraseña se implementará después.'),
-      ),
+  Future<void> _procesarErrorDio(DioException error) async {
+    if (!mounted) {
+      return;
+    }
+
+    final int? statusCode = error.response?.statusCode;
+
+    /*
+     * No se debe habilitar el acceso offline cuando el
+     * servidor respondió 401 o 403, porque eso significa
+     * que sí hubo conexión pero las credenciales o permisos
+     * son incorrectos.
+     */
+    if (statusCode == 401) {
+      _mostrarMensaje('Usuario o contraseña incorrectos.', esError: true);
+      return;
+    }
+
+    if (statusCode == 403) {
+      _mostrarMensaje(
+        'El usuario no tiene permiso para ingresar.',
+        esError: true,
+      );
+      return;
+    }
+
+    if (statusCode != null) {
+      final String mensajeServidor = _obtenerMensajeServidor(
+        error.response?.data,
+      );
+
+      _mostrarMensaje(mensajeServidor, esError: true);
+      return;
+    }
+
+    final bool esErrorConexion =
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.unknown;
+
+    if (!esErrorConexion) {
+      _mostrarMensaje('No se pudo completar la solicitud.', esError: true);
+      return;
+    }
+
+    final OfflineSession? sesionOffline = await _authRepository
+        .getOfflineSession();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (sesionOffline == null) {
+      _mostrarMensaje(
+        'No se pudo conectar con el servidor. '
+        'Primero debe iniciar sesión con conexión a internet.',
+        esError: true,
+      );
+      return;
+    }
+
+    final String usuarioIngresado = _usuarioController.text
+        .trim()
+        .toLowerCase();
+
+    final String usuarioGuardado = sesionOffline.nombreUsuario
+        .trim()
+        .toLowerCase();
+
+    /*
+     * Evita abrir la sesión guardada cuando se escribe
+     * un nombre de usuario diferente.
+     */
+    if (usuarioIngresado != usuarioGuardado) {
+      _mostrarMensaje(
+        'No existe una sesión offline guardada '
+        'para este usuario.',
+        esError: true,
+      );
+      return;
+    }
+
+    _mostrarMensaje('Ingresando en modo offline.');
+
+    _abrirPantallaPrincipal(
+      nombreUsuario: sesionOffline.nombreUsuario,
+      rol: sesionOffline.rol,
     );
   }
 
-  void _solicitarAcceso() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'El administrador de la institución debe crear su cuenta.',
-        ),
+  String _obtenerMensajeServidor(dynamic contenido) {
+    if (contenido is Map) {
+      final Map<String, dynamic> respuesta = Map<String, dynamic>.from(
+        contenido,
+      );
+
+      final dynamic mensaje =
+          respuesta['mensaje'] ?? respuesta['message'] ?? respuesta['title'];
+
+      if (mensaje != null && mensaje.toString().trim().isNotEmpty) {
+        return mensaje.toString();
+      }
+
+      final dynamic errors = respuesta['errors'];
+
+      if (errors is Map && errors.isNotEmpty) {
+        final List<String> mensajes = <String>[];
+
+        for (final dynamic value in errors.values) {
+          if (value is List) {
+            mensajes.addAll(value.map((dynamic item) => item.toString()));
+          } else if (value != null) {
+            mensajes.add(value.toString());
+          }
+        }
+
+        if (mensajes.isNotEmpty) {
+          return mensajes.join('\n');
+        }
+      }
+    }
+
+    return 'El servidor no pudo procesar la solicitud.';
+  }
+
+  void _abrirPantallaPrincipal({
+    required String nombreUsuario,
+    required String rol,
+  }) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            MainNavigationScreen(nombreUsuario: nombreUsuario, rol: rol),
       ),
+      (Route<dynamic> route) => false,
+    );
+  }
+
+  void _mostrarMensaje(String mensaje, {bool esError = false}) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(mensaje),
+          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
+        ),
+      );
+  }
+
+  void _volver() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _solicitarAcceso() {
+    _mostrarMensaje(
+      'La solicitud de acceso se implementará '
+      'en el módulo de usuarios.',
+    );
+  }
+
+  void _recuperarPassword() {
+    _mostrarMensaje(
+      'La recuperación de contraseña se '
+      'implementará próximamente.',
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final Size screenSize = MediaQuery.sizeOf(context);
+    final ColorScheme colores = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colores.surface,
       body: SafeArea(
         child: Stack(
           children: <Widget>[
             const Positioned(
-              top: -125,
-              left: -105,
-              child: _DecorativeCircle(size: 290, color: Color(0xFFE0F2F1)),
+              top: -120,
+              left: -110,
+              child: _DecoracionCircular(tamano: 310, color: Color(0xFFDDF2F2)),
             ),
             const Positioned(
-              top: -95,
-              right: -125,
-              child: _DecorativeCircle(size: 260, color: Color(0xFFE3F2FD)),
+              top: -120,
+              right: -140,
+              child: _DecoracionCircular(tamano: 330, color: Color(0xFFE1F0FD)),
             ),
-            SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight:
-                      screenSize.height -
-                      MediaQuery.paddingOf(context).vertical -
-                      36,
-                ),
-                child: IntrinsicHeight(
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        IconButton(
-                          tooltip: 'Regresar',
-                          onPressed: () => Navigator.maybePop(context),
-                          icon: const Icon(Icons.arrow_back_ios_new),
+            Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                children: <Widget>[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      tooltip: 'Volver',
+                      onPressed: _volver,
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 28),
+                    ),
+                  ),
+                  const SizedBox(height: 120),
+                  Center(
+                    child: Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2F1FD),
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: const Icon(
+                        Icons.health_and_safety,
+                        size: 48,
+                        color: Color(0xFF1565C0),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 38),
+                  Text(
+                    'Iniciar sesión',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          '¿Todavía no tiene acceso?',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: Colors.grey[700]),
                         ),
+                      ),
+                      TextButton(
+                        onPressed: _procesando ? null : _solicitarAcceso,
+                        child: const Text('Solicitar acceso'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _usuarioController,
+                    enabled: !_procesando,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const <String>[
+                      AutofillHints.username,
+                      AutofillHints.email,
+                    ],
+                    decoration: InputDecoration(
+                      hintText: 'Usuario o correo electrónico',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        borderSide: BorderSide(color: colores.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 20,
+                      ),
+                    ),
+                    validator: (String? value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Ingrese su usuario.';
+                      }
 
-                        const SizedBox(height: 72),
-
-                        Center(
-                          child: Container(
-                            width: 88,
-                            height: 88,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE3F2FD),
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            child: const Icon(
-                              Icons.health_and_safety,
-                              size: 54,
-                              color: Color(0xFF1565C0),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 34),
-
-                        Text(
-                          'Iniciar sesión',
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF17202A),
-                              ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Row(
-                          children: <Widget>[
-                            Text(
-                              '¿Todavía no tiene acceso?',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: Colors.black54),
-                            ),
-                            TextButton(
-                              onPressed: _procesando ? null : _solicitarAcceso,
-                              child: const Text('Solicitar acceso'),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        TextFormField(
-                          controller: _usuarioController,
-                          validator: _validarUsuario,
-                          textInputAction: TextInputAction.next,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const <String>[
-                            AutofillHints.username,
-                            AutofillHints.email,
-                          ],
-                          decoration: InputDecoration(
-                            hintText: 'Usuario o correo',
-                            prefixIcon: const Icon(Icons.person_outline),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 17,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD7DEE7),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD7DEE7),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF1565C0),
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        TextFormField(
-                          controller: _passwordController,
-                          validator: _validarPassword,
-                          obscureText: _ocultarPassword,
-                          textInputAction: TextInputAction.done,
-                          autofillHints: const <String>[AutofillHints.password],
-                          onFieldSubmitted: (_) => _iniciarSesion(),
-                          decoration: InputDecoration(
-                            hintText: 'Contraseña',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              tooltip: _ocultarPassword
-                                  ? 'Mostrar contraseña'
-                                  : 'Ocultar contraseña',
-                              onPressed: () {
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    enabled: !_procesando,
+                    obscureText: _ocultarPassword,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const <String>[AutofillHints.password],
+                    onFieldSubmitted: (_) {
+                      _iniciarSesion();
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: _ocultarPassword
+                            ? 'Mostrar contraseña'
+                            : 'Ocultar contraseña',
+                        onPressed: _procesando
+                            ? null
+                            : () {
                                 setState(() {
                                   _ocultarPassword = !_ocultarPassword;
                                 });
                               },
-                              icon: Icon(
-                                _ocultarPassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                              ),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 17,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD7DEE7),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFFD7DEE7),
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF1565C0),
-                                width: 2,
-                              ),
-                            ),
-                            errorBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(30),
-                              borderSide: BorderSide(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                          ),
+                        icon: Icon(
+                          _ocultarPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
                         ),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        borderSide: BorderSide(color: colores.outlineVariant),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 20,
+                      ),
+                    ),
+                    validator: (String? value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Ingrese su contraseña.';
+                      }
 
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton(
-                            onPressed: _procesando ? null : _recuperarPassword,
-                            child: const Text('¿Olvidó su contraseña?'),
-                          ),
-                        ),
+                      if (value.length < 6) {
+                        return 'La contraseña debe tener '
+                            'al menos 6 caracteres.';
+                      }
 
-                        const SizedBox(height: 24),
-
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: SizedBox(
-                            width: 175,
-                            height: 52,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: <Color>[
-                                    Color(0xFF1565C0),
-                                    Color(0xFF26A69A),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(30),
-                                boxShadow: const <BoxShadow>[
-                                  BoxShadow(
-                                    color: Color(0x33000000),
-                                    blurRadius: 10,
-                                    offset: Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: FilledButton(
-                                onPressed: _procesando ? null : _iniciarSesion,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(30),
-                                  ),
-                                ),
-                                child: _procesando
-                                    ? const SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: <Widget>[
-                                          Text(
-                                            'Ingresar',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          SizedBox(width: 8),
-                                          Icon(Icons.arrow_forward),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const Spacer(),
-
-                        const SizedBox(height: 44),
-
-                        const Center(
-                          child: Column(
-                            children: <Widget>[
-                              Icon(
-                                Icons.verified_user_outlined,
-                                color: Color(0xFF1565C0),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Acceso seguro al sistema SST–IPERC',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.black54),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-                      ],
+                      return null;
+                    },
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _procesando ? null : _recuperarPassword,
+                      child: const Text('¿Olvidó su contraseña?'),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: SizedBox(
+                      width: 205,
+                      height: 58,
+                      child: FilledButton.icon(
+                        onPressed: _procesando ? null : _iniciarSesion,
+                        icon: _procesando
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.arrow_forward),
+                        label: Text(
+                          _procesando ? 'Ingresando...' : 'Ingresar',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 180),
+                  const Icon(
+                    Icons.verified_user_outlined,
+                    color: Color(0xFF1976D2),
+                    size: 34,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Acceso seguro al sistema SST–IPERC',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                  ),
+                ],
               ),
             ),
           ],
@@ -453,17 +486,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class _DecorativeCircle extends StatelessWidget {
-  const _DecorativeCircle({required this.size, required this.color});
+class _DecoracionCircular extends StatelessWidget {
+  const _DecoracionCircular({required this.tamano, required this.color});
 
-  final double size;
+  final double tamano;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: size,
-      height: size,
+      width: tamano,
+      height: tamano,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }

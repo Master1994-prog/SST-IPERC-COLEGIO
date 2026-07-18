@@ -2,6 +2,7 @@
 using SST.Domain.SST.Entities;
 using SST.Domain.IPERC.Entities;
 using SST.Domain.Security.Entities;
+using SST.Domain.Organization.Entities;
 
 namespace SST.Infrastructure.Persistence;
 
@@ -58,6 +59,26 @@ public class SSTDbContext : DbContext
     public DbSet<Rol> Roles { get; set; }
     public DbSet<UsuarioRol> UsuariosRoles { get; set; }
 
+
+    #endregion
+
+    #region Organization
+
+    public DbSet<SST.Domain.Organization.Entities.Institucion> Instituciones
+    {
+        get;
+        set;
+    }
+
+    public DbSet<Area> Areas { get; set; }
+
+    public DbSet<Proceso> Procesos { get; set; }
+
+    public DbSet<Sede> Sedes { get; set; }
+
+    public DbSet<Actividad> Actividades { get; set; }
+
+    public DbSet<PuestoTrabajo> PuestosTrabajo { get; set; }
 
     #endregion
 

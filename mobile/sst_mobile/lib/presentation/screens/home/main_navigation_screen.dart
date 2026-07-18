@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../iperc/matrices_iperc_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
@@ -138,25 +139,81 @@ class IpercView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ModulosList(
-      modulos: <ModuloItem>[
-        ModuloItem(
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: <Widget>[
+        _IpercModuloCard(
           icono: Icons.assignment,
           titulo: 'Matrices IPERC',
-          descripcion: 'Crear, consultar y actualizar matrices de riesgos.',
+          descripcion:
+              'Crear, consultar y actualizar matrices de identificación de peligros y evaluación de riesgos.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MatricesIpercScreen(),
+              ),
+            );
+          },
         ),
-        ModuloItem(
+        const SizedBox(height: 12),
+        _IpercModuloCard(
           icono: Icons.grid_view,
           titulo: 'Evaluación 5×5',
-          descripcion: 'Calcular el riesgo según probabilidad y severidad.',
+          descripcion:
+              'Calcular el nivel de riesgo según probabilidad y severidad.',
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Evaluación 5×5 en construcción.')),
+            );
+          },
         ),
-        ModuloItem(
+        const SizedBox(height: 12),
+        _IpercModuloCard(
           icono: Icons.fact_check,
           titulo: 'Seguimientos',
           descripcion:
-              'Registrar avances, responsables, evidencias y observaciones.',
+              'Registrar avances, evidencias, responsables y observaciones.',
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Seguimientos en construcción.')),
+            );
+          },
         ),
       ],
+    );
+  }
+}
+
+class _IpercModuloCard extends StatelessWidget {
+  const _IpercModuloCard({
+    required this.icono,
+    required this.titulo,
+    required this.descripcion,
+    required this.onTap,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final String descripcion;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: CircleAvatar(child: Icon(icono)),
+        title: Text(
+          titulo,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(descripcion),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
     );
   }
 }
@@ -268,7 +325,8 @@ class ModulosList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: modulos.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (BuildContext context, int index) =>
+          const SizedBox(height: 12),
       itemBuilder: (BuildContext context, int index) {
         final ModuloItem modulo = modulos[index];
 

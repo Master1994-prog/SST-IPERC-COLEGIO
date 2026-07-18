@@ -9,6 +9,8 @@ class SecureStorageService {
   static const String _usuarioIdKey = 'usuario_id';
   static const String _nombreUsuarioKey = 'nombre_usuario';
   static const String _rolKey = 'rol';
+  static const String _expiraEnKey = 'expira_en';
+  static const String _sesionOfflineKey = 'sesion_offline';
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
@@ -17,14 +19,16 @@ class SecureStorageService {
     required String usuarioId,
     required String nombreUsuario,
     required String rol,
+    DateTime? expiraEn,
   }) async {
-    await _storage.write(key: _accessTokenKey, value: token);
-
-    await _storage.write(key: _usuarioIdKey, value: usuarioId);
-
-    await _storage.write(key: _nombreUsuarioKey, value: nombreUsuario);
-
-    await _storage.write(key: _rolKey, value: rol);
+    await Future.wait(<Future<void>>[
+      _storage.write(key: _accessTokenKey, value: token),
+      _storage.write(key: _usuarioIdKey, value: usuarioId),
+      _storage.write(key: _nombreUsuarioKey, value: nombreUsuario),
+      _storage.write(key: _rolKey, value: rol),
+      _storage.write(key: _expiraEnKey, value: expiraEn?.toIso8601String()),
+      _storage.write(key: _sesionOfflineKey, value: 'true'),
+    ]);
   }
 
   Future<String?> getAccessToken() {
@@ -41,6 +45,32 @@ class SecureStorageService {
 
   Future<String?> getRol() {
     return _storage.read(key: _rolKey);
+  }
+
+  Future<DateTime?> getExpiraEn() async {
+    final String? value = await _storage.read(key: _expiraEnKey);
+
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    return DateTime.tryParse(value);
+  }
+
+  Future<bool> hasOfflineSession() async {
+    final String? sesion = await _storage.read(key: _sesionOfflineKey);
+
+    final String? usuarioId = await getUsuarioId();
+    final String? nombreUsuario = await getNombreUsuario();
+    final String? rol = await getRol();
+
+    return sesion == 'true' &&
+        usuarioId != null &&
+        usuarioId.isNotEmpty &&
+        nombreUsuario != null &&
+        nombreUsuario.isNotEmpty &&
+        rol != null &&
+        rol.isNotEmpty;
   }
 
   Future<void> clearSession() {
