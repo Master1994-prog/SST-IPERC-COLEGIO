@@ -31,6 +31,16 @@ public class UpdateDetalleIPERCDto
 
     public long? EvaluacionResidualId { get; set; }
 
+    /// <summary>
+    /// Controles aplicados al detalle IPERC.
+    /// </summary>
+    public List<long> ControlIds { get; set; } = new();
+
+    /// <summary>
+    /// Equipos de protección personal requeridos para el detalle IPERC.
+    /// </summary>
+    public List<long> EquipoProteccionIds { get; set; } = new();
+
     public long? ResponsableImplementacionId { get; set; }
 
     public DateTime? FechaCompromiso { get; set; }

@@ -10,4 +10,8 @@ class MatrizIpercRepository {
   Future<List<MatrizIpercModel>> obtenerMatrices() {
     return _remoteDatasource.obtenerMatrices();
   }
+
+  Future<MatrizIpercModel> obtenerMatrizPorId(int id) {
+    return _remoteDatasource.obtenerMatrizPorId(id);
+  }
 }

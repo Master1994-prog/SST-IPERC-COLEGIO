@@ -4,9 +4,15 @@ import 'package:flutter/material.dart';
 import '../../../data/datasources/remote/catalogos_remote_datasource.dart';
 import '../../../data/datasources/remote/matriz_iperc_remote_datasource.dart';
 import '../../../data/models/catalogo_item_model.dart';
+import '../../../data/models/matriz_iperc_model.dart';
 
 class NuevaMatrizIpercScreen extends StatefulWidget {
-  const NuevaMatrizIpercScreen({super.key});
+  const NuevaMatrizIpercScreen({
+    super.key,
+    this.matricesRegistradas = const <MatrizIpercModel>[],
+  });
+
+  final List<MatrizIpercModel> matricesRegistradas;
 
   @override
   State<NuevaMatrizIpercScreen> createState() => _NuevaMatrizIpercScreenState();
@@ -14,6 +20,8 @@ class NuevaMatrizIpercScreen extends StatefulWidget {
 
 class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  final TextEditingController _codigoController = TextEditingController();
 
   final TextEditingController _nombreController = TextEditingController();
 
@@ -57,14 +65,39 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   @override
   void initState() {
     super.initState();
+    _codigoController.text = _generarCodigoMatriz();
     _cargarInstituciones();
   }
 
   @override
   void dispose() {
+    _codigoController.dispose();
     _nombreController.dispose();
     _objetivoController.dispose();
     super.dispose();
+  }
+
+  String _generarCodigoMatriz() {
+    final int anio = DateTime.now().year;
+    int mayorCorrelativo = 0;
+
+    for (final MatrizIpercModel matriz in widget.matricesRegistradas) {
+      final String codigo = matriz.codigo.trim().toUpperCase();
+
+      if (!codigo.startsWith('IPERC-$anio-')) {
+        continue;
+      }
+
+      final int? correlativo = int.tryParse(codigo.split('-').last);
+
+      if (correlativo != null && correlativo > mayorCorrelativo) {
+        mayorCorrelativo = correlativo;
+      }
+    }
+
+    final int siguiente = mayorCorrelativo + 1;
+
+    return 'IPERC-$anio-${siguiente.toString().padLeft(4, '0')}';
   }
 
   Future<void> _cargarInstituciones() async {
@@ -339,10 +372,11 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
     try {
       final Map<String, dynamic> datos = <String, dynamic>{
+        'codigo': _codigoController.text.trim(),
         'nombre': _nombreController.text.trim(),
         'objetivo': _objetivoController.text.trim(),
         'institucionId': _institucionSeleccionada!.id,
-        'sedeId': _institucionSeleccionada!.id,
+        'sedeId': _sedeSeleccionada!.id,
         'areaId': _areaSeleccionada!.id,
         'puestoTrabajoId': _puestoTrabajoSeleccionado!.id,
         'procesoId': _procesoSeleccionado!.id,
@@ -384,6 +418,15 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       _mostrarMensaje(
         'La respuesta del servidor no es válida: '
         '${error.message}',
+        esError: true,
+      );
+    } on ArgumentError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        error.message?.toString() ?? error.toString(),
         esError: true,
       );
     } catch (error) {
@@ -535,6 +578,30 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
               'El código se generará automáticamente.',
             ),
             const SizedBox(height: 26),
+
+            TextFormField(
+              controller: _codigoController,
+              readOnly: true,
+              decoration: InputDecoration(
+                labelText: 'Código generado',
+                helperText: 'El código se genera automáticamente.',
+                prefixIcon: const Icon(Icons.qr_code_outlined),
+                suffixIcon: IconButton(
+                  tooltip: 'Generar código',
+                  onPressed: _guardando
+                      ? null
+                      : () {
+                          setState(() {
+                            _codigoController.text = _generarCodigoMatriz();
+                          });
+                        },
+                  icon: const Icon(Icons.autorenew),
+                ),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+
+            const SizedBox(height: 18),
 
             TextFormField(
               controller: _nombreController,

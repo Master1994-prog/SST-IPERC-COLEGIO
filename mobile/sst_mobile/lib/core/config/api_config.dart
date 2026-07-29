@@ -19,4 +19,22 @@ class ApiConfig {
 
   static const String procesosEndpoint = '/Procesos';
   static const String actividadesEndpoint = '/Actividades';
+
+  static const String peligrosEndpoint = '/Peligros';
+  static const String consecuenciasEndpoint = '/Consecuencias';
+
+  static const String controlesEndpoint = '/Controles';
+
+  static const String evaluacionesRiesgoEndpoint = '/evaluaciones-riesgo';
+
+  static const String equiposProteccionEndpoint = '/equipos-proteccion';
+  static const String tiposEquipoProteccionEndpoint =
+      '/tipos-equipo-proteccion';
+
+  static const String clasificacionesControlEndpoint =
+      '/clasificaciones-control';
+
+  static const String tiposPeligroEndpoint = '/tipos-peligro';
+  static const String categoriasPeligroEndpoint =
+    '/categorias-peligro';
 }

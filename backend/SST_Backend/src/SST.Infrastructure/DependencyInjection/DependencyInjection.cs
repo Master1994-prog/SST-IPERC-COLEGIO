@@ -74,6 +74,8 @@ public static class DependencyInjection
 
         services.AddScoped<ITipoEquipoProteccionService, TipoEquipoProteccionService>();
 
+        services.AddScoped<IClasificacionControlService, ClasificacionControlService>();
+
         return services;
     }
 }

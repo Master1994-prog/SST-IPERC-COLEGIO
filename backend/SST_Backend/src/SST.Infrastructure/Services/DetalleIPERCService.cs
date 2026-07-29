@@ -45,6 +45,12 @@ public class DetalleIPERCService : IDetalleIPERCService
                 DescripcionPeligro = x.DescripcionPeligro,
                 EvaluacionInicialId = x.EvaluacionInicialId,
                 EvaluacionResidualId = x.EvaluacionResidualId,
+                ControlIds = x.Controles
+                    .Select(c => c.ControlId)
+                    .ToList(),
+                EquipoProteccionIds = x.EquiposProteccion
+                    .Select(e => e.EquipoProteccionId)
+                    .ToList(),
                 ResponsableImplementacionId = x.ResponsableImplementacionId,
                 FechaCompromiso = x.FechaCompromiso,
                 FechaImplementacion = x.FechaImplementacion,
@@ -79,6 +85,12 @@ public class DetalleIPERCService : IDetalleIPERCService
                 DescripcionPeligro = x.DescripcionPeligro,
                 EvaluacionInicialId = x.EvaluacionInicialId,
                 EvaluacionResidualId = x.EvaluacionResidualId,
+                ControlIds = x.Controles
+                    .Select(c => c.ControlId)
+                    .ToList(),
+                EquipoProteccionIds = x.EquiposProteccion
+                    .Select(e => e.EquipoProteccionId)
+                    .ToList(),
                 ResponsableImplementacionId = x.ResponsableImplementacionId,
                 FechaCompromiso = x.FechaCompromiso,
                 FechaImplementacion = x.FechaImplementacion,
@@ -114,6 +126,12 @@ public class DetalleIPERCService : IDetalleIPERCService
                 DescripcionPeligro = x.DescripcionPeligro,
                 EvaluacionInicialId = x.EvaluacionInicialId,
                 EvaluacionResidualId = x.EvaluacionResidualId,
+                ControlIds = x.Controles
+                    .Select(c => c.ControlId)
+                    .ToList(),
+                EquipoProteccionIds = x.EquiposProteccion
+                    .Select(e => e.EquipoProteccionId)
+                    .ToList(),
                 ResponsableImplementacionId = x.ResponsableImplementacionId,
                 FechaCompromiso = x.FechaCompromiso,
                 FechaImplementacion = x.FechaImplementacion,
@@ -170,6 +188,12 @@ public class DetalleIPERCService : IDetalleIPERCService
                 throw new InvalidOperationException("El responsable de implementación seleccionado no existe.");
         }
 
+        var controlIds = NormalizarIds(dto.ControlIds);
+        var equipoProteccionIds = NormalizarIds(dto.EquipoProteccionIds);
+
+        await ValidarControlesAsync(controlIds);
+        await ValidarEquiposProteccionAsync(equipoProteccionIds);
+
         var item = dto.Item;
 
         if (item <= 0)
@@ -204,7 +228,19 @@ public class DetalleIPERCService : IDetalleIPERCService
             ResponsableImplementacionId = dto.ResponsableImplementacionId,
             FechaCompromiso = dto.FechaCompromiso,
             FechaImplementacion = dto.FechaImplementacion,
-            EstadoImplementacion = (EstadoImplementacion)dto.EstadoImplementacion
+            EstadoImplementacion = (EstadoImplementacion)dto.EstadoImplementacion,
+            Controles = controlIds
+                .Select(controlId => new DetalleIPERCControl
+                {
+                    ControlId = controlId
+                })
+                .ToList(),
+            EquiposProteccion = equipoProteccionIds
+                .Select(equipoProteccionId => new DetalleIPERCEPP
+                {
+                    EquipoProteccionId = equipoProteccionId
+                })
+                .ToList()
         };
 
         _context.Set<DetalleIPERC>().Add(detalle);
@@ -224,6 +260,8 @@ public class DetalleIPERCService : IDetalleIPERCService
             DescripcionPeligro = detalle.DescripcionPeligro,
             EvaluacionInicialId = detalle.EvaluacionInicialId,
             EvaluacionResidualId = detalle.EvaluacionResidualId,
+            ControlIds = controlIds,
+            EquipoProteccionIds = equipoProteccionIds,
             ResponsableImplementacionId = detalle.ResponsableImplementacionId,
             FechaCompromiso = detalle.FechaCompromiso,
             FechaImplementacion = detalle.FechaImplementacion,
@@ -238,6 +276,8 @@ public class DetalleIPERCService : IDetalleIPERCService
     public async Task<bool> UpdateAsync(long id, UpdateDetalleIPERCDto dto)
     {
         var detalle = await _context.Set<DetalleIPERC>()
+            .Include(x => x.Controles)
+            .Include(x => x.EquiposProteccion)
             .FirstOrDefaultAsync(x => x.Id == id);
 
         if (detalle is null)
@@ -285,6 +325,12 @@ public class DetalleIPERCService : IDetalleIPERCService
                 throw new InvalidOperationException("El responsable de implementación seleccionado no existe.");
         }
 
+        var controlIds = NormalizarIds(dto.ControlIds);
+        var equipoProteccionIds = NormalizarIds(dto.EquipoProteccionIds);
+
+        await ValidarControlesAsync(controlIds);
+        await ValidarEquiposProteccionAsync(equipoProteccionIds);
+
         var item = dto.Item <= 0 ? detalle.Item : dto.Item;
 
         var existeItem = await _context.Set<DetalleIPERC>()
@@ -310,9 +356,92 @@ public class DetalleIPERCService : IDetalleIPERCService
         detalle.EstadoImplementacion = (EstadoImplementacion)dto.EstadoImplementacion;
         detalle.FechaActualizacion = DateTime.UtcNow;
 
+        SincronizarControles(detalle, controlIds);
+        SincronizarEquiposProteccion(detalle, equipoProteccionIds);
+
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    private static List<long> NormalizarIds(IEnumerable<long>? ids)
+    {
+        return ids?
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList() ?? new List<long>();
+    }
+
+    private async Task ValidarControlesAsync(List<long> controlIds)
+    {
+        if (controlIds.Count == 0)
+            return;
+
+        var controlesExistentes = await _context.Controles
+            .CountAsync(x => controlIds.Contains(x.Id) && x.Activo);
+
+        if (controlesExistentes != controlIds.Count)
+            throw new InvalidOperationException("Uno o más controles seleccionados no existen o están inactivos.");
+    }
+
+    private async Task ValidarEquiposProteccionAsync(List<long> equipoProteccionIds)
+    {
+        if (equipoProteccionIds.Count == 0)
+            return;
+
+        var equiposExistentes = await _context.EquiposProteccion
+            .CountAsync(x => equipoProteccionIds.Contains(x.Id) && x.Activo);
+
+        if (equiposExistentes != equipoProteccionIds.Count)
+            throw new InvalidOperationException("Uno o más equipos de protección seleccionados no existen o están inactivos.");
+    }
+
+    private void SincronizarControles(DetalleIPERC detalle, List<long> controlIds)
+    {
+        var actuales = detalle.Controles.ToList();
+        var eliminar = actuales
+            .Where(x => !controlIds.Contains(x.ControlId))
+            .ToList();
+
+        if (eliminar.Count > 0)
+            _context.Set<DetalleIPERCControl>().RemoveRange(eliminar);
+
+        var actualesIds = actuales
+            .Select(x => x.ControlId)
+            .ToHashSet();
+
+        foreach (var controlId in controlIds.Where(id => !actualesIds.Contains(id)))
+        {
+            detalle.Controles.Add(new DetalleIPERCControl
+            {
+                DetalleIPERCId = detalle.Id,
+                ControlId = controlId
+            });
+        }
+    }
+
+    private void SincronizarEquiposProteccion(DetalleIPERC detalle, List<long> equipoProteccionIds)
+    {
+        var actuales = detalle.EquiposProteccion.ToList();
+        var eliminar = actuales
+            .Where(x => !equipoProteccionIds.Contains(x.EquipoProteccionId))
+            .ToList();
+
+        if (eliminar.Count > 0)
+            _context.Set<DetalleIPERCEPP>().RemoveRange(eliminar);
+
+        var actualesIds = actuales
+            .Select(x => x.EquipoProteccionId)
+            .ToHashSet();
+
+        foreach (var equipoProteccionId in equipoProteccionIds.Where(id => !actualesIds.Contains(id)))
+        {
+            detalle.EquiposProteccion.Add(new DetalleIPERCEPP
+            {
+                DetalleIPERCId = detalle.Id,
+                EquipoProteccionId = equipoProteccionId
+            });
+        }
     }
 
     /// <summary>

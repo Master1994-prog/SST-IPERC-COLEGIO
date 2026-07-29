@@ -34,13 +34,19 @@ public class MatrizIPERCDto
 
     public long InstitucionId { get; set; }
 
+    public string? InstitucionNombre { get; set; }
+
     public long SedeId { get; set; }
 
     public long AreaId { get; set; }
 
+    public string? AreaNombre { get; set; }
+
     public long ProcesoId { get; set; }
 
     public long ActividadId { get; set; }
+
+    public string? ActividadNombre { get; set; }
 
     public long PuestoTrabajoId { get; set; }
 

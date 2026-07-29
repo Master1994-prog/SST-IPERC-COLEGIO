@@ -25,7 +25,9 @@ public class SSTDbContext : DbContext
     public DbSet<Consecuencia> Consecuencias { get; set; }
     public DbSet<PeligroConsecuencia> PeligrosConsecuencias { get; set; }
 
-    public DbSet<ClasificacionControl> ClasificacionesControl { get; set; }
+    public DbSet<ClasificacionControl> ClasificacionesControl =>
+        Set<ClasificacionControl>();
+    
     public DbSet<Control> Controles { get; set; }
     public DbSet<PeligroControl> PeligrosControles { get; set; }
 
@@ -58,7 +60,6 @@ public class SSTDbContext : DbContext
 
     public DbSet<Rol> Roles { get; set; }
     public DbSet<UsuarioRol> UsuariosRoles { get; set; }
-
 
     #endregion
 

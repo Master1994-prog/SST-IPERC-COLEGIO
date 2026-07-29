@@ -41,6 +41,14 @@ public class CreateDetalleIPERCDtoValidator : AbstractValidator<CreateDetalleIPE
             .GreaterThan(0)
             .WithMessage("Debe seleccionar una evaluación inicial válida.");
 
+        RuleForEach(x => x.ControlIds)
+            .GreaterThan(0)
+            .WithMessage("Debe seleccionar controles válidos.");
+
+        RuleForEach(x => x.EquipoProteccionIds)
+            .GreaterThan(0)
+            .WithMessage("Debe seleccionar equipos de protección válidos.");
+
         RuleFor(x => x.FechaImplementacion)
             .GreaterThanOrEqualTo(x => x.FechaCompromiso)
             .WithMessage("La fecha de implementación no puede ser menor que la fecha de compromiso.")

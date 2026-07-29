@@ -30,6 +30,10 @@ public class DetalleIPERCDto
 
     public long? EvaluacionResidualId { get; set; }
 
+    public List<long> ControlIds { get; set; } = new();
+
+    public List<long> EquipoProteccionIds { get; set; } = new();
+
     public long? ResponsableImplementacionId { get; set; }
 
     public DateTime? FechaCompromiso { get; set; }

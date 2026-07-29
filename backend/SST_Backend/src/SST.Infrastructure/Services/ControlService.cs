@@ -7,46 +7,56 @@ using SST.Infrastructure.Persistence;
 namespace SST.Infrastructure.Services;
 
 /// <summary>
-/// Servicio encargado de gestionar los controles.
-/// Aquí se realizan las operaciones contra la base de datos.
+/// Servicio encargado de administrar
+/// las medidas de control.
 /// </summary>
 public class ControlService : IControlService
 {
     private readonly SSTDbContext _context;
 
-    /// <summary>
-    /// Constructor del servicio.
-    /// Recibe el contexto de base de datos mediante inyección de dependencias.
-    /// </summary>
     public ControlService(SSTDbContext context)
     {
         _context = context;
     }
 
     /// <summary>
-    /// Obtiene todos los controles activos.
+    /// Obtiene todos los controles registrados.
     /// </summary>
     public async Task<IEnumerable<ControlDto>> GetAllAsync()
     {
         return await _context.Controles
             .AsNoTracking()
-            .Where(x => x.Activo)
+            .OrderBy(x => x.Codigo)
             .Select(x => new ControlDto
             {
                 Id = x.Id,
                 Codigo = x.Codigo,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
-                Activo = x.Activo
+
+                ClasificacionControlId =
+                    x.ClasificacionControlId,
+
+                ClasificacionControlNombre =
+                    x.ClasificacionControl.Nombre,
+
+                Activo = x.Activo,
+                Estado = x.Estado,
+                FechaRegistro = x.FechaRegistro,
+                FechaActualizacion =
+                    x.FechaActualizacion
             })
             .ToListAsync();
     }
 
     /// <summary>
-    /// Obtiene un control por su Id.
+    /// Obtiene un control por su identificador.
     /// </summary>
     public async Task<ControlDto?> GetByIdAsync(long id)
     {
+        if (id <= 0)
+            return null;
+
         return await _context.Controles
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -56,37 +66,91 @@ public class ControlService : IControlService
                 Codigo = x.Codigo,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
-                Activo = x.Activo
+
+                ClasificacionControlId =
+                    x.ClasificacionControlId,
+
+                ClasificacionControlNombre =
+                    x.ClasificacionControl.Nombre,
+
+                Activo = x.Activo,
+                Estado = x.Estado,
+                FechaRegistro = x.FechaRegistro,
+                FechaActualizacion =
+                    x.FechaActualizacion
             })
             .FirstOrDefaultAsync();
     }
 
     /// <summary>
-    /// Registra un nuevo control.
+    /// Registra una nueva medida de control.
     /// </summary>
-    public async Task<ControlDto> CreateAsync(CreateControlDto dto)
+    public async Task<ControlDto> CreateAsync(
+        CreateControlDto dto
+    )
     {
-        // Verifica si ya existe un control activo con el mismo código.
-        var existeCodigo = await _context.Controles
-            .AnyAsync(x => x.Codigo.ToLower() == dto.Codigo.ToLower() && x.Activo);
+        string nombre = dto.Nombre.Trim();
 
-        if (existeCodigo)
-            throw new InvalidOperationException("Ya existe un control activo con ese código.");
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            throw new InvalidOperationException(
+                "El nombre del control es obligatorio."
+            );
+        }
 
-        // Verifica si ya existe un control activo con el mismo nombre.
-        var existeNombre = await _context.Controles
-            .AnyAsync(x => x.Nombre.ToLower() == dto.Nombre.ToLower() && x.Activo);
+        bool existeNombre = await _context.Controles
+            .AnyAsync(x =>
+                x.Nombre.ToLower() == nombre.ToLower() &&
+                x.Estado
+            );
 
         if (existeNombre)
-            throw new InvalidOperationException("Ya existe un control activo con ese nombre.");
-
-        // Crea la entidad control.
-        var control = new Control
         {
-            Codigo = dto.Codigo.Trim().ToUpper(),
-            Nombre = dto.Nombre.Trim(),
-            Descripcion = dto.Descripcion?.Trim(),
-            Activo = true
+            throw new InvalidOperationException(
+                "Ya existe un control con ese nombre."
+            );
+        }
+
+        ClasificacionControl? clasificacion =
+            await _context.ClasificacionesControl
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id == dto.ClasificacionControlId &&
+                    x.Activo &&
+                    x.Estado
+                );
+
+        if (clasificacion is null)
+        {
+            throw new InvalidOperationException(
+                "La clasificación seleccionada no existe o está inactiva."
+            );
+        }
+
+        string codigo = await GenerarCodigoAsync();
+
+        Control control = new()
+        {
+            Codigo = codigo,
+            Nombre = nombre,
+            Descripcion = NormalizarTexto(
+                dto.Descripcion
+            ),
+
+            ClasificacionControlId =
+                dto.ClasificacionControlId,
+
+            Prioridad = clasificacion.Prioridad,
+            Obligatorio = false,
+
+            Activo = dto.Activo,
+            Estado = true,
+
+            FechaRegistro = DateTime.UtcNow,
+            UsuarioRegistroId =
+                dto.UsuarioRegistroId,
+
+            EsGlobal = true
         };
 
         _context.Controles.Add(control);
@@ -98,47 +162,125 @@ public class ControlService : IControlService
             Codigo = control.Codigo,
             Nombre = control.Nombre,
             Descripcion = control.Descripcion,
-            Activo = control.Activo
+
+            ClasificacionControlId =
+                control.ClasificacionControlId,
+
+            ClasificacionControlNombre =
+                clasificacion.Nombre,
+
+            Activo = control.Activo,
+            Estado = control.Estado,
+            FechaRegistro = control.FechaRegistro,
+            FechaActualizacion =
+                control.FechaActualizacion
         };
     }
 
     /// <summary>
-    /// Actualiza un control existente.
+    /// Actualiza una medida de control existente.
     /// </summary>
-    public async Task<bool> UpdateAsync(long id, UpdateControlDto dto)
+    public async Task<bool> UpdateAsync(
+        long id,
+        UpdateControlDto dto
+    )
     {
-        var control = await _context.Controles
-            .FirstOrDefaultAsync(x => x.Id == id);
+        Control? control =
+            await _context.Controles
+                .FirstOrDefaultAsync(x => x.Id == id);
 
         if (control is null)
             return false;
 
-        // Evita duplicar el código en otro registro activo.
-        var existeCodigo = await _context.Controles
-            .AnyAsync(x =>
+        string codigo =
+            dto.Codigo.Trim().ToUpperInvariant();
+
+        string nombre =
+            dto.Nombre.Trim();
+
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            throw new InvalidOperationException(
+                "El código del control es obligatorio."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            throw new InvalidOperationException(
+                "El nombre del control es obligatorio."
+            );
+        }
+
+        bool existeCodigo =
+            await _context.Controles.AnyAsync(x =>
                 x.Id != id &&
-                x.Codigo.ToLower() == dto.Codigo.ToLower() &&
-                x.Activo);
+                x.Codigo.ToLower() ==
+                    codigo.ToLower() &&
+                x.Estado
+            );
 
         if (existeCodigo)
-            throw new InvalidOperationException("Ya existe otro control activo con ese código.");
+        {
+            throw new InvalidOperationException(
+                "Ya existe otro control con ese código."
+            );
+        }
 
-        // Evita duplicar el nombre en otro registro activo.
-        var existeNombre = await _context.Controles
-            .AnyAsync(x =>
+        bool existeNombre =
+            await _context.Controles.AnyAsync(x =>
                 x.Id != id &&
-                x.Nombre.ToLower() == dto.Nombre.ToLower() &&
-                x.Activo);
+                x.Nombre.ToLower() ==
+                    nombre.ToLower() &&
+                x.Estado
+            );
 
         if (existeNombre)
-            throw new InvalidOperationException("Ya existe otro control activo con ese nombre.");
+        {
+            throw new InvalidOperationException(
+                "Ya existe otro control con ese nombre."
+            );
+        }
 
-        // Actualiza los datos del control.
-        control.Codigo = dto.Codigo.Trim().ToUpper();
-        control.Nombre = dto.Nombre.Trim();
-        control.Descripcion = dto.Descripcion?.Trim();
+        ClasificacionControl? clasificacion =
+            await _context.ClasificacionesControl
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.Id ==
+                        dto.ClasificacionControlId &&
+                    x.Activo &&
+                    x.Estado
+                );
+
+        if (clasificacion is null)
+        {
+            throw new InvalidOperationException(
+                "La clasificación seleccionada no existe o está inactiva."
+            );
+        }
+
+        control.Codigo = codigo;
+        control.Nombre = nombre;
+        control.Descripcion =
+            NormalizarTexto(dto.Descripcion);
+
+        control.ClasificacionControlId =
+            dto.ClasificacionControlId;
+
+        /*
+         * La prioridad del control adopta la prioridad
+         * definida en la clasificación seleccionada.
+         */
+        control.Prioridad =
+            clasificacion.Prioridad;
+
         control.Activo = dto.Activo;
-        control.FechaActualizacion = DateTime.UtcNow;
+
+        control.FechaActualizacion =
+            DateTime.UtcNow;
+
+        control.UsuarioActualizacionId =
+            dto.UsuarioActualizacionId;
 
         await _context.SaveChangesAsync();
 
@@ -146,22 +288,65 @@ public class ControlService : IControlService
     }
 
     /// <summary>
-    /// Desactiva un control.
-    /// No elimina físicamente el registro.
+    /// Desactiva lógicamente un control.
     /// </summary>
     public async Task<bool> DeleteAsync(long id)
     {
-        var control = await _context.Controles
-            .FirstOrDefaultAsync(x => x.Id == id);
+        Control? control =
+            await _context.Controles
+                .FirstOrDefaultAsync(x => x.Id == id);
 
         if (control is null)
             return false;
 
         control.Activo = false;
-        control.FechaActualizacion = DateTime.UtcNow;
+        control.Estado = false;
+        control.FechaActualizacion =
+            DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    /// <summary>
+    /// Genera códigos consecutivos:
+    /// CTRL-0001, CTRL-0002, etc.
+    /// </summary>
+    private async Task<string> GenerarCodigoAsync()
+    {
+        long ultimoId = await _context.Controles
+            .AsNoTracking()
+            .MaxAsync(x => (long?)x.Id) ?? 0;
+
+        long numero = ultimoId + 1;
+
+        string codigo;
+
+        do
+        {
+            codigo = $"CTRL-{numero:D4}";
+            numero++;
+        }
+        while (await _context.Controles.AnyAsync(
+            x => x.Codigo == codigo
+        ));
+
+        return codigo;
+    }
+
+    /// <summary>
+    /// Elimina espacios y convierte textos vacíos
+    /// en null.
+    /// </summary>
+    private static string? NormalizarTexto(
+        string? valor
+    )
+    {
+        string texto = valor?.Trim() ?? string.Empty;
+
+        return string.IsNullOrWhiteSpace(texto)
+            ? null
+            : texto;
     }
 }

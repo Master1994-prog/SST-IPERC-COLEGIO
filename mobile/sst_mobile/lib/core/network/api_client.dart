@@ -72,6 +72,10 @@ class ApiClient {
     return _dio.put(endpoint, data: data);
   }
 
+  Future<Response<dynamic>> patch(String endpoint, {Object? data}) {
+    return _dio.patch(endpoint, data: data);
+  }
+
   Future<Response<dynamic>> delete(String endpoint) {
     return _dio.delete(endpoint);
   }

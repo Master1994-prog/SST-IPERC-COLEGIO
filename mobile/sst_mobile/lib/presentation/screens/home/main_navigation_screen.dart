@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
+
+import '../categorias_peligro/categorias_peligro_screen.dart';
+import '../clasificaciones_control/clasificaciones_control_screen.dart';
+import '../consecuencias/consecuencias_screen.dart';
+import '../controles/controles_screen.dart';
+import '../equipos_proteccion/equipos_proteccion_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
+import '../matriz_riesgo/matriz_riesgo_screen.dart';
+import '../peligros/peligros_screen.dart';
+import '../reportes/reportes_screen.dart';
+import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
+import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
+import '../tipos_peligro/tipos_peligro_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
@@ -158,12 +170,14 @@ class IpercView extends StatelessWidget {
         const SizedBox(height: 12),
         _IpercModuloCard(
           icono: Icons.grid_view,
-          titulo: 'Evaluación 5×5',
+          titulo: 'Evaluación 5x5',
           descripcion:
               'Calcular el nivel de riesgo según probabilidad y severidad.',
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Evaluación 5×5 en construcción.')),
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const MatrizRiesgoScreen(),
+              ),
             );
           },
         ),
@@ -174,8 +188,10 @@ class IpercView extends StatelessWidget {
           descripcion:
               'Registrar avances, evidencias, responsables y observaciones.',
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Seguimientos en construcción.')),
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const SeguimientosIpercScreen(),
+              ),
             );
           },
         ),
@@ -223,31 +239,107 @@ class SstView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ModulosList(
+    return ModulosList(
       modulos: <ModuloItem>[
         ModuloItem(
-          icono: Icons.warning,
+          icono: Icons.category_outlined,
+          titulo: 'Categorías de peligro',
+          descripcion:
+              'Administrar las categorías principales utilizadas para organizar los tipos de peligro.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const CategoriasPeligroScreen(),
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.account_tree_outlined,
+          titulo: 'Tipos de peligro',
+          descripcion:
+              'Administrar los tipos utilizados para clasificar los peligros SST.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TiposPeligroScreen(),
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.warning_amber_outlined,
           titulo: 'Peligros',
           descripcion:
-              'Registrar fuentes y situaciones que pueden causar daño.',
+              'Registrar fuentes, actos y situaciones que pueden causar daño.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const PeligrosScreen()),
+            );
+          },
         ),
         ModuloItem(
-          icono: Icons.personal_injury,
+          icono: Icons.personal_injury_outlined,
           titulo: 'Consecuencias',
           descripcion:
-              'Registrar los posibles efectos producidos por cada peligro.',
+              'Registrar los posibles daños o efectos producidos por cada peligro.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ConsecuenciasScreen(),
+              ),
+            );
+          },
         ),
         ModuloItem(
-          icono: Icons.shield,
+          icono: Icons.account_tree_outlined,
+          titulo: 'Clasificaciones de control',
+          descripcion:
+              'Administrar la jerarquía utilizada para organizar los controles SST.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ClasificacionesControlScreen(),
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.health_and_safety_outlined,
           titulo: 'Controles',
           descripcion:
               'Administrar medidas para eliminar o reducir los riesgos.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ControlesScreen()),
+            );
+          },
         ),
         ModuloItem(
-          icono: Icons.engineering,
+          icono: Icons.category_outlined,
+          titulo: 'Tipos de EPP',
+          descripcion:
+              'Administrar las categorías utilizadas para clasificar los equipos de protección personal.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TiposEquipoProteccionScreen(),
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.engineering_outlined,
           titulo: 'Equipos de protección',
           descripcion:
               'Gestionar los equipos de protección personal requeridos.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const EquiposProteccionScreen(),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -282,19 +374,19 @@ class MasView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ModulosList(
+    return ModulosList(
       modulos: <ModuloItem>[
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.apartment,
           titulo: 'Áreas',
           descripcion: 'Administrar las áreas y ambientes de la institución.',
         ),
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.task_alt,
           titulo: 'Actividades',
           descripcion: 'Registrar actividades y tareas que serán evaluadas.',
         ),
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.people,
           titulo: 'Usuarios',
           descripcion: 'Administrar usuarios, roles e instituciones.',
@@ -304,8 +396,13 @@ class MasView extends StatelessWidget {
           titulo: 'Reportes',
           descripcion:
               'Consultar reportes de riesgos, controles y seguimientos.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ReportesScreen()),
+            );
+          },
         ),
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',
           descripcion: 'Consultar la información de la cuenta y cerrar sesión.',
@@ -325,12 +422,14 @@ class ModulosList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: modulos.length,
-      separatorBuilder: (BuildContext context, int index) =>
-          const SizedBox(height: 12),
+      separatorBuilder: (BuildContext context, int index) {
+        return const SizedBox(height: 12);
+      },
       itemBuilder: (BuildContext context, int index) {
         final ModuloItem modulo = modulos[index];
 
         return Card(
+          clipBehavior: Clip.antiAlias,
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: CircleAvatar(child: Icon(modulo.icono)),
@@ -343,13 +442,19 @@ class ModulosList extends StatelessWidget {
               child: Text(modulo.descripcion),
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Módulo ${modulo.titulo} en construcción.'),
-                ),
-              );
-            },
+            onTap:
+                modulo.onTap ??
+                () {
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Módulo ${modulo.titulo} en construcción.',
+                        ),
+                      ),
+                    );
+                },
           ),
         );
       },
@@ -418,9 +523,11 @@ class ModuloItem {
     required this.icono,
     required this.titulo,
     required this.descripcion,
+    this.onTap,
   });
 
   final IconData icono;
   final String titulo;
   final String descripcion;
+  final VoidCallback? onTap;
 }

@@ -6,11 +6,10 @@ import '../../models/matriz_iperc_model.dart';
 
 class MatrizIpercRemoteDatasource {
   MatrizIpercRemoteDatasource({ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient.instance;
+      : _apiClient = apiClient ?? ApiClient.instance;
 
   final ApiClient _apiClient;
 
-  /// Obtiene las matrices registradas en el backend.
   Future<List<MatrizIpercModel>> obtenerMatrices() async {
     final Response<dynamic> response = await _apiClient.get(
       ApiConfig.matricesIpercEndpoint,
@@ -27,8 +26,22 @@ class MatrizIpercRemoteDatasource {
         .toList();
   }
 
-  /// Crea una matriz y devuelve el Id generado
-  /// por el backend.
+  Future<MatrizIpercModel> obtenerMatrizPorId(int id) async {
+    final Response<dynamic> response = await _apiClient.get(
+      '${ApiConfig.matricesIpercEndpoint}/$id',
+    );
+
+    if (response.data is! Map) {
+      throw const FormatException(
+        'El servidor no devolvió una matriz IPERC válida.',
+      );
+    }
+
+    return MatrizIpercModel.fromJson(
+      Map<String, dynamic>.from(response.data as Map),
+    );
+  }
+
   Future<String> create(Map<String, dynamic> data) async {
     final Response<dynamic> response = await _apiClient.post(
       ApiConfig.matricesIpercEndpoint,
@@ -48,14 +61,10 @@ class MatrizIpercRemoteDatasource {
     }
 
     throw FormatException(
-      'El servidor respondió ${response.statusCode}, '
-      'pero no devolvió el identificador de la matriz. '
-      'Respuesta: ${response.data}',
+      'El servidor respondió ${response.statusCode}, pero no devolvió el ID.',
     );
   }
 
-  /// Permite interpretar diferentes formatos
-  /// que podría devolver el backend.
   List<dynamic> _obtenerLista(dynamic contenido) {
     if (contenido is List) {
       return contenido;
@@ -87,8 +96,6 @@ class MatrizIpercRemoteDatasource {
 
     final Map<String, dynamic> respuesta = Map<String, dynamic>.from(contenido);
 
-    final dynamic contenidoData = respuesta['data'];
-
     dynamic id =
         respuesta['id'] ??
         respuesta['Id'] ??
@@ -96,10 +103,10 @@ class MatrizIpercRemoteDatasource {
         respuesta['MatrizId'] ??
         respuesta['serverId'];
 
-    if (id == null && contenidoData is Map) {
-      final Map<String, dynamic> dataInterna = Map<String, dynamic>.from(
-        contenidoData,
-      );
+    final dynamic data = respuesta['data'];
+
+    if (id == null && data is Map) {
+      final Map<String, dynamic> dataInterna = Map<String, dynamic>.from(data);
 
       id =
           dataInterna['id'] ??
@@ -108,11 +115,7 @@ class MatrizIpercRemoteDatasource {
           dataInterna['MatrizId'];
     }
 
-    if (id == null) {
-      return null;
-    }
-
-    final String valor = id.toString().trim();
+    final String valor = id?.toString().trim() ?? '';
 
     return valor.isEmpty ? null : valor;
   }

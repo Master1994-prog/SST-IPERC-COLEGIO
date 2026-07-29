@@ -3,28 +3,54 @@
 namespace SST.Application.SST.Dtos;
 
 /// <summary>
-/// DTO utilizado para registrar un nuevo control.
+/// DTO utilizado para registrar una nueva medida de control.
+///
+/// El código no se recibe desde Flutter porque será
+/// generado automáticamente por el backend.
 /// </summary>
 public class CreateControlDto
 {
     /// <summary>
-    /// Código único del control.
-    /// Ejemplo: CTRL-001.
+    /// Nombre de la medida de control.
     /// </summary>
-    [Required]
-    [MaxLength(50)]
-    public string Codigo { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Nombre del control.
-    /// </summary>
-    [Required]
-    [MaxLength(200)]
+    [Required(ErrorMessage = "El nombre del control es obligatorio.")]
+    [MaxLength(
+        250,
+        ErrorMessage = "El nombre no puede superar los 250 caracteres."
+    )]
     public string Nombre { get; set; } = string.Empty;
 
     /// <summary>
-    /// Descripción del control.
+    /// Descripción detallada del control.
     /// </summary>
-    [MaxLength(1000)]
+    [MaxLength(
+        2000,
+        ErrorMessage = "La descripción no puede superar los 2000 caracteres."
+    )]
     public string? Descripcion { get; set; }
+
+    /// <summary>
+    /// Clasificación asociada al control.
+    /// </summary>
+    [Range(
+        1,
+        long.MaxValue,
+        ErrorMessage = "La clasificación seleccionada no es válida."
+    )]
+    public long ClasificacionControlId { get; set; }
+
+    /// <summary>
+    /// Indica si el control estará activo.
+    /// </summary>
+    public bool Activo { get; set; } = true;
+
+    /// <summary>
+    /// Usuario que registra el control.
+    /// </summary>
+    [Range(
+        1,
+        long.MaxValue,
+        ErrorMessage = "El usuario que registra no es válido."
+    )]
+    public long UsuarioRegistroId { get; set; }
 }

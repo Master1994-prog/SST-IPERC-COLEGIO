@@ -71,13 +71,25 @@ public class MatrizIPERCService : IMatrizIPERCService
                 EstadoMatriz = x.EstadoMatriz,
                 Observaciones = x.Observaciones,
                 InstitucionId = x.InstitucionId,
+                InstitucionNombre = _context.Instituciones
+                    .Where(i => i.Id == x.InstitucionId)
+                    .Select(i => i.Nombre)
+                    .FirstOrDefault(),
                 SedeId = x.SedeId,
                 AreaId = x.AreaId,
+                AreaNombre = _context.Areas
+                    .Where(a => a.Id == x.AreaId)
+                    .Select(a => a.Nombre)
+                    .FirstOrDefault(),
                 ProcesoId = x.ProcesoId,
                 ActividadId = x.ActividadId,
+                ActividadNombre = _context.Actividades
+                    .Where(a => a.Id == x.ActividadId)
+                    .Select(a => a.Nombre)
+                    .FirstOrDefault(),
                 PuestoTrabajoId = x.PuestoTrabajoId,
                 ResponsableId = x.ResponsableId,
-                AprobadorId = x.AprobadorId
+                AprobadorId = x.AprobadorId,
             })
             .ToListAsync();
     }
@@ -104,13 +116,25 @@ public class MatrizIPERCService : IMatrizIPERCService
                 EstadoMatriz = x.EstadoMatriz,
                 Observaciones = x.Observaciones,
                 InstitucionId = x.InstitucionId,
+                InstitucionNombre = _context.Instituciones
+                    .Where(i => i.Id == x.InstitucionId)
+                    .Select(i => i.Nombre)
+                    .FirstOrDefault(),
                 SedeId = x.SedeId,
                 AreaId = x.AreaId,
+                AreaNombre = _context.Areas
+                    .Where(a => a.Id == x.AreaId)
+                    .Select(a => a.Nombre)
+                    .FirstOrDefault(),
                 ProcesoId = x.ProcesoId,
                 ActividadId = x.ActividadId,
+                ActividadNombre = _context.Actividades
+                    .Where(a => a.Id == x.ActividadId)
+                    .Select(a => a.Nombre)
+                    .FirstOrDefault(),
                 PuestoTrabajoId = x.PuestoTrabajoId,
                 ResponsableId = x.ResponsableId,
-                AprobadorId = x.AprobadorId
+                AprobadorId = x.AprobadorId,
             })
             .FirstOrDefaultAsync();
     }
@@ -150,28 +174,8 @@ public class MatrizIPERCService : IMatrizIPERCService
         _context.Set<MatrizIPERC>().Add(matriz);
         await _context.SaveChangesAsync();
 
-        return new MatrizIPERCDto
-        {
-            Id = matriz.Id,
-            Codigo = matriz.Codigo,
-            Nombre = matriz.Nombre,
-            Objetivo = matriz.Objetivo,
-            Alcance = matriz.Alcance,
-            Version = matriz.Version,
-            FechaEvaluacion = matriz.FechaEvaluacion,
-            FechaRevision = matriz.FechaRevision,
-            FechaAprobacion = matriz.FechaAprobacion,
-            EstadoMatriz = matriz.EstadoMatriz,
-            Observaciones = matriz.Observaciones,
-            InstitucionId = matriz.InstitucionId,
-            SedeId = matriz.SedeId,
-            AreaId = matriz.AreaId,
-            ProcesoId = matriz.ProcesoId,
-            ActividadId = matriz.ActividadId,
-            PuestoTrabajoId = matriz.PuestoTrabajoId,
-            ResponsableId = matriz.ResponsableId,
-            AprobadorId = matriz.AprobadorId
-        };
+        return await GetByIdAsync(matriz.Id)
+            ?? throw new InvalidOperationException("No se pudo obtener la matriz IPERC creada.");
     }
 
     /// <summary>
