@@ -1,76 +1,43 @@
-﻿# =========================
-# Visual Studio / .NET
-# =========================
-.vs/
-**/bin/
-**/obj/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# =========================
-# Flutter / Dart
-# =========================
+﻿# ==============================
+# FLUTTER / DART
+# ==============================
 .dart_tool/
+build/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
-.pub-cache/
-.pub/
-build/
-**/build/
-android/.gradle/
-android/local.properties
-ios/Flutter/ephemeral/
-macos/Flutter/ephemeral/
-windows/flutter/ephemeral/
-linux/flutter/ephemeral/
 
-# =========================
 # Android
-# =========================
-*.apk
-*.aab
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
 *.jks
 *.keystore
-key.properties
-local.properties
 
-# =========================
-# Configuración sensible
-# =========================
-appsettings.Development.json
-appsettings.Local.json
-.env
-.env.*
-secrets.json
+# ==============================
+# .NET
+# ==============================
+**/bin/
+**/obj/
 
-# =========================
-# Bases locales
-# =========================
-*.db
-*.sqlite
-*.sqlite3
-
-# =========================
-# Logs y temporales
-# =========================
-*.log
-*.tmp
-*.temp
-error_flutter.txt
-
-# =========================
-# IDE
-# =========================
-.idea/
+# ==============================
+# VISUAL STUDIO / VS CODE
+# ==============================
+.vs/
 .vscode/
-*.iml
+*.user
+*.suo
 
-# =========================
-# Sistema operativo
-# =========================
-Thumbs.db
-Desktop.ini
+# ==============================
+# CONFIGURACIÓN SENSIBLE
+# ==============================
+appsettings.Development.json
+**/appsettings.Development.json
+.env
+**/.env
+
+# ==============================
+# ARCHIVOS DEL SISTEMA
+# ==============================
 .DS_Store
+Thumbs.db
