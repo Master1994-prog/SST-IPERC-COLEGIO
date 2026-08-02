@@ -6,7 +6,7 @@ import '../../models/matriz_iperc_model.dart';
 
 class MatrizIpercRemoteDatasource {
   MatrizIpercRemoteDatasource({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient.instance;
+    : _apiClient = apiClient ?? ApiClient.instance;
 
   final ApiClient _apiClient;
 

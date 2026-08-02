@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Linq.Expressions;
+using Microsoft.EntityFrameworkCore;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
 using SST.Domain.IPERC.Entities;
@@ -16,6 +17,102 @@ public class DetalleIPERCService : IDetalleIPERCService
 {
     private readonly SSTDbContext _context;
 
+    /// <summary>
+    /// Proyección reutilizable que devuelve un detalle IPERC
+    /// junto con sus evaluaciones inicial y residual.
+    /// </summary>
+    private static readonly Expression<Func<DetalleIPERC, DetalleIPERCDto>>
+        ProyectarDetalle = x => new DetalleIPERCDto
+        {
+            Id = x.Id,
+            MatrizIPERCId = x.MatrizIPERCId,
+            MatrizIPERCCodigo = x.MatrizIPERC.Codigo,
+            Item = x.Item,
+            Tarea = x.Tarea,
+            PeligroId = x.PeligroId,
+            PeligroNombre = x.Peligro.Nombre,
+            ConsecuenciaId = x.ConsecuenciaId,
+            ConsecuenciaNombre = x.Consecuencia.Nombre,
+            DescripcionPeligro = x.DescripcionPeligro,
+
+            EvaluacionInicialId = x.EvaluacionInicialId,
+            EvaluacionInicial = new EvaluacionDetalleIPERCDto
+            {
+                Id = x.EvaluacionInicial.Id,
+                ProbabilidadId = x.EvaluacionInicial.ProbabilidadId,
+                ProbabilidadNombre =
+                    x.EvaluacionInicial.Probabilidad.Nombre,
+                ValorProbabilidad =
+                    x.EvaluacionInicial.Probabilidad.Valor,
+                SeveridadId = x.EvaluacionInicial.SeveridadId,
+                SeveridadNombre =
+                    x.EvaluacionInicial.Severidad.Nombre,
+                ValorSeveridad =
+                    x.EvaluacionInicial.Severidad.Valor,
+                NivelRiesgoId = x.EvaluacionInicial.NivelRiesgoId,
+                NivelRiesgoNombre =
+                    x.EvaluacionInicial.NivelRiesgo.Nombre,
+                Color = x.EvaluacionInicial.NivelRiesgo.Color,
+                ValorRiesgo = x.EvaluacionInicial.Valor,
+                EsAceptable = x.EvaluacionInicial.EsAceptable,
+                RequiereAccion =
+                    x.EvaluacionInicial.RequiereAccion,
+                Observaciones =
+                    x.EvaluacionInicial.Observaciones
+            },
+
+            EvaluacionResidualId = x.EvaluacionResidualId,
+            EvaluacionResidual = x.EvaluacionResidual == null
+                ? null
+                : new EvaluacionDetalleIPERCDto
+                {
+                    Id = x.EvaluacionResidual.Id,
+                    ProbabilidadId =
+                        x.EvaluacionResidual.ProbabilidadId,
+                    ProbabilidadNombre =
+                        x.EvaluacionResidual.Probabilidad.Nombre,
+                    ValorProbabilidad =
+                        x.EvaluacionResidual.Probabilidad.Valor,
+                    SeveridadId =
+                        x.EvaluacionResidual.SeveridadId,
+                    SeveridadNombre =
+                        x.EvaluacionResidual.Severidad.Nombre,
+                    ValorSeveridad =
+                        x.EvaluacionResidual.Severidad.Valor,
+                    NivelRiesgoId =
+                        x.EvaluacionResidual.NivelRiesgoId,
+                    NivelRiesgoNombre =
+                        x.EvaluacionResidual.NivelRiesgo.Nombre,
+                    Color =
+                        x.EvaluacionResidual.NivelRiesgo.Color,
+                    ValorRiesgo =
+                        x.EvaluacionResidual.Valor,
+                    EsAceptable =
+                        x.EvaluacionResidual.EsAceptable,
+                    RequiereAccion =
+                        x.EvaluacionResidual.RequiereAccion,
+                    Observaciones =
+                        x.EvaluacionResidual.Observaciones
+                },
+
+            ControlIds = x.Controles
+                .Select(c => c.ControlId)
+                .ToList(),
+
+            EquipoProteccionIds = x.EquiposProteccion
+                .Select(e => e.EquipoProteccionId)
+                .ToList(),
+
+            ResponsableImplementacionId =
+                x.ResponsableImplementacionId,
+            FechaCompromiso = x.FechaCompromiso,
+            FechaImplementacion = x.FechaImplementacion,
+            EstadoImplementacionId =
+                (int)x.EstadoImplementacion,
+            EstadoImplementacionNombre =
+                x.EstadoImplementacion.ToString()
+        };
+
     public DetalleIPERCService(SSTDbContext context)
     {
         _context = context;
@@ -28,116 +125,35 @@ public class DetalleIPERCService : IDetalleIPERCService
     {
         return await _context.Set<DetalleIPERC>()
             .AsNoTracking()
-            .Include(x => x.MatrizIPERC)
-            .Include(x => x.Peligro)
-            .Include(x => x.Consecuencia)
-            .Select(x => new DetalleIPERCDto
-            {
-                Id = x.Id,
-                MatrizIPERCId = x.MatrizIPERCId,
-                MatrizIPERCCodigo = x.MatrizIPERC.Codigo,
-                Item = x.Item,
-                Tarea = x.Tarea,
-                PeligroId = x.PeligroId,
-                PeligroNombre = x.Peligro.Nombre,
-                ConsecuenciaId = x.ConsecuenciaId,
-                ConsecuenciaNombre = x.Consecuencia.Nombre,
-                DescripcionPeligro = x.DescripcionPeligro,
-                EvaluacionInicialId = x.EvaluacionInicialId,
-                EvaluacionResidualId = x.EvaluacionResidualId,
-                ControlIds = x.Controles
-                    .Select(c => c.ControlId)
-                    .ToList(),
-                EquipoProteccionIds = x.EquiposProteccion
-                    .Select(e => e.EquipoProteccionId)
-                    .ToList(),
-                ResponsableImplementacionId = x.ResponsableImplementacionId,
-                FechaCompromiso = x.FechaCompromiso,
-                FechaImplementacion = x.FechaImplementacion,
-                EstadoImplementacionId = (int)x.EstadoImplementacion,
-                EstadoImplementacionNombre = x.EstadoImplementacion.ToString()
-            })
+            .OrderBy(x => x.MatrizIPERCId)
+            .ThenBy(x => x.Item)
+            .Select(ProyectarDetalle)
             .ToListAsync();
     }
 
     /// <summary>
-    /// Obtiene un detalle IPERC por su Id.
+    /// Obtiene un detalle IPERC por su identificador.
     /// </summary>
     public async Task<DetalleIPERCDto?> GetByIdAsync(long id)
     {
         return await _context.Set<DetalleIPERC>()
             .AsNoTracking()
-            .Include(x => x.MatrizIPERC)
-            .Include(x => x.Peligro)
-            .Include(x => x.Consecuencia)
             .Where(x => x.Id == id)
-            .Select(x => new DetalleIPERCDto
-            {
-                Id = x.Id,
-                MatrizIPERCId = x.MatrizIPERCId,
-                MatrizIPERCCodigo = x.MatrizIPERC.Codigo,
-                Item = x.Item,
-                Tarea = x.Tarea,
-                PeligroId = x.PeligroId,
-                PeligroNombre = x.Peligro.Nombre,
-                ConsecuenciaId = x.ConsecuenciaId,
-                ConsecuenciaNombre = x.Consecuencia.Nombre,
-                DescripcionPeligro = x.DescripcionPeligro,
-                EvaluacionInicialId = x.EvaluacionInicialId,
-                EvaluacionResidualId = x.EvaluacionResidualId,
-                ControlIds = x.Controles
-                    .Select(c => c.ControlId)
-                    .ToList(),
-                EquipoProteccionIds = x.EquiposProteccion
-                    .Select(e => e.EquipoProteccionId)
-                    .ToList(),
-                ResponsableImplementacionId = x.ResponsableImplementacionId,
-                FechaCompromiso = x.FechaCompromiso,
-                FechaImplementacion = x.FechaImplementacion,
-                EstadoImplementacionId = (int)x.EstadoImplementacion,
-                EstadoImplementacionNombre = x.EstadoImplementacion.ToString()
-            })
+            .Select(ProyectarDetalle)
             .FirstOrDefaultAsync();
     }
 
     /// <summary>
-    /// Obtiene todos los detalles asociados a una Matriz IPERC.
+    /// Obtiene los detalles asociados a una Matriz IPERC.
     /// </summary>
-    public async Task<IEnumerable<DetalleIPERCDto>> GetByMatrizIdAsync(long matrizIPERCId)
+    public async Task<IEnumerable<DetalleIPERCDto>> GetByMatrizIdAsync(
+        long matrizIPERCId)
     {
         return await _context.Set<DetalleIPERC>()
             .AsNoTracking()
-            .Include(x => x.MatrizIPERC)
-            .Include(x => x.Peligro)
-            .Include(x => x.Consecuencia)
             .Where(x => x.MatrizIPERCId == matrizIPERCId)
             .OrderBy(x => x.Item)
-            .Select(x => new DetalleIPERCDto
-            {
-                Id = x.Id,
-                MatrizIPERCId = x.MatrizIPERCId,
-                MatrizIPERCCodigo = x.MatrizIPERC.Codigo,
-                Item = x.Item,
-                Tarea = x.Tarea,
-                PeligroId = x.PeligroId,
-                PeligroNombre = x.Peligro.Nombre,
-                ConsecuenciaId = x.ConsecuenciaId,
-                ConsecuenciaNombre = x.Consecuencia.Nombre,
-                DescripcionPeligro = x.DescripcionPeligro,
-                EvaluacionInicialId = x.EvaluacionInicialId,
-                EvaluacionResidualId = x.EvaluacionResidualId,
-                ControlIds = x.Controles
-                    .Select(c => c.ControlId)
-                    .ToList(),
-                EquipoProteccionIds = x.EquiposProteccion
-                    .Select(e => e.EquipoProteccionId)
-                    .ToList(),
-                ResponsableImplementacionId = x.ResponsableImplementacionId,
-                FechaCompromiso = x.FechaCompromiso,
-                FechaImplementacion = x.FechaImplementacion,
-                EstadoImplementacionId = (int)x.EstadoImplementacion,
-                EstadoImplementacionNombre = x.EstadoImplementacion.ToString()
-            })
+            .Select(ProyectarDetalle)
             .ToListAsync();
     }
 
@@ -246,28 +262,9 @@ public class DetalleIPERCService : IDetalleIPERCService
         _context.Set<DetalleIPERC>().Add(detalle);
         await _context.SaveChangesAsync();
 
-        return new DetalleIPERCDto
-        {
-            Id = detalle.Id,
-            MatrizIPERCId = detalle.MatrizIPERCId,
-            MatrizIPERCCodigo = matriz.Codigo,
-            Item = detalle.Item,
-            Tarea = detalle.Tarea,
-            PeligroId = detalle.PeligroId,
-            PeligroNombre = peligro.Nombre,
-            ConsecuenciaId = detalle.ConsecuenciaId,
-            ConsecuenciaNombre = consecuencia.Nombre,
-            DescripcionPeligro = detalle.DescripcionPeligro,
-            EvaluacionInicialId = detalle.EvaluacionInicialId,
-            EvaluacionResidualId = detalle.EvaluacionResidualId,
-            ControlIds = controlIds,
-            EquipoProteccionIds = equipoProteccionIds,
-            ResponsableImplementacionId = detalle.ResponsableImplementacionId,
-            FechaCompromiso = detalle.FechaCompromiso,
-            FechaImplementacion = detalle.FechaImplementacion,
-            EstadoImplementacionId = (int)detalle.EstadoImplementacion,
-            EstadoImplementacionNombre = detalle.EstadoImplementacion.ToString()
-        };
+        return await GetByIdAsync(detalle.Id)
+            ?? throw new InvalidOperationException(
+                "No se pudo recuperar el detalle IPERC registrado.");
     }
 
     /// <summary>

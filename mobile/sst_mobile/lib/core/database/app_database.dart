@@ -3,15 +3,18 @@ import 'package:sqflite/sqflite.dart';
 
 /// Administra la base de datos SQLite del aplicativo.
 ///
-/// Esta base permite registrar información cuando el dispositivo
-/// no tiene conexión a internet.
+/// Permite registrar matrices y evaluaciones IPERC cuando el dispositivo
+/// no tiene conexión a internet y sincronizarlas posteriormente.
 class AppDatabase {
   AppDatabase._();
 
   static final AppDatabase instance = AppDatabase._();
 
   static const String databaseName = 'sst_local.db';
-  static const int databaseVersion = 1;
+
+  /// Versión 2:
+  /// agrega controles y equipos de protección a los detalles IPERC.
+  static const int databaseVersion = 2;
 
   Database? _database;
 
@@ -44,17 +47,18 @@ class AppDatabase {
     await db.execute('PRAGMA foreign_keys = ON');
   }
 
-  /// Crea las tablas la primera vez que se inicia la aplicación.
+  /// Crea todas las tablas durante la primera instalación.
   Future<void> _onCreate(Database db, int version) async {
     await db.transaction((Transaction txn) async {
       await _createConfiguracionesTable(txn);
       await _createMatricesIpercTable(txn);
       await _createDetallesIpercTable(txn);
       await _createSyncQueueTable(txn);
+      await _createIndexes(txn);
     });
   }
 
-  /// Tabla para configuraciones locales.
+  /// Tabla para configuraciones locales del aplicativo.
   Future<void> _createConfiguracionesTable(DatabaseExecutor db) async {
     await db.execute('''
       CREATE TABLE configuraciones (
@@ -65,7 +69,7 @@ class AppDatabase {
     ''');
   }
 
-  /// Cabecera de las matrices IPERC creadas localmente.
+  /// Cabecera de las matrices IPERC almacenadas localmente.
   Future<void> _createMatricesIpercTable(DatabaseExecutor db) async {
     await db.execute('''
       CREATE TABLE matrices_iperc_local (
@@ -73,6 +77,7 @@ class AppDatabase {
         id_servidor TEXT,
 
         institucion_id TEXT NOT NULL,
+        sede_id TEXT,
         area_id TEXT,
         proceso_id TEXT,
         puesto_trabajo_id TEXT,
@@ -94,7 +99,9 @@ class AppDatabase {
     ''');
   }
 
-  /// Detalles de cada peligro evaluado dentro de una matriz IPERC.
+  /// Detalles y evaluaciones de riesgos de cada matriz IPERC.
+  ///
+  /// Los identificadores de controles y EPP se almacenan como JSON.
   Future<void> _createDetallesIpercTable(DatabaseExecutor db) async {
     await db.execute('''
       CREATE TABLE detalles_iperc_local (
@@ -116,12 +123,19 @@ class AppDatabase {
         valor_riesgo_inicial INTEGER NOT NULL,
         nivel_riesgo_inicial TEXT NOT NULL,
 
+        control_ids_json TEXT NOT NULL DEFAULT '[]',
+        equipo_proteccion_ids_json TEXT NOT NULL DEFAULT '[]',
         control_descripcion TEXT,
 
         severidad_residual INTEGER,
         frecuencia_residual INTEGER,
         valor_riesgo_residual INTEGER,
         nivel_riesgo_residual TEXT,
+
+        responsable_implementacion_id TEXT,
+        fecha_compromiso TEXT,
+        fecha_implementacion TEXT,
+        estado_implementacion TEXT,
 
         observaciones TEXT,
 
@@ -163,20 +177,97 @@ class AppDatabase {
     ''');
   }
 
-  /// Aquí se agregarán futuras migraciones de SQLite.
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Ejemplo futuro:
-    //
-    // if (oldVersion < 2) {
-    //   await db.execute(
-    //     'ALTER TABLE matrices_iperc_local ADD COLUMN nueva_columna TEXT',
-    //   );
-    // }
+  /// Crea índices para acelerar las consultas y la sincronización.
+  Future<void> _createIndexes(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_matrices_iperc_sincronizado
+      ON matrices_iperc_local(sincronizado, eliminado)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_detalles_iperc_matriz
+      ON detalles_iperc_local(matriz_id_local)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_detalles_iperc_sincronizado
+      ON detalles_iperc_local(sincronizado, eliminado)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_sincronizaciones_estado
+      ON sincronizaciones_pendientes(estado, fecha_creacion)
+    ''');
+
+    /// Evita colocar varias veces la misma operación pendiente.
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS
+      idx_sincronizacion_operacion_unica
+      ON sincronizaciones_pendientes(
+        entidad,
+        entidad_id_local,
+        operacion
+      )
+      WHERE estado = 'PENDIENTE'
+    ''');
   }
 
-  /// Elimina toda la base local.
+  /// Ejecuta las migraciones cuando aumenta la versión de SQLite.
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await db.transaction((Transaction txn) async {
+      if (oldVersion < 2) {
+        await _upgradeToVersion2(txn);
+      }
+
+      await _createIndexes(txn);
+    });
+  }
+
+  /// Actualiza una base de datos versión 1 a versión 2.
+  Future<void> _upgradeToVersion2(DatabaseExecutor db) async {
+    await db.execute('''
+      ALTER TABLE matrices_iperc_local
+      ADD COLUMN sede_id TEXT
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN control_ids_json TEXT NOT NULL DEFAULT '[]'
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN equipo_proteccion_ids_json TEXT NOT NULL DEFAULT '[]'
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN responsable_implementacion_id TEXT
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN fecha_compromiso TEXT
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN fecha_implementacion TEXT
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN estado_implementacion TEXT
+    ''');
+  }
+
+  /// Elimina toda la base de datos local.
   ///
-  /// Usar únicamente durante pruebas o desarrollo.
+  /// Debe utilizarse únicamente durante pruebas o desarrollo.
   Future<void> deleteDatabaseFile() async {
     await close();
 

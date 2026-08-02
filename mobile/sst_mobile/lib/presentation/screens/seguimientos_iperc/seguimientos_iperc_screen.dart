@@ -40,10 +40,7 @@ class SeguimientosIpercScreen extends StatelessWidget {
 }
 
 class _SeguimientosIpercView extends StatefulWidget {
-  const _SeguimientosIpercView({
-    required this.titulo,
-    this.detalleIpercId,
-  });
+  const _SeguimientosIpercView({required this.titulo, this.detalleIpercId});
 
   final int? detalleIpercId;
   final String titulo;
@@ -258,19 +255,27 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
                     ],
                     const SizedBox(height: 12),
                     if (provider.seguimientosFiltrados.isEmpty)
-                      _VacioCard(
-                        buscando: provider.terminoBusqueda.isNotEmpty,
-                      )
+                      _VacioCard(buscando: provider.terminoBusqueda.isNotEmpty)
                     else
-                      ...provider.seguimientosFiltrados.map(
-                        (SeguimientoIpercModel seguimiento) {
-                          return _SeguimientoCard(
-                            seguimiento: seguimiento,
-                            onEditar: () => _abrirEditar(seguimiento),
-                            onEliminar: () => _confirmarEliminar(seguimiento),
-                            onVerificar: seguimiento.verificado
-                                ? null
-                                : () => _verificar(seguimiento),
+                      ...List<Widget>.generate(
+                        provider.seguimientosFiltrados.length,
+                        (int index) {
+                          final SeguimientoIpercModel seguimiento =
+                              provider.seguimientosFiltrados[index];
+                          final bool esUltimo =
+                              index ==
+                              provider.seguimientosFiltrados.length - 1;
+
+                          return Padding(
+                            padding: EdgeInsets.only(bottom: esUltimo ? 0 : 16),
+                            child: _SeguimientoCard(
+                              seguimiento: seguimiento,
+                              onEditar: () => _abrirEditar(seguimiento),
+                              onEliminar: () => _confirmarEliminar(seguimiento),
+                              onVerificar: seguimiento.verificado
+                                  ? null
+                                  : () => _verificar(seguimiento),
+                            ),
                           );
                         },
                       ),
@@ -291,6 +296,8 @@ class _ResumenSeguimientos extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -332,9 +339,9 @@ class _ResumenDato extends StatelessWidget {
       children: <Widget>[
         Text(
           valor,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(etiqueta, textAlign: TextAlign.center),
@@ -361,6 +368,8 @@ class _SeguimientoCard extends StatelessWidget {
     final ColorScheme colors = Theme.of(context).colorScheme;
 
     return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -439,7 +448,9 @@ class _SeguimientoCard extends StatelessWidget {
               children: <Widget>[
                 Chip(
                   avatar: const Icon(Icons.percent, size: 18),
-                  label: Text('${seguimiento.porcentajeAvance.toStringAsFixed(0)}%'),
+                  label: Text(
+                    '${seguimiento.porcentajeAvance.toStringAsFixed(0)}%',
+                  ),
                 ),
                 Chip(
                   avatar: Icon(

@@ -48,7 +48,9 @@ class _NuevoTipoPeligroScreenState extends State<NuevoTipoPeligroScreen> {
   ///
   /// Ejemplo: si ya existe TIP-001, el siguiente será TIP-002.
   String _generarCodigoCorrelativo() {
-    final List<TipoPeligroModel> tipos = context.read<TipoPeligroProvider>().tipos;
+    final List<TipoPeligroModel> tipos = context
+        .read<TipoPeligroProvider>()
+        .tipos;
 
     int mayorNumero = 0;
 
@@ -245,7 +247,8 @@ class _NuevoTipoPeligroScreenState extends State<NuevoTipoPeligroScreen> {
                   maxLength: 20,
                   decoration: InputDecoration(
                     labelText: 'Código generado',
-                    helperText: 'Se genera automáticamente según los tipos existentes.',
+                    helperText:
+                        'Se genera automáticamente según los tipos existentes.',
                     prefixIcon: const Icon(Icons.qr_code_outlined),
                     suffixIcon: IconButton(
                       tooltip: 'Generar código',

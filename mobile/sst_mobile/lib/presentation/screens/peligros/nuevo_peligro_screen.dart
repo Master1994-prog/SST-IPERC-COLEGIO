@@ -99,7 +99,9 @@ class _NuevoPeligroScreenState extends State<NuevoPeligroScreen> {
 
   /// Genera un código correlativo con formato PEL-001.
   String _generarCodigoCorrelativo() {
-    final List<PeligroModel> peligros = context.read<PeligroProvider>().peligros;
+    final List<PeligroModel> peligros = context
+        .read<PeligroProvider>()
+        .peligros;
     final RegExp formato = RegExp(r'^PEL-(\d+)$', caseSensitive: false);
 
     int mayorNumero = 0;

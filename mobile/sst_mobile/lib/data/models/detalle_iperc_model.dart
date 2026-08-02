@@ -10,6 +10,7 @@ class DetalleIpercModel {
     required this.evaluacionInicialId,
     required this.estadoImplementacionId,
     required this.estadoImplementacionNombre,
+    this.evaluacionInicial,
     this.controlIds = const <int>[],
     this.equipoProteccionIds = const <int>[],
     this.matrizIpercCodigo,
@@ -17,6 +18,7 @@ class DetalleIpercModel {
     this.consecuenciaNombre,
     this.descripcionPeligro,
     this.evaluacionResidualId,
+    this.evaluacionResidual,
     this.responsableImplementacionId,
     this.fechaCompromiso,
     this.fechaImplementacion,
@@ -33,7 +35,9 @@ class DetalleIpercModel {
   final String? consecuenciaNombre;
   final String? descripcionPeligro;
   final int evaluacionInicialId;
+  final EvaluacionDetalleIpercModel? evaluacionInicial;
   final int? evaluacionResidualId;
+  final EvaluacionDetalleIpercModel? evaluacionResidual;
   final List<int> controlIds;
   final List<int> equipoProteccionIds;
   final int? responsableImplementacionId;
@@ -46,6 +50,10 @@ class DetalleIpercModel {
     final int estadoId = _toInt(
       json['estadoImplementacionId'] ?? json['estadoImplementacion'],
     );
+    final EvaluacionDetalleIpercModel? evaluacionInicial =
+        EvaluacionDetalleIpercModel.desdeValor(json['evaluacionInicial']);
+    final EvaluacionDetalleIpercModel? evaluacionResidual =
+        EvaluacionDetalleIpercModel.desdeValor(json['evaluacionResidual']);
 
     return DetalleIpercModel(
       id: _toInt(json['id']),
@@ -60,8 +68,14 @@ class DetalleIpercModel {
       consecuenciaId: _toInt(json['consecuenciaId']),
       consecuenciaNombre: _toNullableString(json['consecuenciaNombre']),
       descripcionPeligro: _toNullableString(json['descripcionPeligro']),
-      evaluacionInicialId: _toInt(json['evaluacionInicialId']),
-      evaluacionResidualId: _toNullableInt(json['evaluacionResidualId']),
+      evaluacionInicialId: _toInt(
+        json['evaluacionInicialId'] ?? evaluacionInicial?.id,
+      ),
+      evaluacionInicial: evaluacionInicial,
+      evaluacionResidualId: _toNullableInt(
+        json['evaluacionResidualId'] ?? evaluacionResidual?.id,
+      ),
+      evaluacionResidual: evaluacionResidual,
       controlIds: _toIntList(
         json['controlIds'] ??
             json['controlesIds'] ??
@@ -96,9 +110,8 @@ class DetalleIpercModel {
     return lista
         .whereType<Map>()
         .map(
-          (Map elemento) => DetalleIpercModel.fromJson(
-            Map<String, dynamic>.from(elemento),
-          ),
+          (Map elemento) =>
+              DetalleIpercModel.fromJson(Map<String, dynamic>.from(elemento)),
         )
         .where((DetalleIpercModel detalle) => detalle.id > 0)
         .toList();
@@ -117,7 +130,8 @@ class DetalleIpercModel {
   }
 
   bool get tieneEvaluacionResidual {
-    return evaluacionResidualId != null && evaluacionResidualId! > 0;
+    return evaluacionResidual != null ||
+        (evaluacionResidualId != null && evaluacionResidualId! > 0);
   }
 
   bool get tieneControles {
@@ -159,6 +173,87 @@ class DetalleIpercModel {
   static String _textoVisible(String? valor, String predeterminado) {
     final String texto = valor?.trim() ?? '';
     return texto.isEmpty ? predeterminado : texto;
+  }
+}
+
+/// Información completa de una evaluación de riesgo asociada al detalle IPERC.
+class EvaluacionDetalleIpercModel {
+  const EvaluacionDetalleIpercModel({
+    required this.id,
+    required this.probabilidadId,
+    required this.probabilidadNombre,
+    required this.valorProbabilidad,
+    required this.severidadId,
+    required this.severidadNombre,
+    required this.valorSeveridad,
+    required this.nivelRiesgoId,
+    required this.nivelRiesgoNombre,
+    required this.color,
+    required this.valorRiesgo,
+    required this.esAceptable,
+    required this.requiereAccion,
+    this.observaciones,
+  });
+
+  final int id;
+  final int probabilidadId;
+  final String probabilidadNombre;
+  final int valorProbabilidad;
+  final int severidadId;
+  final String severidadNombre;
+  final int valorSeveridad;
+  final int nivelRiesgoId;
+  final String nivelRiesgoNombre;
+  final String color;
+  final int valorRiesgo;
+  final bool esAceptable;
+  final bool requiereAccion;
+  final String? observaciones;
+
+  factory EvaluacionDetalleIpercModel.fromJson(Map<String, dynamic> json) {
+    final int valorProbabilidad = _toInt(
+      json['valorProbabilidad'] ?? json['probabilidadValor'],
+    );
+    final int valorSeveridad = _toInt(
+      json['valorSeveridad'] ?? json['severidadValor'],
+    );
+    final int valorRecibido = _toInt(json['valorRiesgo'] ?? json['valor']);
+
+    return EvaluacionDetalleIpercModel(
+      id: _toInt(json['id']),
+      probabilidadId: _toInt(json['probabilidadId']),
+      probabilidadNombre:
+          _toNullableString(json['probabilidadNombre']) ?? 'Sin probabilidad',
+      valorProbabilidad: valorProbabilidad,
+      severidadId: _toInt(json['severidadId']),
+      severidadNombre:
+          _toNullableString(json['severidadNombre']) ?? 'Sin severidad',
+      valorSeveridad: valorSeveridad,
+      nivelRiesgoId: _toInt(json['nivelRiesgoId']),
+      nivelRiesgoNombre:
+          _toNullableString(json['nivelRiesgoNombre']) ?? 'Sin nivel',
+      color: _normalizarColor(json['color']),
+      valorRiesgo: valorRecibido > 0
+          ? valorRecibido
+          : valorProbabilidad * valorSeveridad,
+      esAceptable: _toBool(json['esAceptable'] ?? json['aceptable']),
+      requiereAccion: _toBool(json['requiereAccion']),
+      observaciones: _toNullableString(json['observaciones']),
+    );
+  }
+
+  static EvaluacionDetalleIpercModel? desdeValor(dynamic valor) {
+    if (valor is! Map) {
+      return null;
+    }
+
+    return EvaluacionDetalleIpercModel.fromJson(
+      Map<String, dynamic>.from(valor),
+    );
+  }
+
+  String get calculo {
+    return '$valorProbabilidad × $valorSeveridad = $valorRiesgo';
   }
 }
 
@@ -368,4 +463,22 @@ DateTime? _toNullableDate(dynamic valor) {
 String? _nullableText(String? valor) {
   final String texto = valor?.trim() ?? '';
   return texto.isEmpty ? null : texto;
+}
+
+bool _toBool(dynamic valor) {
+  if (valor is bool) {
+    return valor;
+  }
+
+  if (valor is num) {
+    return valor != 0;
+  }
+
+  final String texto = valor?.toString().trim().toLowerCase() ?? '';
+  return texto == 'true' || texto == '1' || texto == 'si' || texto == 'sí';
+}
+
+String _normalizarColor(dynamic valor) {
+  final String color = _toNullableString(valor) ?? '#9E9E9E';
+  return color.startsWith('#') ? color : '#$color';
 }

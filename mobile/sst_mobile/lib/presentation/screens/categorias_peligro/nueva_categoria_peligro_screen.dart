@@ -436,10 +436,7 @@ class _NuevaCategoriaPeligroScreenState
 
 /// Encabezado visual del formulario.
 class _EncabezadoFormulario extends StatelessWidget {
-  const _EncabezadoFormulario({
-    required this.color,
-    required this.icono,
-  });
+  const _EncabezadoFormulario({required this.color, required this.icono});
 
   final String color;
   final String icono;
@@ -618,16 +615,8 @@ const List<_OpcionIcono> _opcionesIcono = <_OpcionIcono>[
     valor: 'science',
     icono: Icons.science_outlined,
   ),
-  _OpcionIcono(
-    nombre: 'Ambiente',
-    valor: 'eco',
-    icono: Icons.eco_outlined,
-  ),
-  _OpcionIcono(
-    nombre: 'Persona',
-    valor: 'person',
-    icono: Icons.person_outline,
-  ),
+  _OpcionIcono(nombre: 'Ambiente', valor: 'eco', icono: Icons.eco_outlined),
+  _OpcionIcono(nombre: 'Persona', valor: 'person', icono: Icons.person_outline),
   _OpcionIcono(
     nombre: 'Construcción',
     valor: 'construction',

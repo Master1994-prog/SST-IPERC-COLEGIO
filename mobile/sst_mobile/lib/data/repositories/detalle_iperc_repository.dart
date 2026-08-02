@@ -3,10 +3,8 @@ import '../models/detalle_iperc_model.dart';
 
 /// Intermediario entre la interfaz y el origen remoto de Detalle IPERC.
 class DetalleIpercRepository {
-  DetalleIpercRepository({
-    DetalleIpercRemoteDatasource? remoteDatasource,
-  }) : _remoteDatasource =
-           remoteDatasource ?? DetalleIpercRemoteDatasource();
+  DetalleIpercRepository({DetalleIpercRemoteDatasource? remoteDatasource})
+    : _remoteDatasource = remoteDatasource ?? DetalleIpercRemoteDatasource();
 
   final DetalleIpercRemoteDatasource _remoteDatasource;
 

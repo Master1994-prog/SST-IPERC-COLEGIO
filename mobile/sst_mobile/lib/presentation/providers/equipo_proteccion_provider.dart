@@ -20,17 +20,14 @@ class EquipoProteccionProvider extends ChangeNotifier {
   ///
   /// Permite inyectar un repositorio personalizado
   /// para pruebas unitarias.
-  EquipoProteccionProvider({
-    EquipoProteccionRepository? repository,
-  }) : _repository =
-            repository ?? EquipoProteccionRepository();
+  EquipoProteccionProvider({EquipoProteccionRepository? repository})
+    : _repository = repository ?? EquipoProteccionRepository();
 
   /// Repositorio utilizado para acceder a los datos.
   final EquipoProteccionRepository _repository;
 
   /// Lista completa de equipos cargados.
-  final List<EquipoProteccionModel> _equipos =
-      <EquipoProteccionModel>[];
+  final List<EquipoProteccionModel> _equipos = <EquipoProteccionModel>[];
 
   /// Lista visible después de aplicar una búsqueda.
   final List<EquipoProteccionModel> _equiposFiltrados =
@@ -54,17 +51,13 @@ class EquipoProteccionProvider extends ChangeNotifier {
   /// Devuelve una copia de solo lectura
   /// de todos los equipos.
   List<EquipoProteccionModel> get equipos {
-    return List<EquipoProteccionModel>.unmodifiable(
-      _equipos,
-    );
+    return List<EquipoProteccionModel>.unmodifiable(_equipos);
   }
 
   /// Devuelve una copia de solo lectura
   /// de los resultados filtrados.
   List<EquipoProteccionModel> get equiposFiltrados {
-    return List<EquipoProteccionModel>.unmodifiable(
-      _equiposFiltrados,
-    );
+    return List<EquipoProteccionModel>.unmodifiable(_equiposFiltrados);
   }
 
   /// Indica si se están cargando datos.
@@ -84,8 +77,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
 
   /// Indica si existe un mensaje de error.
   bool get tieneError {
-    return _mensajeError != null &&
-        _mensajeError!.trim().isNotEmpty;
+    return _mensajeError != null && _mensajeError!.trim().isNotEmpty;
   }
 
   /// Indica si existen equipos cargados.
@@ -106,20 +98,14 @@ class EquipoProteccionProvider extends ChangeNotifier {
   /// Cantidad de equipos activos.
   int get cantidadActivos {
     return _equipos
-        .where(
-          (EquipoProteccionModel equipo) =>
-              equipo.estaDisponible,
-        )
+        .where((EquipoProteccionModel equipo) => equipo.estaDisponible)
         .length;
   }
 
   /// Cantidad de equipos inactivos.
   int get cantidadInactivos {
     return _equipos
-        .where(
-          (EquipoProteccionModel equipo) =>
-              !equipo.estaDisponible,
-        )
+        .where((EquipoProteccionModel equipo) => !equipo.estaDisponible)
         .length;
   }
 
@@ -145,31 +131,25 @@ class EquipoProteccionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<EquipoProteccionModel> resultado =
-          await _repository.obtenerTodos();
+      final List<EquipoProteccionModel> resultado = await _repository
+          .obtenerTodos();
 
-      resultado.sort(
-        (
-          EquipoProteccionModel primero,
-          EquipoProteccionModel segundo,
-        ) {
-          final int comparacionNombre = primero.nombre
-              .toLowerCase()
-              .compareTo(
-                segundo.nombre.toLowerCase(),
-              );
+      resultado.sort((
+        EquipoProteccionModel primero,
+        EquipoProteccionModel segundo,
+      ) {
+        final int comparacionNombre = primero.nombre.toLowerCase().compareTo(
+          segundo.nombre.toLowerCase(),
+        );
 
-          if (comparacionNombre != 0) {
-            return comparacionNombre;
-          }
+        if (comparacionNombre != 0) {
+          return comparacionNombre;
+        }
 
-          return primero.codigo
-              .toLowerCase()
-              .compareTo(
-                segundo.codigo.toLowerCase(),
-              );
-        },
-      );
+        return primero.codigo.toLowerCase().compareTo(
+          segundo.codigo.toLowerCase(),
+        );
+      });
 
       _equipos
         ..clear()
@@ -191,9 +171,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
   ///
   /// Devuelve `true` cuando el registro
   /// se completa correctamente.
-  Future<bool> crearEquipo(
-    CrearEquipoProteccionRequest request,
-  ) async {
+  Future<bool> crearEquipo(CrearEquipoProteccionRequest request) async {
     if (_guardando) {
       return false;
     }
@@ -203,8 +181,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final EquipoProteccionModel creado =
-          await _repository.crear(request);
+      final EquipoProteccionModel creado = await _repository.crear(request);
 
       _equipos.add(creado);
 
@@ -238,15 +215,13 @@ class EquipoProteccionProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final EquipoProteccionModel actualizado =
-          await _repository.actualizar(
+      final EquipoProteccionModel actualizado = await _repository.actualizar(
         id,
         request,
       );
 
       final int indice = _equipos.indexWhere(
-        (EquipoProteccionModel equipo) =>
-            equipo.id == id,
+        (EquipoProteccionModel equipo) => equipo.id == id,
       );
 
       if (indice >= 0) {
@@ -272,9 +247,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
   ///
   /// Devuelve `true` cuando la operación
   /// se realiza correctamente.
-  Future<bool> eliminarEquipo(
-    int id,
-  ) async {
+  Future<bool> eliminarEquipo(int id) async {
     if (_eliminando) {
       return false;
     }
@@ -286,10 +259,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
     try {
       await _repository.eliminar(id);
 
-      _equipos.removeWhere(
-        (EquipoProteccionModel equipo) =>
-            equipo.id == id,
-      );
+      _equipos.removeWhere((EquipoProteccionModel equipo) => equipo.id == id);
 
       _aplicarFiltro();
 
@@ -307,9 +277,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
   ///
   /// Primero lo busca en la lista local.
   /// Cuando no existe, consulta el backend.
-  Future<EquipoProteccionModel?> obtenerEquipoPorId(
-    int id,
-  ) async {
+  Future<EquipoProteccionModel?> obtenerEquipoPorId(int id) async {
     if (id <= 0) {
       _mensajeError =
           'El identificador del equipo de protección '
@@ -320,8 +288,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
     }
 
     final int indiceLocal = _equipos.indexWhere(
-      (EquipoProteccionModel equipo) =>
-          equipo.id == id,
+      (EquipoProteccionModel equipo) => equipo.id == id,
     );
 
     if (indiceLocal >= 0) {
@@ -339,9 +306,7 @@ class EquipoProteccionProvider extends ChangeNotifier {
 
   /// Actualiza el texto de búsqueda
   /// y vuelve a filtrar los equipos.
-  void buscar(
-    String texto,
-  ) {
+  void buscar(String texto) {
     _textoBusqueda = texto.trim();
     _aplicarFiltro();
     notifyListeners();
@@ -370,12 +335,9 @@ class EquipoProteccionProvider extends ChangeNotifier {
 
   /// Reemplaza un equipo existente o lo agrega
   /// cuando todavía no se encuentra cargado.
-  void reemplazarEquipo(
-    EquipoProteccionModel equipo,
-  ) {
+  void reemplazarEquipo(EquipoProteccionModel equipo) {
     final int indice = _equipos.indexWhere(
-      (EquipoProteccionModel elemento) =>
-          elemento.id == equipo.id,
+      (EquipoProteccionModel elemento) => elemento.id == equipo.id,
     );
 
     if (indice >= 0) {
@@ -396,73 +358,49 @@ class EquipoProteccionProvider extends ChangeNotifier {
   /// - Descripción.
   /// - Tipo de equipo.
   void _aplicarFiltro() {
-    final String criterio =
-        _textoBusqueda.toLowerCase();
+    final String criterio = _textoBusqueda.toLowerCase();
 
     _equiposFiltrados.clear();
 
     if (criterio.isEmpty) {
-      _equiposFiltrados.addAll(
-        _equipos,
-      );
+      _equiposFiltrados.addAll(_equipos);
       return;
     }
 
     _equiposFiltrados.addAll(
-      _equipos.where(
-        (EquipoProteccionModel equipo) {
-          return equipo.codigo
-                  .toLowerCase()
-                  .contains(criterio) ||
-              equipo.nombre
-                  .toLowerCase()
-                  .contains(criterio) ||
-              equipo.descripcionVisible
-                  .toLowerCase()
-                  .contains(criterio) ||
-              equipo.tipoVisible
-                  .toLowerCase()
-                  .contains(criterio);
-        },
-      ),
+      _equipos.where((EquipoProteccionModel equipo) {
+        return equipo.codigo.toLowerCase().contains(criterio) ||
+            equipo.nombre.toLowerCase().contains(criterio) ||
+            equipo.descripcionVisible.toLowerCase().contains(criterio) ||
+            equipo.tipoVisible.toLowerCase().contains(criterio);
+      }),
     );
   }
 
   /// Ordena los equipos primero por nombre
   /// y después por código.
   void _ordenarEquipos() {
-    _equipos.sort(
-      (
-        EquipoProteccionModel primero,
-        EquipoProteccionModel segundo,
-      ) {
-        final int comparacionNombre = primero.nombre
-            .toLowerCase()
-            .compareTo(
-              segundo.nombre.toLowerCase(),
-            );
+    _equipos.sort((
+      EquipoProteccionModel primero,
+      EquipoProteccionModel segundo,
+    ) {
+      final int comparacionNombre = primero.nombre.toLowerCase().compareTo(
+        segundo.nombre.toLowerCase(),
+      );
 
-        if (comparacionNombre != 0) {
-          return comparacionNombre;
-        }
+      if (comparacionNombre != 0) {
+        return comparacionNombre;
+      }
 
-        return primero.codigo
-            .toLowerCase()
-            .compareTo(
-              segundo.codigo.toLowerCase(),
-            );
-      },
-    );
+      return primero.codigo.toLowerCase().compareTo(
+        segundo.codigo.toLowerCase(),
+      );
+    });
   }
 
   /// Limpia el prefijo `Exception:` antes
   /// de mostrar el mensaje en la interfaz.
-  String _limpiarMensaje(
-    Object error,
-  ) {
-    return error
-        .toString()
-        .replaceFirst('Exception: ', '')
-        .trim();
+  String _limpiarMensaje(Object error) {
+    return error.toString().replaceFirst('Exception: ', '').trim();
   }
 }

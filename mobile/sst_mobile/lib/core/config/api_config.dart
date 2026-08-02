@@ -8,6 +8,7 @@ class ApiConfig {
   static const Duration receiveTimeout = Duration(seconds: 30);
 
   static const String loginEndpoint = '/Auth/login';
+  static const String usuariosEndpoint = '/Usuarios';
   static const String matricesIpercEndpoint = '/MatricesIPERC';
 
   static const String institucionesEndpoint = '/Instituciones';
@@ -35,6 +36,5 @@ class ApiConfig {
       '/clasificaciones-control';
 
   static const String tiposPeligroEndpoint = '/tipos-peligro';
-  static const String categoriasPeligroEndpoint =
-    '/categorias-peligro';
+  static const String categoriasPeligroEndpoint = '/categorias-peligro';
 }

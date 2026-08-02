@@ -619,16 +619,8 @@ const List<_OpcionIcono> _opcionesIcono = <_OpcionIcono>[
     valor: 'science',
     icono: Icons.science_outlined,
   ),
-  _OpcionIcono(
-    nombre: 'Ambiente',
-    valor: 'eco',
-    icono: Icons.eco_outlined,
-  ),
-  _OpcionIcono(
-    nombre: 'Persona',
-    valor: 'person',
-    icono: Icons.person_outline,
-  ),
+  _OpcionIcono(nombre: 'Ambiente', valor: 'eco', icono: Icons.eco_outlined),
+  _OpcionIcono(nombre: 'Persona', valor: 'person', icono: Icons.person_outline),
   _OpcionIcono(
     nombre: 'Construcción',
     valor: 'construction',

@@ -56,9 +56,7 @@ class _EditarConsecuenciaScreenState extends State<EditarConsecuenciaScreen> {
     super.initState();
 
     // Carga en el formulario los datos actuales.
-    _codigoController = TextEditingController(
-      text: widget.consecuencia.codigo,
-    );
+    _codigoController = TextEditingController(text: widget.consecuencia.codigo);
 
     _nombreController = TextEditingController(text: widget.consecuencia.nombre);
 

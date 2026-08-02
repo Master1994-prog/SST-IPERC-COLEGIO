@@ -30,15 +30,17 @@ class DetalleIpercProvider extends ChangeNotifier {
       return List<DetalleIpercModel>.unmodifiable(_detalles);
     }
 
-    return _detalles.where((DetalleIpercModel detalle) {
-      final String contenido = _normalizar(
-        '${detalle.item} ${detalle.tarea} ${detalle.peligroVisible} '
-        '${detalle.consecuenciaVisible} ${detalle.descripcionVisible} '
-        '${detalle.estadoImplementacionNombre}',
-      );
+    return _detalles
+        .where((DetalleIpercModel detalle) {
+          final String contenido = _normalizar(
+            '${detalle.item} ${detalle.tarea} ${detalle.peligroVisible} '
+            '${detalle.consecuenciaVisible} ${detalle.descripcionVisible} '
+            '${detalle.estadoImplementacionNombre}',
+          );
 
-      return contenido.contains(termino);
-    }).toList(growable: false);
+          return contenido.contains(termino);
+        })
+        .toList(growable: false);
   }
 
   bool get cargando => _cargando;
@@ -144,10 +146,7 @@ class DetalleIpercProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> actualizar(
-    int id,
-    ActualizarDetalleIpercRequest request,
-  ) async {
+  Future<bool> actualizar(int id, ActualizarDetalleIpercRequest request) async {
     if (_procesando || id <= 0) {
       return false;
     }

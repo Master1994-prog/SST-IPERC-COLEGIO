@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../data/models/detalle_iperc_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
+import '../../../data/models/usuario_model.dart';
 import '../../providers/detalle_iperc_provider.dart';
+import '../../providers/usuario_provider.dart';
 import 'editar_detalle_iperc_screen.dart';
 import 'nuevo_detalle_iperc_screen.dart';
 
@@ -15,12 +17,23 @@ class DetallesIpercScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<DetalleIpercProvider>(
-      create: (_) {
-        final DetalleIpercProvider provider = DetalleIpercProvider();
-        Future<void>.microtask(() => provider.cargarPorMatriz(matriz.id));
-        return provider;
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DetalleIpercProvider>(
+          create: (_) {
+            final DetalleIpercProvider provider = DetalleIpercProvider();
+            Future<void>.microtask(() => provider.cargarPorMatriz(matriz.id));
+            return provider;
+          },
+        ),
+        ChangeNotifierProvider<UsuarioProvider>(
+          create: (_) {
+            final UsuarioProvider provider = UsuarioProvider();
+            Future<void>.microtask(provider.cargarUsuarios);
+            return provider;
+          },
+        ),
+      ],
       child: _DetallesIpercView(matriz: matriz),
     );
   }
@@ -46,10 +59,11 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
     super.dispose();
   }
 
-  Future<void> _actualizar() {
-    return context.read<DetalleIpercProvider>().cargarPorMatriz(
-      widget.matriz.id,
-    );
+  Future<void> _actualizar() async {
+    await Future.wait<void>(<Future<void>>[
+      context.read<DetalleIpercProvider>().cargarPorMatriz(widget.matriz.id),
+      context.read<UsuarioProvider>().cargarUsuarios(),
+    ]);
   }
 
   Future<void> _abrirNuevoDetalle() async {
@@ -72,12 +86,21 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
   }
 
   Future<void> _abrirEditarDetalle(DetalleIpercModel detalle) async {
-    final DetalleIpercProvider provider = context.read<DetalleIpercProvider>();
+    final DetalleIpercProvider detalleProvider = context
+        .read<DetalleIpercProvider>();
+    final UsuarioProvider usuarioProvider = context.read<UsuarioProvider>();
 
     final bool? actualizado = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => ChangeNotifierProvider<DetalleIpercProvider>.value(
-          value: provider,
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider<DetalleIpercProvider>.value(
+              value: detalleProvider,
+            ),
+            ChangeNotifierProvider<UsuarioProvider>.value(
+              value: usuarioProvider,
+            ),
+          ],
           child: EditarDetalleIpercScreen(
             matriz: widget.matriz,
             detalle: detalle,
@@ -122,8 +145,7 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
       return;
     }
 
-    final DetalleIpercProvider provider = context
-        .read<DetalleIpercProvider>();
+    final DetalleIpercProvider provider = context.read<DetalleIpercProvider>();
     final bool eliminado = await provider.eliminar(detalle.id);
 
     if (!mounted) {
@@ -149,6 +171,11 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
   }
 
   void _mostrarDetalle(DetalleIpercModel detalle) {
+    final String responsable = _nombreResponsable(
+      context.read<UsuarioProvider>(),
+      detalle.responsableImplementacionId,
+    );
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -183,18 +210,22 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                   etiqueta: 'Descripción específica',
                   valor: detalle.descripcionVisible,
                 ),
-                _DatoDetalle(
+                const SizedBox(height: 8),
+                _EvaluacionCard(
+                  titulo: 'Evaluación inicial',
                   icono: Icons.calculate_outlined,
-                  etiqueta: 'Evaluación inicial',
-                  valor: 'ID ${detalle.evaluacionInicialId}',
+                  evaluacion: detalle.evaluacionInicial,
+                  evaluacionId: detalle.evaluacionInicialId,
                 ),
-                _DatoDetalle(
+                const SizedBox(height: 12),
+                _EvaluacionCard(
+                  titulo: 'Evaluación residual',
                   icono: Icons.verified_user_outlined,
-                  etiqueta: 'Evaluación residual',
-                  valor: detalle.tieneEvaluacionResidual
-                      ? 'ID ${detalle.evaluacionResidualId}'
-                      : 'Pendiente',
+                  evaluacion: detalle.evaluacionResidual,
+                  evaluacionId: detalle.evaluacionResidualId,
+                  pendienteCuandoFalta: true,
                 ),
+                const SizedBox(height: 8),
                 _DatoDetalle(
                   icono: Icons.security_outlined,
                   etiqueta: 'Controles',
@@ -213,6 +244,21 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                   icono: Icons.task_alt_outlined,
                   etiqueta: 'Implementación',
                   valor: detalle.estadoImplementacionNombre,
+                ),
+                _DatoDetalle(
+                  icono: Icons.person_outline,
+                  etiqueta: 'Responsable',
+                  valor: responsable,
+                ),
+                _DatoDetalle(
+                  icono: Icons.event_outlined,
+                  etiqueta: 'Fecha de compromiso',
+                  valor: _formatearFecha(detalle.fechaCompromiso),
+                ),
+                _DatoDetalle(
+                  icono: Icons.event_available_outlined,
+                  etiqueta: 'Fecha de implementación',
+                  valor: _formatearFecha(detalle.fechaImplementacion),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -250,6 +296,8 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
 
   @override
   Widget build(BuildContext context) {
+    final UsuarioProvider usuarioProvider = context.watch<UsuarioProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Peligros y riesgos'),
@@ -299,7 +347,7 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                   Expanded(
                     child: RefreshIndicator(
                       onRefresh: _actualizar,
-                      child: _construirContenido(provider),
+                      child: _construirContenido(provider, usuarioProvider),
                     ),
                   ),
                 ],
@@ -334,7 +382,10 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
     );
   }
 
-  Widget _construirContenido(DetalleIpercProvider provider) {
+  Widget _construirContenido(
+    DetalleIpercProvider provider,
+    UsuarioProvider usuarioProvider,
+  ) {
     if (provider.cargando && !provider.tieneDetalles) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -358,9 +409,7 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
       final bool buscando = provider.terminoBusqueda.isNotEmpty;
 
       return _EstadoLista(
-        icono: buscando
-            ? Icons.search_off_outlined
-            : Icons.assignment_outlined,
+        icono: buscando ? Icons.search_off_outlined : Icons.assignment_outlined,
         titulo: buscando
             ? 'No se encontraron resultados'
             : 'La matriz todavía no tiene peligros',
@@ -394,6 +443,10 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
 
         return _DetalleCard(
           detalle: detalle,
+          responsableNombre: _nombreResponsable(
+            usuarioProvider,
+            detalle.responsableImplementacionId,
+          ),
           procesando: provider.procesando,
           onTap: () => _mostrarDetalle(detalle),
           onEditar: () => _abrirEditarDetalle(detalle),
@@ -401,6 +454,34 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
         );
       },
     );
+  }
+
+  String _nombreResponsable(UsuarioProvider provider, int? responsableId) {
+    if (responsableId == null || responsableId <= 0) {
+      return 'Sin responsable asignado';
+    }
+
+    for (final UsuarioModel usuario in provider.usuarios) {
+      if (usuario.id == responsableId) {
+        return usuario.nombreVisible;
+      }
+    }
+
+    if (provider.cargando) {
+      return 'Cargando responsable...';
+    }
+
+    return 'Responsable no disponible';
+  }
+
+  String _formatearFecha(DateTime? fecha) {
+    if (fecha == null) {
+      return 'Sin fecha registrada';
+    }
+
+    final String dia = fecha.day.toString().padLeft(2, '0');
+    final String mes = fecha.month.toString().padLeft(2, '0');
+    return '$dia/$mes/${fecha.year}';
   }
 }
 
@@ -478,6 +559,7 @@ class _MatrizResumen extends StatelessWidget {
 class _DetalleCard extends StatelessWidget {
   const _DetalleCard({
     required this.detalle,
+    required this.responsableNombre,
     required this.procesando,
     required this.onTap,
     required this.onEditar,
@@ -485,6 +567,7 @@ class _DetalleCard extends StatelessWidget {
   });
 
   final DetalleIpercModel detalle;
+  final String responsableNombre;
   final bool procesando;
   final VoidCallback onTap;
   final VoidCallback onEditar;
@@ -530,6 +613,10 @@ class _DetalleCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 6,
                       children: <Widget>[
+                        if (detalle.evaluacionInicial != null)
+                          _NivelRiesgoEtiqueta(
+                            evaluacion: detalle.evaluacionInicial!,
+                          ),
                         _Etiqueta(
                           icono: Icons.report_problem_outlined,
                           texto: detalle.consecuenciaVisible,
@@ -553,6 +640,10 @@ class _DetalleCard extends StatelessWidget {
                           texto: detalle.tieneEquiposProteccion
                               ? '${detalle.equipoProteccionIds.length} EPP'
                               : 'Sin EPP',
+                        ),
+                        _Etiqueta(
+                          icono: Icons.person_outline,
+                          texto: responsableNombre,
                         ),
                       ],
                     ),
@@ -675,6 +766,210 @@ class _DatoDetalle extends StatelessWidget {
   }
 }
 
+/// Presenta los datos que forman una evaluación de riesgo.
+class _EvaluacionCard extends StatelessWidget {
+  const _EvaluacionCard({
+    required this.titulo,
+    required this.icono,
+    required this.evaluacion,
+    required this.evaluacionId,
+    this.pendienteCuandoFalta = false,
+  });
+
+  final String titulo;
+  final IconData icono;
+  final EvaluacionDetalleIpercModel? evaluacion;
+  final int? evaluacionId;
+  final bool pendienteCuandoFalta;
+
+  @override
+  Widget build(BuildContext context) {
+    final EvaluacionDetalleIpercModel? datos = evaluacion;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    if (datos == null) {
+      final bool tieneId = evaluacionId != null && evaluacionId! > 0;
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Row(
+          children: <Widget>[
+            Icon(icono, color: colors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    titulo,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    pendienteCuandoFalta && !tieneId
+                        ? 'Pendiente de evaluación'
+                        : tieneId
+                        ? 'La evaluación #$evaluacionId no incluye todavía '
+                              'el detalle del cálculo.'
+                        : 'Sin evaluación registrada',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final Color colorNivel = _colorDesdeHex(datos.color);
+    final Color textoNivel = _colorDeTexto(colorNivel);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorNivel.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colorNivel.withValues(alpha: 0.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(icono, color: colorNivel),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  titulo,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: colorNivel,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${datos.nivelRiesgoNombre} · ${datos.valorRiesgo}',
+                  style: TextStyle(
+                    color: textoNivel,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _EvaluacionFila(
+            etiqueta: 'Probabilidad',
+            valor: '${datos.probabilidadNombre} (${datos.valorProbabilidad})',
+          ),
+          _EvaluacionFila(
+            etiqueta: 'Severidad',
+            valor: '${datos.severidadNombre} (${datos.valorSeveridad})',
+          ),
+          _EvaluacionFila(etiqueta: 'Cálculo', valor: datos.calculo),
+          _EvaluacionFila(
+            etiqueta: 'Aceptación',
+            valor: datos.esAceptable ? 'Riesgo aceptable' : 'No aceptable',
+          ),
+          _EvaluacionFila(
+            etiqueta: 'Acción',
+            valor: datos.requiereAccion
+                ? 'Requiere medidas de control'
+                : 'No requiere acción adicional',
+          ),
+          if (datos.observaciones?.trim().isNotEmpty == true)
+            _EvaluacionFila(
+              etiqueta: 'Observaciones',
+              valor: datos.observaciones!.trim(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EvaluacionFila extends StatelessWidget {
+  const _EvaluacionFila({required this.etiqueta, required this.valor});
+
+  final String etiqueta;
+  final String valor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 104,
+            child: Text(
+              etiqueta,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(valor)),
+        ],
+      ),
+    );
+  }
+}
+
+class _NivelRiesgoEtiqueta extends StatelessWidget {
+  const _NivelRiesgoEtiqueta({required this.evaluacion});
+
+  final EvaluacionDetalleIpercModel evaluacion;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color = _colorDesdeHex(evaluacion.color);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(
+            Icons.assessment_outlined,
+            size: 15,
+            color: _colorDeTexto(color),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            '${evaluacion.nivelRiesgoNombre} (${evaluacion.valorRiesgo})',
+            style: TextStyle(
+              color: _colorDeTexto(color),
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _Etiqueta extends StatelessWidget {
   const _Etiqueta({required this.icono, required this.texto});
 
@@ -709,6 +1004,23 @@ class _Etiqueta extends StatelessWidget {
       ),
     );
   }
+}
+
+Color _colorDesdeHex(String valor) {
+  String hexadecimal = valor.trim().replaceFirst('#', '');
+
+  if (hexadecimal.length == 6) {
+    hexadecimal = 'FF$hexadecimal';
+  }
+
+  final int? numero = int.tryParse(hexadecimal, radix: 16);
+  return numero == null ? const Color(0xFF9E9E9E) : Color(numero);
+}
+
+Color _colorDeTexto(Color fondo) {
+  return ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+      ? Colors.white
+      : Colors.black;
 }
 
 class _EstadoLista extends StatelessWidget {

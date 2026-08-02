@@ -232,7 +232,8 @@ class _EditarClasificacionControlScreenState
 
   /// Determina si existen cambios sin guardar.
   bool _hayCambios() {
-    return _nombreController.text.trim() != widget.clasificacion.nombre.trim() ||
+    return _nombreController.text.trim() !=
+            widget.clasificacion.nombre.trim() ||
         _descripcionController.text.trim() !=
             (widget.clasificacion.descripcion?.trim() ?? '') ||
         _prioridadController.text.trim() !=

@@ -53,9 +53,7 @@ class _NuevaConsecuenciaScreenState extends State<NuevaConsecuenciaScreen> {
     super.initState();
 
     final ConsecuenciaProvider provider = context.read<ConsecuenciaProvider>();
-    _codigoController.text = _generarCodigoConsecuencia(
-      provider.consecuencias,
-    );
+    _codigoController.text = _generarCodigoConsecuencia(provider.consecuencias);
   }
 
   @override

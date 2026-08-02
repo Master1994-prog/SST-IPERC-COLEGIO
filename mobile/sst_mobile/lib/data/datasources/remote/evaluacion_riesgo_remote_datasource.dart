@@ -7,10 +7,35 @@ import '../../models/evaluacion_riesgo_model.dart';
 /// Comunica las evaluaciones de riesgo con la API.
 class EvaluacionRiesgoRemoteDatasource {
   EvaluacionRiesgoRemoteDatasource({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient.instance;
+    : _apiClient = apiClient ?? ApiClient.instance;
 
   final ApiClient _apiClient;
 
+  /// Obtiene una evaluación mediante su identificador.
+  Future<EvaluacionRiesgoModel> obtenerPorId(int id) async {
+    try {
+      final Response<dynamic> response = await _apiClient.get(
+        '${ApiConfig.evaluacionesRiesgoEndpoint}/$id',
+      );
+
+      final Map<String, dynamic> json = _extraerObjeto(response.data);
+
+      if (json.isEmpty) {
+        throw Exception('El servidor no devolvió la evaluación solicitada.');
+      }
+
+      return EvaluacionRiesgoModel.fromJson(json);
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensaje(
+          error,
+          predeterminado: 'No se pudo obtener la evaluación de riesgo.',
+        ),
+      );
+    }
+  }
+
+  /// Registra una evaluación en el backend.
   Future<EvaluacionRiesgoModel> crear(
     CrearEvaluacionRiesgoRequest request,
   ) async {
@@ -24,7 +49,8 @@ class EvaluacionRiesgoRemoteDatasource {
 
       if (json.isEmpty) {
         throw Exception(
-          'La evaluacion fue registrada, pero el servidor no devolvio datos.',
+          'La evaluación fue registrada, pero el servidor '
+          'no devolvió datos.',
         );
       }
 
@@ -33,18 +59,41 @@ class EvaluacionRiesgoRemoteDatasource {
       throw Exception(
         _obtenerMensaje(
           error,
-          predeterminado: 'No se pudo registrar la evaluacion de riesgo.',
+          predeterminado: 'No se pudo registrar la evaluación de riesgo.',
         ),
       );
     }
   }
 
+  /// Actualiza una evaluación existente.
+  Future<void> actualizar(
+    int id,
+    ActualizarEvaluacionRiesgoRequest request,
+  ) async {
+    try {
+      await _apiClient.put(
+        '${ApiConfig.evaluacionesRiesgoEndpoint}/$id',
+        data: request.toJson(),
+      );
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensaje(
+          error,
+          predeterminado: 'No se pudo actualizar la evaluación de riesgo.',
+        ),
+      );
+    }
+  }
+
+  /// Extrae un objeto JSON aunque la API lo envíe
+  /// dentro de data, result, value o evaluacion.
   Map<String, dynamic> _extraerObjeto(dynamic data) {
     if (data is! Map) {
       return <String, dynamic>{};
     }
 
     final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
+
     final dynamic contenido =
         mapa['data'] ?? mapa['result'] ?? mapa['value'] ?? mapa['evaluacion'];
 
@@ -55,14 +104,13 @@ class EvaluacionRiesgoRemoteDatasource {
     return mapa;
   }
 
-  String _obtenerMensaje(
-    DioException error, {
-    required String predeterminado,
-  }) {
+  /// Convierte los errores de Dio en mensajes comprensibles.
+  String _obtenerMensaje(DioException error, {required String predeterminado}) {
     final dynamic data = error.response?.data;
 
     if (data is Map) {
       final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
+
       final dynamic mensaje =
           mapa['mensaje'] ??
           mapa['message'] ??
@@ -83,11 +131,12 @@ class EvaluacionRiesgoRemoteDatasource {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
       DioExceptionType.receiveTimeout =>
-        'Se agoto el tiempo de conexion con el servidor.',
+        'Se agotó el tiempo de conexión con el servidor.',
       DioExceptionType.connectionError =>
-        'No se pudo conectar con el servidor. Verifica la API y tu conexion.',
+        'No se pudo conectar con el servidor. '
+            'Verifica la API y tu conexión.',
       DioExceptionType.badCertificate =>
-        'El certificado del servidor no es valido.',
+        'El certificado del servidor no es válido.',
       DioExceptionType.cancel => 'La solicitud fue cancelada.',
       _ => predeterminado,
     };

@@ -11,8 +11,7 @@ class SeguimientoIpercProvider extends ChangeNotifier {
     : _repository = repository ?? SeguimientoIpercRepository();
 
   final SeguimientoIpercRepository _repository;
-  final List<SeguimientoIpercModel> _seguimientos =
-      <SeguimientoIpercModel>[];
+  final List<SeguimientoIpercModel> _seguimientos = <SeguimientoIpercModel>[];
 
   bool _cargando = false;
   bool _procesando = false;
@@ -31,14 +30,16 @@ class SeguimientoIpercProvider extends ChangeNotifier {
       return List<SeguimientoIpercModel>.unmodifiable(_seguimientos);
     }
 
-    return _seguimientos.where((SeguimientoIpercModel seguimiento) {
-      final String contenido = _normalizar(
-        '${seguimiento.detalleVisible} ${seguimiento.descripcion} '
-        '${seguimiento.observaciones ?? ''} ${seguimiento.estadoVisible}',
-      );
+    return _seguimientos
+        .where((SeguimientoIpercModel seguimiento) {
+          final String contenido = _normalizar(
+            '${seguimiento.detalleVisible} ${seguimiento.descripcion} '
+            '${seguimiento.observaciones ?? ''} ${seguimiento.estadoVisible}',
+          );
 
-      return contenido.contains(termino);
-    }).toList(growable: false);
+          return contenido.contains(termino);
+        })
+        .toList(growable: false);
   }
 
   bool get cargando => _cargando;

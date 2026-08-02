@@ -37,9 +37,7 @@ class SeguimientoIpercModel {
   factory SeguimientoIpercModel.fromJson(Map<String, dynamic> json) {
     return SeguimientoIpercModel(
       id: _toInt(json['id']),
-      detalleIpercId: _toInt(
-        json['detalleIPERCId'] ?? json['detalleIpercId'],
-      ),
+      detalleIpercId: _toInt(json['detalleIPERCId'] ?? json['detalleIpercId']),
       detalleItem: _toNullableInt(json['detalleItem']),
       detalleTarea: _toNullableString(json['detalleTarea']),
       fechaSeguimiento:
@@ -63,9 +61,8 @@ class SeguimientoIpercModel {
     return lista
         .whereType<Map>()
         .map(
-          (Map item) => SeguimientoIpercModel.fromJson(
-            Map<String, dynamic>.from(item),
-          ),
+          (Map item) =>
+              SeguimientoIpercModel.fromJson(Map<String, dynamic>.from(item)),
         )
         .where((SeguimientoIpercModel seguimiento) => seguimiento.id > 0)
         .toList();

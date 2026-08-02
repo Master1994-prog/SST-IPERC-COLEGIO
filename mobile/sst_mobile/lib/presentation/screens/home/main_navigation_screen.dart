@@ -7,12 +7,12 @@ import '../controles/controles_screen.dart';
 import '../equipos_proteccion/equipos_proteccion_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
+import '../mapas_riesgo/mapas_riesgo_screen.dart';
 import '../peligros/peligros_screen.dart';
-import '../reportes/reportes_screen.dart';
-import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
 
+/// Pantalla principal de navegación de la aplicación.
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
     required this.nombreUsuario,
@@ -20,16 +20,23 @@ class MainNavigationScreen extends StatefulWidget {
     super.key,
   });
 
+  /// Nombre visible del usuario autenticado.
   final String nombreUsuario;
+
+  /// Rol del usuario autenticado.
   final String rol;
 
   @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
+  State<MainNavigationScreen> createState() {
+    return _MainNavigationScreenState();
+  }
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  /// Índice seleccionado en la barra inferior.
   int _indiceActual = 0;
 
+  /// Pantallas principales de la navegación.
   late final List<Widget> _pantallas = <Widget>[
     InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
     const IpercView(),
@@ -38,6 +45,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     const MasView(),
   ];
 
+  /// Títulos del AppBar según la sección seleccionada.
   final List<String> _titulos = <String>[
     'Inicio',
     'Gestión IPERC',
@@ -93,6 +101,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
+/// Vista inicial de la aplicación.
 class InicioView extends StatelessWidget {
   const InicioView({required this.nombreUsuario, required this.rol, super.key});
 
@@ -146,6 +155,7 @@ class InicioView extends StatelessWidget {
   }
 }
 
+/// Vista principal del módulo IPERC.
 class IpercView extends StatelessWidget {
   const IpercView({super.key});
 
@@ -162,7 +172,9 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const MatricesIpercScreen(),
+                builder: (_) {
+                  return const MatricesIpercScreen();
+                },
               ),
             );
           },
@@ -170,13 +182,15 @@ class IpercView extends StatelessWidget {
         const SizedBox(height: 12),
         _IpercModuloCard(
           icono: Icons.grid_view,
-          titulo: 'Evaluación 5x5',
+          titulo: 'Evaluación 5×5',
           descripcion:
               'Calcular el nivel de riesgo según probabilidad y severidad.',
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const MatrizRiesgoScreen(),
+                builder: (_) {
+                  return const MatrizRiesgoScreen();
+                },
               ),
             );
           },
@@ -188,11 +202,11 @@ class IpercView extends StatelessWidget {
           descripcion:
               'Registrar avances, evidencias, responsables y observaciones.',
           onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const SeguimientosIpercScreen(),
-              ),
-            );
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(content: Text('Seguimientos en construcción.')),
+              );
           },
         ),
       ],
@@ -200,6 +214,7 @@ class IpercView extends StatelessWidget {
   }
 }
 
+/// Tarjeta utilizada dentro del módulo IPERC.
 class _IpercModuloCard extends StatelessWidget {
   const _IpercModuloCard({
     required this.icono,
@@ -234,6 +249,7 @@ class _IpercModuloCard extends StatelessWidget {
   }
 }
 
+/// Vista que contiene los catálogos SST.
 class SstView extends StatelessWidget {
   const SstView({super.key});
 
@@ -249,7 +265,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const CategoriasPeligroScreen(),
+                builder: (_) {
+                  return const CategoriasPeligroScreen();
+                },
               ),
             );
           },
@@ -262,7 +280,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const TiposPeligroScreen(),
+                builder: (_) {
+                  return const TiposPeligroScreen();
+                },
               ),
             );
           },
@@ -274,7 +294,11 @@ class SstView extends StatelessWidget {
               'Registrar fuentes, actos y situaciones que pueden causar daño.',
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const PeligrosScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const PeligrosScreen();
+                },
+              ),
             );
           },
         ),
@@ -286,7 +310,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const ConsecuenciasScreen(),
+                builder: (_) {
+                  return const ConsecuenciasScreen();
+                },
               ),
             );
           },
@@ -299,7 +325,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const ClasificacionesControlScreen(),
+                builder: (_) {
+                  return const ClasificacionesControlScreen();
+                },
               ),
             );
           },
@@ -311,7 +339,11 @@ class SstView extends StatelessWidget {
               'Administrar medidas para eliminar o reducir los riesgos.',
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ControlesScreen()),
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const ControlesScreen();
+                },
+              ),
             );
           },
         ),
@@ -323,7 +355,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const TiposEquipoProteccionScreen(),
+                builder: (_) {
+                  return const TiposEquipoProteccionScreen();
+                },
               ),
             );
           },
@@ -336,7 +370,9 @@ class SstView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const EquiposProteccionScreen(),
+                builder: (_) {
+                  return const EquiposProteccionScreen();
+                },
               ),
             );
           },
@@ -346,47 +382,67 @@ class SstView extends StatelessWidget {
   }
 }
 
+/// Vista principal del módulo de mapas de riesgo.
 class MapasView extends StatelessWidget {
   const MapasView({super.key});
 
+  /// Abre la pantalla funcional del mapa de riesgos.
+  void _abrirMapa(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) {
+          return const MapasRiesgoScreen();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const ModulosList(
+    return ModulosList(
       modulos: <ModuloItem>[
         ModuloItem(
-          icono: Icons.map,
+          icono: Icons.map_outlined,
           titulo: 'Mapas de riesgo',
           descripcion:
               'Ubicar los peligros y niveles de riesgo por área del colegio.',
+          onTap: () {
+            _abrirMapa(context);
+          },
         ),
         ModuloItem(
-          icono: Icons.location_on,
+          icono: Icons.location_on_outlined,
           titulo: 'Zonas identificadas',
-          descripcion: 'Consultar las zonas con riesgos bajos, medios y altos.',
+          descripcion:
+              'Consultar las zonas con riesgos bajos, medios, altos y críticos.',
+          onTap: () {
+            _abrirMapa(context);
+          },
         ),
       ],
     );
   }
 }
 
+/// Vista de módulos adicionales.
 class MasView extends StatelessWidget {
   const MasView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ModulosList(
+    return const ModulosList(
       modulos: <ModuloItem>[
-        const ModuloItem(
+        ModuloItem(
           icono: Icons.apartment,
           titulo: 'Áreas',
           descripcion: 'Administrar las áreas y ambientes de la institución.',
         ),
-        const ModuloItem(
+        ModuloItem(
           icono: Icons.task_alt,
           titulo: 'Actividades',
           descripcion: 'Registrar actividades y tareas que serán evaluadas.',
         ),
-        const ModuloItem(
+        ModuloItem(
           icono: Icons.people,
           titulo: 'Usuarios',
           descripcion: 'Administrar usuarios, roles e instituciones.',
@@ -396,13 +452,8 @@ class MasView extends StatelessWidget {
           titulo: 'Reportes',
           descripcion:
               'Consultar reportes de riesgos, controles y seguimientos.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ReportesScreen()),
-            );
-          },
         ),
-        const ModuloItem(
+        ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',
           descripcion: 'Consultar la información de la cuenta y cerrar sesión.',
@@ -412,6 +463,10 @@ class MasView extends StatelessWidget {
   }
 }
 
+/// Lista reutilizable de módulos.
+///
+/// Cuando un módulo no tiene [onTap], muestra
+/// un mensaje indicando que está en construcción.
 class ModulosList extends StatelessWidget {
   const ModulosList({required this.modulos, super.key});
 
@@ -462,6 +517,7 @@ class ModulosList extends StatelessWidget {
   }
 }
 
+/// Tarjeta de resumen utilizada en la vista Inicio.
 class ResumenCard extends StatelessWidget {
   const ResumenCard({
     required this.icono,
@@ -518,6 +574,7 @@ class ResumenCard extends StatelessWidget {
   }
 }
 
+/// Información de un módulo del sistema.
 class ModuloItem {
   const ModuloItem({
     required this.icono,
@@ -526,8 +583,15 @@ class ModuloItem {
     this.onTap,
   });
 
+  /// Icono representativo.
   final IconData icono;
+
+  /// Nombre del módulo.
   final String titulo;
+
+  /// Descripción breve.
   final String descripcion;
+
+  /// Acción al seleccionar el módulo.
   final VoidCallback? onTap;
 }

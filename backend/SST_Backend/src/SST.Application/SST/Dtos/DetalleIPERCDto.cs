@@ -1,8 +1,7 @@
 ﻿namespace SST.Application.SST.Dtos;
 
 /// <summary>
-/// DTO utilizado para mostrar la información de un detalle de Matriz IPERC.
-/// Cada detalle representa un peligro evaluado dentro de una matriz.
+/// Representa un peligro evaluado dentro de una Matriz IPERC.
 /// </summary>
 public class DetalleIPERCDto
 {
@@ -28,7 +27,13 @@ public class DetalleIPERCDto
 
     public long EvaluacionInicialId { get; set; }
 
+    /// Información completa de la evaluación inicial.
+    public EvaluacionDetalleIPERCDto? EvaluacionInicial { get; set; }
+
     public long? EvaluacionResidualId { get; set; }
+
+    /// Información completa de la evaluación posterior a los controles.
+    public EvaluacionDetalleIPERCDto? EvaluacionResidual { get; set; }
 
     public List<long> ControlIds { get; set; } = new();
 
@@ -43,4 +48,38 @@ public class DetalleIPERCDto
     public int EstadoImplementacionId { get; set; }
 
     public string EstadoImplementacionNombre { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Información visible de una evaluación de riesgo.
+/// </summary>
+public class EvaluacionDetalleIPERCDto
+{
+    public long Id { get; set; }
+
+    public long ProbabilidadId { get; set; }
+
+    public string ProbabilidadNombre { get; set; } = string.Empty;
+
+    public int ValorProbabilidad { get; set; }
+
+    public long SeveridadId { get; set; }
+
+    public string SeveridadNombre { get; set; } = string.Empty;
+
+    public int ValorSeveridad { get; set; }
+
+    public long NivelRiesgoId { get; set; }
+
+    public string NivelRiesgoNombre { get; set; } = string.Empty;
+
+    public string Color { get; set; } = "#9E9E9E";
+
+    public int ValorRiesgo { get; set; }
+
+    public bool EsAceptable { get; set; }
+
+    public bool RequiereAccion { get; set; }
+
+    public string? Observaciones { get; set; }
 }

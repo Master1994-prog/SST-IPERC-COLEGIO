@@ -165,10 +165,7 @@ class SeguimientoIpercRemoteDatasource {
     }
   }
 
-  int _ordenarPorFechaDesc(
-    SeguimientoIpercModel a,
-    SeguimientoIpercModel b,
-  ) {
+  int _ordenarPorFechaDesc(SeguimientoIpercModel a, SeguimientoIpercModel b) {
     return b.fechaSeguimiento.compareTo(a.fechaSeguimiento);
   }
 
@@ -217,10 +214,7 @@ class SeguimientoIpercRemoteDatasource {
     return mapa;
   }
 
-  String _obtenerMensaje(
-    DioException error, {
-    required String predeterminado,
-  }) {
+  String _obtenerMensaje(DioException error, {required String predeterminado}) {
     final dynamic data = error.response?.data;
 
     if (data is Map) {

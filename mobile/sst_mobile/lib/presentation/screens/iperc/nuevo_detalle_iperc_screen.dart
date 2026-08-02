@@ -47,8 +47,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   List<PeligroModel> _peligros = <PeligroModel>[];
   List<ConsecuenciaModel> _consecuencias = <ConsecuenciaModel>[];
   List<ControlModel> _controles = <ControlModel>[];
-  List<EquipoProteccionModel> _equiposProteccion =
-      <EquipoProteccionModel>[];
+  List<EquipoProteccionModel> _equiposProteccion = <EquipoProteccionModel>[];
 
   PeligroModel? _peligroSeleccionado;
   ConsecuenciaModel? _consecuenciaSeleccionada;
@@ -66,7 +65,8 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   @override
   void initState() {
     super.initState();
-    _itemController.text = context.read<DetalleIpercProvider>()
+    _itemController.text = context
+        .read<DetalleIpercProvider>()
         .siguienteItem
         .toString();
     _cargarCatalogos();
@@ -87,14 +87,13 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     });
 
     try {
-      final List<dynamic> resultados = await Future.wait<dynamic>(
-        <Future<dynamic>>[
-          _peligroRepository.obtenerActivos(),
-          _consecuenciaRepository.obtenerActivos(),
-          _controlRepository.obtenerActivos(),
-          _equipoProteccionRepository.obtenerActivos(),
-        ],
-      );
+      final List<dynamic> resultados =
+          await Future.wait<dynamic>(<Future<dynamic>>[
+            _peligroRepository.obtenerActivos(),
+            _consecuenciaRepository.obtenerActivos(),
+            _controlRepository.obtenerActivos(),
+            _equipoProteccionRepository.obtenerActivos(),
+          ]);
 
       if (!mounted) {
         return;
@@ -157,20 +156,19 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
       // 1. Calculamos el nivel con la matriz 5x5.
       final int valorRiesgo =
           _probabilidadSeleccionada!.valor * _severidadSeleccionada!.valor;
-      final NivelRiesgoIpercOption nivel =
-          obtenerNivelRiesgoIperc(valorRiesgo);
+      final NivelRiesgoIpercOption nivel = obtenerNivelRiesgoIperc(valorRiesgo);
 
       // 2. Registramos la evaluación y el backend devuelve su ID.
       final EvaluacionRiesgoModel evaluacionInicial =
           await _evaluacionRiesgoRepository.crear(
-        CrearEvaluacionRiesgoRequest(
-          probabilidadId: _probabilidadSeleccionada!.id,
-          severidadId: _severidadSeleccionada!.id,
-          nivelRiesgoId: nivel.id,
-          observaciones:
-              'Evaluacion inicial generada desde el detalle IPERC.',
-        ),
-      );
+            CrearEvaluacionRiesgoRequest(
+              probabilidadId: _probabilidadSeleccionada!.id,
+              severidadId: _severidadSeleccionada!.id,
+              nivelRiesgoId: nivel.id,
+              observaciones:
+                  'Evaluacion inicial generada desde el detalle IPERC.',
+            ),
+          );
 
       // 3. Usamos ese ID internamente para registrar el detalle IPERC.
       final CrearDetalleIpercRequest request = CrearDetalleIpercRequest(
@@ -257,9 +255,9 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
           const SizedBox(height: 20),
           Text(
             'Identificación del peligro',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           TextFormField(
@@ -386,17 +384,16 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
           const SizedBox(height: 8),
           Text(
             'Evaluación inicial del riesgo',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           _SelectorProbabilidad(
             seleccionada: _probabilidadSeleccionada,
             habilitado: !bloqueado,
             mostrarError:
-                _mostrarErroresEvaluacion &&
-                _probabilidadSeleccionada == null,
+                _mostrarErroresEvaluacion && _probabilidadSeleccionada == null,
             onChanged: (ProbabilidadIpercOption value) {
               setState(() {
                 _probabilidadSeleccionada = value;
@@ -408,8 +405,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
             seleccionada: _severidadSeleccionada,
             habilitado: !bloqueado,
             mostrarError:
-                _mostrarErroresEvaluacion &&
-                _severidadSeleccionada == null,
+                _mostrarErroresEvaluacion && _severidadSeleccionada == null,
             onChanged: (SeveridadIpercOption value) {
               setState(() {
                 _severidadSeleccionada = value;
@@ -466,9 +462,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: bloqueado ||
-                    _peligros.isEmpty ||
-                    _consecuencias.isEmpty
+            onPressed: bloqueado || _peligros.isEmpty || _consecuencias.isEmpty
                 ? null
                 : _guardar,
             icon: bloqueado
@@ -478,9 +472,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_outlined),
-            label: Text(
-              bloqueado ? 'Guardando...' : 'Guardar peligro',
-            ),
+            label: Text(bloqueado ? 'Guardando...' : 'Guardar peligro'),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
@@ -529,9 +521,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: esError
-              ? Theme.of(context).colorScheme.error
-              : null,
+          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
           content: Text(mensaje),
         ),
       );
@@ -633,17 +623,17 @@ class _SelectorProbabilidad extends StatelessWidget {
       icono: Icons.trending_up_outlined,
       mostrarError: mostrarError,
       mensajeError: 'Selecciona la probabilidad.',
-      opciones: probabilidadesIperc.map((ProbabilidadIpercOption opcion) {
-        return ChoiceChip(
-          selected: seleccionada?.id == opcion.id,
-          showCheckmark: true,
-          avatar: CircleAvatar(
-            child: Text(opcion.valor.toString()),
-          ),
-          label: Text(opcion.nombre),
-          onSelected: habilitado ? (_) => onChanged(opcion) : null,
-        );
-      }).toList(growable: false),
+      opciones: probabilidadesIperc
+          .map((ProbabilidadIpercOption opcion) {
+            return ChoiceChip(
+              selected: seleccionada?.id == opcion.id,
+              showCheckmark: true,
+              avatar: CircleAvatar(child: Text(opcion.valor.toString())),
+              label: Text(opcion.nombre),
+              onSelected: habilitado ? (_) => onChanged(opcion) : null,
+            );
+          })
+          .toList(growable: false),
       detalleSeleccionado: seleccionada?.descripcion,
     );
   }
@@ -674,17 +664,17 @@ class _SelectorSeveridad extends StatelessWidget {
       icono: Icons.priority_high_outlined,
       mostrarError: mostrarError,
       mensajeError: 'Selecciona la severidad.',
-      opciones: severidadesIperc.map((SeveridadIpercOption opcion) {
-        return ChoiceChip(
-          selected: seleccionada?.id == opcion.id,
-          showCheckmark: true,
-          avatar: CircleAvatar(
-            child: Text(opcion.valor.toString()),
-          ),
-          label: Text(opcion.nombre),
-          onSelected: habilitado ? (_) => onChanged(opcion) : null,
-        );
-      }).toList(growable: false),
+      opciones: severidadesIperc
+          .map((SeveridadIpercOption opcion) {
+            return ChoiceChip(
+              selected: seleccionada?.id == opcion.id,
+              showCheckmark: true,
+              avatar: CircleAvatar(child: Text(opcion.valor.toString())),
+              label: Text(opcion.nombre),
+              onSelected: habilitado ? (_) => onChanged(opcion) : null,
+            );
+          })
+          .toList(growable: false),
       detalleSeleccionado: seleccionada?.descripcion,
     );
   }
@@ -747,11 +737,7 @@ class _TarjetaSelectorEscala extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: opciones,
-          ),
+          Wrap(spacing: 8, runSpacing: 8, children: opciones),
           if (detalleSeleccionado != null) ...<Widget>[
             const SizedBox(height: 10),
             Text(
@@ -763,10 +749,7 @@ class _TarjetaSelectorEscala extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               mensajeError,
-              style: TextStyle(
-                color: colors.error,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: colors.error, fontSize: 12),
             ),
           ],
         ],
@@ -962,10 +945,7 @@ class _SelectorMultipleCatalogo extends StatelessWidget {
 }
 
 class _EstadoCarga extends StatelessWidget {
-  const _EstadoCarga({
-    required this.mensaje,
-    required this.onReintentar,
-  });
+  const _EstadoCarga({required this.mensaje, required this.onReintentar});
 
   final String mensaje;
   final VoidCallback onReintentar;
@@ -986,9 +966,9 @@ class _EstadoCarga extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'No se pudieron cargar los catálogos',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),

@@ -75,8 +75,9 @@ class _NuevoControlScreenState extends State<NuevoControlScreen> {
 
   /// Genera un código correlativo con formato CTRL-001.
   String _generarCodigoCorrelativo() {
-    final List<ControlModel> controles =
-        context.read<ControlProvider>().controles;
+    final List<ControlModel> controles = context
+        .read<ControlProvider>()
+        .controles;
     final RegExp formato = RegExp(r'^CTRL-(\d+)$', caseSensitive: false);
 
     int mayorNumero = 0;

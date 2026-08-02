@@ -62,34 +62,33 @@ class EvaluacionRiesgo5x5Model {
 class EvaluacionRiesgo5x5Calculator {
   EvaluacionRiesgo5x5Calculator._();
 
-  static const List<EscalaRiesgoModel> probabilidades =
-      <EscalaRiesgoModel>[
-        EscalaRiesgoModel(
-          valor: 1,
-          nombre: 'Rara',
-          descripcion: 'Puede ocurrir solo en circunstancias excepcionales.',
-        ),
-        EscalaRiesgoModel(
-          valor: 2,
-          nombre: 'Poco probable',
-          descripcion: 'Podría ocurrir en algún momento.',
-        ),
-        EscalaRiesgoModel(
-          valor: 3,
-          nombre: 'Posible',
-          descripcion: 'Puede ocurrir ocasionalmente.',
-        ),
-        EscalaRiesgoModel(
-          valor: 4,
-          nombre: 'Probable',
-          descripcion: 'Puede ocurrir frecuentemente.',
-        ),
-        EscalaRiesgoModel(
-          valor: 5,
-          nombre: 'Muy probable',
-          descripcion: 'Se espera que ocurra con frecuencia.',
-        ),
-      ];
+  static const List<EscalaRiesgoModel> probabilidades = <EscalaRiesgoModel>[
+    EscalaRiesgoModel(
+      valor: 1,
+      nombre: 'Rara',
+      descripcion: 'Puede ocurrir solo en circunstancias excepcionales.',
+    ),
+    EscalaRiesgoModel(
+      valor: 2,
+      nombre: 'Poco probable',
+      descripcion: 'Podría ocurrir en algún momento.',
+    ),
+    EscalaRiesgoModel(
+      valor: 3,
+      nombre: 'Posible',
+      descripcion: 'Puede ocurrir ocasionalmente.',
+    ),
+    EscalaRiesgoModel(
+      valor: 4,
+      nombre: 'Probable',
+      descripcion: 'Puede ocurrir frecuentemente.',
+    ),
+    EscalaRiesgoModel(
+      valor: 5,
+      nombre: 'Muy probable',
+      descripcion: 'Se espera que ocurra con frecuencia.',
+    ),
+  ];
 
   static const List<EscalaRiesgoModel> severidades = <EscalaRiesgoModel>[
     EscalaRiesgoModel(
@@ -119,41 +118,40 @@ class EvaluacionRiesgo5x5Calculator {
     ),
   ];
 
-  static const List<NivelRiesgo5x5Model> niveles =
-      <NivelRiesgo5x5Model>[
-        NivelRiesgo5x5Model(
-          nombre: 'Bajo',
-          desde: 1,
-          hasta: 4,
-          colorHex: '#4CAF50',
-          aceptable: true,
-          accion: 'Mantener los controles y realizar seguimiento periódico.',
-        ),
-        NivelRiesgo5x5Model(
-          nombre: 'Medio',
-          desde: 5,
-          hasta: 9,
-          colorHex: '#FFC107',
-          aceptable: true,
-          accion: 'Revisar y mejorar los controles existentes.',
-        ),
-        NivelRiesgo5x5Model(
-          nombre: 'Alto',
-          desde: 10,
-          hasta: 16,
-          colorHex: '#FF9800',
-          aceptable: false,
-          accion: 'Implementar controles antes de continuar la actividad.',
-        ),
-        NivelRiesgo5x5Model(
-          nombre: 'Crítico',
-          desde: 17,
-          hasta: 25,
-          colorHex: '#F44336',
-          aceptable: false,
-          accion: 'Detener la actividad hasta reducir el nivel de riesgo.',
-        ),
-      ];
+  static const List<NivelRiesgo5x5Model> niveles = <NivelRiesgo5x5Model>[
+    NivelRiesgo5x5Model(
+      nombre: 'Bajo',
+      desde: 1,
+      hasta: 4,
+      colorHex: '#4CAF50',
+      aceptable: true,
+      accion: 'Mantener los controles y realizar seguimiento periódico.',
+    ),
+    NivelRiesgo5x5Model(
+      nombre: 'Medio',
+      desde: 5,
+      hasta: 9,
+      colorHex: '#FFC107',
+      aceptable: true,
+      accion: 'Revisar y mejorar los controles existentes.',
+    ),
+    NivelRiesgo5x5Model(
+      nombre: 'Alto',
+      desde: 10,
+      hasta: 16,
+      colorHex: '#FF9800',
+      aceptable: false,
+      accion: 'Implementar controles antes de continuar la actividad.',
+    ),
+    NivelRiesgo5x5Model(
+      nombre: 'Crítico',
+      desde: 17,
+      hasta: 25,
+      colorHex: '#F44336',
+      aceptable: false,
+      accion: 'Detener la actividad hasta reducir el nivel de riesgo.',
+    ),
+  ];
 
   static EvaluacionRiesgo5x5Model calcular({
     required int probabilidad,

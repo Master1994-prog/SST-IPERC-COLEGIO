@@ -23,18 +23,12 @@ class EvaluacionRiesgoModel {
   factory EvaluacionRiesgoModel.fromJson(Map<String, dynamic> json) {
     return EvaluacionRiesgoModel(
       id: _toInt(json['id'] ?? json['Id']),
-      probabilidadId: _toInt(
-        json['probabilidadId'] ?? json['ProbabilidadId'],
-      ),
+      probabilidadId: _toInt(json['probabilidadId'] ?? json['ProbabilidadId']),
       severidadId: _toInt(json['severidadId'] ?? json['SeveridadId']),
-      nivelRiesgoId: _toInt(
-        json['nivelRiesgoId'] ?? json['NivelRiesgoId'],
-      ),
+      nivelRiesgoId: _toInt(json['nivelRiesgoId'] ?? json['NivelRiesgoId']),
       valor: _toInt(json['valor'] ?? json['Valor']),
       esAceptable: _toBool(json['esAceptable'] ?? json['EsAceptable']),
-      requiereAccion: _toBool(
-        json['requiereAccion'] ?? json['RequiereAccion'],
-      ),
+      requiereAccion: _toBool(json['requiereAccion'] ?? json['RequiereAccion']),
       observaciones: _toNullableString(
         json['observaciones'] ?? json['Observaciones'],
       ),
@@ -59,16 +53,17 @@ class EvaluacionRiesgoModel {
     }
 
     final String texto = value?.toString().toLowerCase().trim() ?? '';
+
     return texto == 'true' || texto == '1' || texto == 'si';
   }
 
   static String? _toNullableString(dynamic value) {
-    final String text = value?.toString().trim() ?? '';
-    return text.isEmpty ? null : text;
+    final String texto = value?.toString().trim() ?? '';
+    return texto.isEmpty ? null : texto;
   }
 }
 
-/// Solicitud para crear una evaluación de riesgo.
+/// Solicitud para registrar una evaluación de riesgo.
 class CrearEvaluacionRiesgoRequest {
   const CrearEvaluacionRiesgoRequest({
     required this.probabilidadId,
@@ -92,12 +87,38 @@ class CrearEvaluacionRiesgoRequest {
   }
 
   String? _nullableText(String? value) {
-    final String text = value?.trim() ?? '';
-    return text.isEmpty ? null : text;
+    final String texto = value?.trim() ?? '';
+    return texto.isEmpty ? null : texto;
   }
 }
 
-/// Opción local para seleccionar probabilidad sin escribir IDs.
+/// Solicitud para actualizar una evaluación existente.
+class ActualizarEvaluacionRiesgoRequest {
+  const ActualizarEvaluacionRiesgoRequest({
+    required this.probabilidadId,
+    required this.severidadId,
+    required this.nivelRiesgoId,
+    this.observaciones,
+  });
+
+  final int probabilidadId;
+  final int severidadId;
+  final int nivelRiesgoId;
+  final String? observaciones;
+
+  Map<String, dynamic> toJson() {
+    final String texto = observaciones?.trim() ?? '';
+
+    return <String, dynamic>{
+      'probabilidadId': probabilidadId,
+      'severidadId': severidadId,
+      'nivelRiesgoId': nivelRiesgoId,
+      'observaciones': texto.isEmpty ? null : texto,
+    };
+  }
+}
+
+/// Opción de probabilidad para evitar escribir identificadores.
 class ProbabilidadIpercOption {
   const ProbabilidadIpercOption({
     required this.id,
@@ -114,7 +135,7 @@ class ProbabilidadIpercOption {
   String get etiqueta => '$valor - $nombre';
 }
 
-/// Opción local para seleccionar severidad sin escribir IDs.
+/// Opción de severidad para evitar escribir identificadores.
 class SeveridadIpercOption {
   const SeveridadIpercOption({
     required this.id,
@@ -131,7 +152,7 @@ class SeveridadIpercOption {
   String get etiqueta => '$valor - $nombre';
 }
 
-/// Resultado calculado de la matriz IPERC 5x5.
+/// Nivel obtenido después de calcular probabilidad por severidad.
 class NivelRiesgoIpercOption {
   const NivelRiesgoIpercOption({
     required this.id,
@@ -154,58 +175,80 @@ class NivelRiesgoIpercOption {
   }
 }
 
+/// Resultado completo del cálculo de riesgo.
+class ResultadoRiesgoCalculado {
+  const ResultadoRiesgoCalculado({
+    required this.probabilidad,
+    required this.severidad,
+    required this.valor,
+    required this.nivel,
+  });
+
+  final ProbabilidadIpercOption probabilidad;
+  final SeveridadIpercOption severidad;
+  final int valor;
+  final NivelRiesgoIpercOption nivel;
+}
+
+// Alias para mantener compatibilidad con pantallas anteriores.
+typedef ProbabilidadRiesgoModel = ProbabilidadIpercOption;
+typedef SeveridadRiesgoModel = SeveridadIpercOption;
+typedef NivelRiesgoModel = NivelRiesgoIpercOption;
+
+/// Catálogo local de probabilidades.
 const List<ProbabilidadIpercOption> probabilidadesIperc =
     <ProbabilidadIpercOption>[
-  ProbabilidadIpercOption(
-    id: 1,
-    valor: 1,
-    nombre: 'Rara',
-    descripcion: 'Puede ocurrir solo en circunstancias excepcionales.',
-  ),
-  ProbabilidadIpercOption(
-    id: 2,
-    valor: 2,
-    nombre: 'Poco probable',
-    descripcion: 'Podria ocurrir en algun momento.',
-  ),
-  ProbabilidadIpercOption(
-    id: 3,
-    valor: 3,
-    nombre: 'Posible',
-    descripcion: 'Puede ocurrir ocasionalmente.',
-  ),
-  ProbabilidadIpercOption(
-    id: 4,
-    valor: 4,
-    nombre: 'Probable',
-    descripcion: 'Puede ocurrir frecuentemente.',
-  ),
-  ProbabilidadIpercOption(
-    id: 5,
-    valor: 5,
-    nombre: 'Muy probable',
-    descripcion: 'Se espera que ocurra con frecuencia.',
-  ),
-];
+      ProbabilidadIpercOption(
+        id: 1,
+        valor: 1,
+        nombre: 'Rara',
+        descripcion: 'Puede ocurrir solo en circunstancias excepcionales.',
+      ),
+      ProbabilidadIpercOption(
+        id: 2,
+        valor: 2,
+        nombre: 'Poco probable',
+        descripcion: 'Podría ocurrir en algún momento.',
+      ),
+      ProbabilidadIpercOption(
+        id: 3,
+        valor: 3,
+        nombre: 'Posible',
+        descripcion: 'Puede ocurrir ocasionalmente.',
+      ),
+      ProbabilidadIpercOption(
+        id: 4,
+        valor: 4,
+        nombre: 'Probable',
+        descripcion: 'Puede ocurrir frecuentemente.',
+      ),
+      ProbabilidadIpercOption(
+        id: 5,
+        valor: 5,
+        nombre: 'Muy probable',
+        descripcion: 'Se espera que ocurra con frecuencia.',
+      ),
+    ];
 
+/// Catálogo local de severidades.
 const List<SeveridadIpercOption> severidadesIperc = <SeveridadIpercOption>[
   SeveridadIpercOption(
     id: 1,
     valor: 1,
     nombre: 'Insignificante',
-    descripcion: 'Evento leve sin perdida de jornada.',
+    descripcion: 'Evento leve sin pérdida de jornada.',
   ),
   SeveridadIpercOption(
     id: 2,
     valor: 2,
     nombre: 'Menor',
-    descripcion: 'Evento menor con atencion basica.',
+    descripcion: 'Evento menor con atención básica.',
   ),
   SeveridadIpercOption(
     id: 3,
     valor: 3,
     nombre: 'Moderada',
-    descripcion: 'Evento con descanso medico o afectacion moderada.',
+    descripcion: 'Evento con descanso médico o afectación moderada.',
   ),
   SeveridadIpercOption(
     id: 4,
@@ -216,50 +259,51 @@ const List<SeveridadIpercOption> severidadesIperc = <SeveridadIpercOption>[
   SeveridadIpercOption(
     id: 5,
     valor: 5,
-    nombre: 'Catastrofica',
+    nombre: 'Catastrófica',
     descripcion: 'Evento con consecuencia permanente o muy severa.',
   ),
 ];
 
+/// Rangos utilizados por la matriz IPERC 5×5.
 const List<NivelRiesgoIpercOption> nivelesRiesgoIperc =
     <NivelRiesgoIpercOption>[
-  NivelRiesgoIpercOption(
-    id: 1,
-    nombre: 'Bajo',
-    desde: 1,
-    hasta: 4,
-    colorHex: '#4CAF50',
-    aceptable: true,
-  ),
-  NivelRiesgoIpercOption(
-    id: 2,
-    nombre: 'Medio',
-    desde: 5,
-    hasta: 9,
-    colorHex: '#FFC107',
-    aceptable: true,
-  ),
-  NivelRiesgoIpercOption(
-    id: 3,
-    nombre: 'Alto',
-    desde: 10,
-    hasta: 16,
-    colorHex: '#FF9800',
-    aceptable: false,
-  ),
-  NivelRiesgoIpercOption(
-    id: 4,
-    nombre: 'Critico',
-    desde: 17,
-    hasta: 25,
-    colorHex: '#F44336',
-    aceptable: false,
-  ),
-];
+      NivelRiesgoIpercOption(
+        id: 1,
+        nombre: 'Bajo',
+        desde: 1,
+        hasta: 4,
+        colorHex: '#4CAF50',
+        aceptable: true,
+      ),
+      NivelRiesgoIpercOption(
+        id: 2,
+        nombre: 'Medio',
+        desde: 5,
+        hasta: 9,
+        colorHex: '#FFC107',
+        aceptable: true,
+      ),
+      NivelRiesgoIpercOption(
+        id: 3,
+        nombre: 'Alto',
+        desde: 10,
+        hasta: 16,
+        colorHex: '#FF9800',
+        aceptable: false,
+      ),
+      NivelRiesgoIpercOption(
+        id: 4,
+        nombre: 'Crítico',
+        desde: 17,
+        hasta: 25,
+        colorHex: '#F44336',
+        aceptable: false,
+      ),
+    ];
 
+/// Devuelve el nivel correspondiente al valor calculado.
 NivelRiesgoIpercOption obtenerNivelRiesgoIperc(int valor) {
-  return nivelesRiesgoIperc.firstWhere(
-    (NivelRiesgoIpercOption nivel) => nivel.contiene(valor),
-    orElse: () => nivelesRiesgoIperc.last,
-  );
+  return nivelesRiesgoIperc.firstWhere((NivelRiesgoIpercOption nivel) {
+    return nivel.contiene(valor);
+  }, orElse: () => nivelesRiesgoIperc.last);
 }

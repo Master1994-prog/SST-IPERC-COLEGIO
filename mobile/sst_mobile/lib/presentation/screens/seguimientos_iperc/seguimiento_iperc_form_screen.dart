@@ -467,6 +467,13 @@ class _DetalleSelector extends StatelessWidget {
         );
       }).toList(),
       onChanged: onChanged,
+      validator: (int? value) {
+        if (value == null || value <= 0) {
+          return 'Selecciona el detalle IPERC.';
+        }
+
+        return null;
+      },
     );
   }
 }

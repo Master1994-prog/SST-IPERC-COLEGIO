@@ -15,8 +15,7 @@ class EvaluacionRiesgo5x5Screen extends StatefulWidget {
   }
 }
 
-class _EvaluacionRiesgo5x5ScreenState
-    extends State<EvaluacionRiesgo5x5Screen> {
+class _EvaluacionRiesgo5x5ScreenState extends State<EvaluacionRiesgo5x5Screen> {
   int _probabilidad = 1;
   int _severidad = 1;
 
@@ -241,7 +240,10 @@ class _ResultadoCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 resultado.nivel.aceptable ? 'Aceptable' : 'No aceptable',
-                style: TextStyle(color: foreground, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  color: foreground,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
@@ -453,32 +455,32 @@ class _LeyendaNiveles extends StatelessWidget {
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            ...EvaluacionRiesgo5x5Calculator.niveles.map(
-              (NivelRiesgo5x5Model nivel) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: _colorDesdeHex(nivel.colorHex),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
+            ...EvaluacionRiesgo5x5Calculator.niveles.map((
+              NivelRiesgo5x5Model nivel,
+            ) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: _colorDesdeHex(nivel.colorHex),
+                        borderRadius: BorderRadius.circular(5),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '${nivel.nombre}: ${nivel.desde}–${nivel.hasta} '
-                          '(${nivel.aceptable ? 'aceptable' : 'no aceptable'})',
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${nivel.nombre}: ${nivel.desde}–${nivel.hasta} '
+                        '(${nivel.aceptable ? 'aceptable' : 'no aceptable'})',
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
       ),

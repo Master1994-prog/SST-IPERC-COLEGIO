@@ -34,11 +34,10 @@ class DetalleIpercRemoteDatasource {
         '$_endpoint/matriz/$matrizIpercId',
       );
       final List<DetalleIpercModel> detalles =
-          DetalleIpercModel.listaDesdeJson(response.data)
-            ..sort(
-              (DetalleIpercModel a, DetalleIpercModel b) =>
-                  a.item.compareTo(b.item),
-            );
+          DetalleIpercModel.listaDesdeJson(response.data)..sort(
+            (DetalleIpercModel a, DetalleIpercModel b) =>
+                a.item.compareTo(b.item),
+          );
 
       return detalles;
     } on DioException catch (error) {
@@ -199,10 +198,7 @@ class DetalleIpercRemoteDatasource {
     return mapa;
   }
 
-  String _obtenerMensaje(
-    DioException error, {
-    required String predeterminado,
-  }) {
+  String _obtenerMensaje(DioException error, {required String predeterminado}) {
     final dynamic data = error.response?.data;
 
     if (data is Map) {

@@ -92,9 +92,8 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         onPressed: () async {
           final bool? creada = await Navigator.of(context).push<bool>(
             MaterialPageRoute<bool>(
-              builder: (_) => NuevaMatrizIpercScreen(
-                matricesRegistradas: _matrices,
-              ),
+              builder: (_) =>
+                  NuevaMatrizIpercScreen(matricesRegistradas: _matrices),
             ),
           );
 

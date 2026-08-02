@@ -22,9 +22,7 @@ class SeguimientoIpercRepository {
     return _remoteDatasource.obtenerPorId(id);
   }
 
-  Future<SeguimientoIpercModel> crear(
-    CrearSeguimientoIpercRequest request,
-  ) {
+  Future<SeguimientoIpercModel> crear(CrearSeguimientoIpercRequest request) {
     return _remoteDatasource.crear(request);
   }
 

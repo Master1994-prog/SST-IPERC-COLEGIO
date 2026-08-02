@@ -77,9 +77,7 @@ class MatrizIpercModel {
       areaId: _toNullableInt(json['areaId'] ?? json['AreaId']),
       areaNombre: _toNullableString(json['areaNombre'] ?? json['AreaNombre']),
       procesoId: _toNullableInt(json['procesoId'] ?? json['ProcesoId']),
-      actividadId: _toNullableInt(
-        json['actividadId'] ?? json['ActividadId'],
-      ),
+      actividadId: _toNullableInt(json['actividadId'] ?? json['ActividadId']),
       actividadNombre: _toNullableString(
         json['actividadNombre'] ?? json['ActividadNombre'],
       ),
@@ -89,18 +87,20 @@ class MatrizIpercModel {
       responsableId: _toNullableInt(
         json['responsableId'] ?? json['ResponsableId'],
       ),
-      aprobadorId: _toNullableInt(
-        json['aprobadorId'] ?? json['AprobadorId'],
-      ),
+      aprobadorId: _toNullableInt(json['aprobadorId'] ?? json['AprobadorId']),
       activo: _leerActivo(json, estado),
       fechaEvaluacion: _toDateTime(
         json['fechaEvaluacion'] ?? json['FechaEvaluacion'],
       ),
-      fechaRevision: _toDateTime(json['fechaRevision'] ?? json['FechaRevision']),
+      fechaRevision: _toDateTime(
+        json['fechaRevision'] ?? json['FechaRevision'],
+      ),
       fechaAprobacion: _toDateTime(
         json['fechaAprobacion'] ?? json['FechaAprobacion'],
       ),
-      fechaRegistro: _toDateTime(json['fechaRegistro'] ?? json['FechaRegistro']),
+      fechaRegistro: _toDateTime(
+        json['fechaRegistro'] ?? json['FechaRegistro'],
+      ),
     );
   }
 
