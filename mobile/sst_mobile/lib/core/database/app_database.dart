@@ -12,9 +12,19 @@ class AppDatabase {
 
   static const String databaseName = 'sst_local.db';
 
+  /// Historial de versiones:
+  ///
+  /// Versión 1:
+  /// - creación inicial de tablas locales.
+  ///
   /// Versión 2:
-  /// agrega controles y equipos de protección a los detalles IPERC.
-  static const int databaseVersion = 2;
+  /// - agrega sede, controles, EPP e implementación de controles.
+  ///
+  /// Versión 3:
+  /// - agrega item y tarea al detalle IPERC;
+  /// - agrega identificador remoto de la matriz;
+  /// - agrega identificadores de evaluación inicial y residual.
+  static const int databaseVersion = 3;
 
   Database? _database;
 
@@ -58,6 +68,10 @@ class AppDatabase {
     });
   }
 
+  // ============================================================
+  // TABLA DE CONFIGURACIONES
+  // ============================================================
+
   /// Tabla para configuraciones locales del aplicativo.
   Future<void> _createConfiguracionesTable(DatabaseExecutor db) async {
     await db.execute('''
@@ -68,6 +82,10 @@ class AppDatabase {
       )
     ''');
   }
+
+  // ============================================================
+  // TABLA DE MATRICES IPERC
+  // ============================================================
 
   /// Cabecera de las matrices IPERC almacenadas localmente.
   Future<void> _createMatricesIpercTable(DatabaseExecutor db) async {
@@ -99,6 +117,10 @@ class AppDatabase {
     ''');
   }
 
+  // ============================================================
+  // TABLA DE DETALLES IPERC
+  // ============================================================
+
   /// Detalles y evaluaciones de riesgos de cada matriz IPERC.
   ///
   /// Los identificadores de controles y EPP se almacenan como JSON.
@@ -109,6 +131,10 @@ class AppDatabase {
         id_servidor TEXT,
 
         matriz_id_local TEXT NOT NULL,
+        matriz_id_servidor INTEGER,
+
+        item INTEGER NOT NULL DEFAULT 1,
+        tarea TEXT NOT NULL DEFAULT '',
 
         actividad_id TEXT,
         peligro_id TEXT,
@@ -118,6 +144,8 @@ class AppDatabase {
         peligro_descripcion TEXT,
         consecuencia_descripcion TEXT,
 
+        evaluacion_inicial_id INTEGER,
+
         severidad_inicial INTEGER NOT NULL,
         frecuencia_inicial INTEGER NOT NULL,
         valor_riesgo_inicial INTEGER NOT NULL,
@@ -126,6 +154,8 @@ class AppDatabase {
         control_ids_json TEXT NOT NULL DEFAULT '[]',
         equipo_proteccion_ids_json TEXT NOT NULL DEFAULT '[]',
         control_descripcion TEXT,
+
+        evaluacion_residual_id INTEGER,
 
         severidad_residual INTEGER,
         frecuencia_residual INTEGER,
@@ -153,6 +183,10 @@ class AppDatabase {
     ''');
   }
 
+  // ============================================================
+  // COLA DE SINCRONIZACIÓN
+  // ============================================================
+
   /// Cola de operaciones pendientes de enviar al backend.
   Future<void> _createSyncQueueTable(DatabaseExecutor db) async {
     await db.execute('''
@@ -177,30 +211,53 @@ class AppDatabase {
     ''');
   }
 
+  // ============================================================
+  // ÍNDICES
+  // ============================================================
+
   /// Crea índices para acelerar las consultas y la sincronización.
   Future<void> _createIndexes(DatabaseExecutor db) async {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS
       idx_matrices_iperc_sincronizado
-      ON matrices_iperc_local(sincronizado, eliminado)
+      ON matrices_iperc_local(
+        sincronizado,
+        eliminado
+      )
     ''');
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS
       idx_detalles_iperc_matriz
-      ON detalles_iperc_local(matriz_id_local)
+      ON detalles_iperc_local(
+        matriz_id_local
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_detalles_iperc_matriz_servidor
+      ON detalles_iperc_local(
+        matriz_id_servidor
+      )
     ''');
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS
       idx_detalles_iperc_sincronizado
-      ON detalles_iperc_local(sincronizado, eliminado)
+      ON detalles_iperc_local(
+        sincronizado,
+        eliminado
+      )
     ''');
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS
       idx_sincronizaciones_estado
-      ON sincronizaciones_pendientes(estado, fecha_creacion)
+      ON sincronizaciones_pendientes(
+        estado,
+        fecha_creacion
+      )
     ''');
 
     /// Evita colocar varias veces la misma operación pendiente.
@@ -216,11 +273,19 @@ class AppDatabase {
     ''');
   }
 
+  // ============================================================
+  // MIGRACIONES
+  // ============================================================
+
   /// Ejecuta las migraciones cuando aumenta la versión de SQLite.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     await db.transaction((Transaction txn) async {
       if (oldVersion < 2) {
         await _upgradeToVersion2(txn);
+      }
+
+      if (oldVersion < 3) {
+        await _upgradeToVersion3(txn);
       }
 
       await _createIndexes(txn);
@@ -236,12 +301,14 @@ class AppDatabase {
 
     await db.execute('''
       ALTER TABLE detalles_iperc_local
-      ADD COLUMN control_ids_json TEXT NOT NULL DEFAULT '[]'
+      ADD COLUMN control_ids_json
+      TEXT NOT NULL DEFAULT '[]'
     ''');
 
     await db.execute('''
       ALTER TABLE detalles_iperc_local
-      ADD COLUMN equipo_proteccion_ids_json TEXT NOT NULL DEFAULT '[]'
+      ADD COLUMN equipo_proteccion_ids_json
+      TEXT NOT NULL DEFAULT '[]'
     ''');
 
     await db.execute('''
@@ -264,6 +331,41 @@ class AppDatabase {
       ADD COLUMN estado_implementacion TEXT
     ''');
   }
+
+  /// Actualiza una base de datos versión 2 a versión 3.
+  ///
+  /// Agrega los campos necesarios para convertir un registro local
+  /// en una solicitud válida para la API.
+  Future<void> _upgradeToVersion3(DatabaseExecutor db) async {
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN matriz_id_servidor INTEGER
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN item INTEGER NOT NULL DEFAULT 1
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN tarea TEXT NOT NULL DEFAULT ''
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN evaluacion_inicial_id INTEGER
+    ''');
+
+    await db.execute('''
+      ALTER TABLE detalles_iperc_local
+      ADD COLUMN evaluacion_residual_id INTEGER
+    ''');
+  }
+
+  // ============================================================
+  // UTILIDADES
+  // ============================================================
 
   /// Elimina toda la base de datos local.
   ///

@@ -65,6 +65,46 @@ class MatrizIpercRemoteDatasource {
     );
   }
 
+  // Actualiza una matriz existente mediante PUT.
+  Future<MatrizIpercModel> actualizar(int id, Map<String, dynamic> data) async {
+    if (id <= 0) {
+      throw ArgumentError('El identificador de la matriz no es válido.');
+    }
+
+    final Response<dynamic> response = await _apiClient.put(
+      '${ApiConfig.matricesIpercEndpoint}/$id',
+      data: data,
+    );
+
+    // Si el backend devuelve la matriz actualizada, se utiliza directamente.
+    if (response.data is Map) {
+      final Map<String, dynamic> contenido = Map<String, dynamic>.from(
+        response.data as Map,
+      );
+
+      final dynamic dataInterna = contenido['data'];
+
+      if (dataInterna is Map) {
+        return MatrizIpercModel.fromJson(
+          Map<String, dynamic>.from(dataInterna),
+        );
+      }
+
+      final bool contieneMatriz =
+          contenido.containsKey('id') ||
+          contenido.containsKey('Id') ||
+          contenido.containsKey('codigo') ||
+          contenido.containsKey('Codigo');
+
+      if (contieneMatriz) {
+        return MatrizIpercModel.fromJson(contenido);
+      }
+    }
+
+    // Si el PUT devuelve 204 o solo un mensaje, consulta nuevamente la matriz.
+    return obtenerMatrizPorId(id);
+  }
+
   List<dynamic> _obtenerLista(dynamic contenido) {
     if (contenido is List) {
       return contenido;

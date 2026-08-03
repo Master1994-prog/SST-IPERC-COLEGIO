@@ -14,4 +14,12 @@ class MatrizIpercRepository {
   Future<MatrizIpercModel> obtenerMatrizPorId(int id) {
     return _remoteDatasource.obtenerMatrizPorId(id);
   }
+
+  Future<String> crear(Map<String, dynamic> datos) {
+    return _remoteDatasource.create(datos);
+  }
+
+  Future<MatrizIpercModel> actualizar(int id, Map<String, dynamic> datos) {
+    return _remoteDatasource.actualizar(id, datos);
+  }
 }

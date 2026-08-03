@@ -1,21 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../data/models/consecuencia_model.dart';
 import '../../../data/models/detalle_iperc_local_model.dart';
+import '../../../data/models/peligro_model.dart';
+import '../../providers/detalle_iperc_catalogos_provider.dart';
 import '../../providers/detalle_iperc_offline_provider.dart';
 
-/// Formulario para registrar o editar un detalle IPERC sin conexión.
+/// Formulario para registrar o editar un detalle IPERC.
+///
+/// El registro se almacena primero en SQLite. Cuando exista conexión,
+/// podrá sincronizarse con el backend.
 class DetalleIpercFormScreen extends StatefulWidget {
   const DetalleIpercFormScreen({
     super.key,
     required this.matrizIdLocal,
+    this.matrizIdServidor,
+    this.siguienteItem,
     this.detalle,
   });
 
-  /// Identificador local de la matriz IPERC.
+  /// Identificador local de la matriz.
   final String matrizIdLocal;
 
-  /// Si contiene un detalle, el formulario funcionará en modo edición.
+  /// Identificador de la matriz en el backend.
+  final int? matrizIdServidor;
+
+  /// Número sugerido para el nuevo detalle.
+  final int? siguienteItem;
+
+  /// Detalle que se editará.
   final DetalleIpercLocalModel? detalle;
 
   bool get esEdicion => detalle != null;
@@ -27,12 +41,15 @@ class DetalleIpercFormScreen extends StatefulWidget {
 class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
+  late final TextEditingController _itemController;
+  late final TextEditingController _tareaController;
   late final TextEditingController _actividadController;
-  late final TextEditingController _peligroController;
-  late final TextEditingController _consecuenciaController;
   late final TextEditingController _controlController;
   late final TextEditingController _observacionesController;
   late final TextEditingController _responsableController;
+
+  int? _peligroIdSeleccionado;
+  int? _consecuenciaIdSeleccionada;
 
   int _severidadInicial = 1;
   int _frecuenciaInicial = 1;
@@ -52,6 +69,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     'EN_PROCESO',
     'IMPLEMENTADO',
     'VERIFICADO',
+    'CERRADO',
   ];
 
   @override
@@ -60,16 +78,16 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
     final DetalleIpercLocalModel? detalle = widget.detalle;
 
+    _itemController = TextEditingController(
+      text: (detalle?.item ?? widget.siguienteItem ?? 1).toString(),
+    );
+
+    _tareaController = TextEditingController(
+      text: detalle?.tarea ?? detalle?.actividadDescripcion ?? '',
+    );
+
     _actividadController = TextEditingController(
       text: detalle?.actividadDescripcion ?? '',
-    );
-
-    _peligroController = TextEditingController(
-      text: detalle?.peligroDescripcion ?? '',
-    );
-
-    _consecuenciaController = TextEditingController(
-      text: detalle?.consecuenciaDescripcion ?? '',
     );
 
     _controlController = TextEditingController(
@@ -83,6 +101,10 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     _responsableController = TextEditingController(
       text: detalle?.responsableImplementacionId ?? '',
     );
+
+    _peligroIdSeleccionado = int.tryParse(detalle?.peligroId ?? '');
+
+    _consecuenciaIdSeleccionada = int.tryParse(detalle?.consecuenciaId ?? '');
 
     if (detalle != null) {
       _severidadInicial = detalle.severidadInicial;
@@ -100,18 +122,30 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
       _estadoImplementacion = detalle.estadoImplementacion ?? 'PENDIENTE';
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargarCatalogos();
+    });
   }
 
   @override
   void dispose() {
+    _itemController.dispose();
+    _tareaController.dispose();
     _actividadController.dispose();
-    _peligroController.dispose();
-    _consecuenciaController.dispose();
     _controlController.dispose();
     _observacionesController.dispose();
     _responsableController.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _cargarCatalogos() async {
+    await context.read<DetalleIpercCatalogosProvider>().cargar();
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   int get _valorRiesgoInicial {
@@ -133,23 +167,31 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return 'BAJO';
     }
 
-    if (valor <= 12) {
+    if (valor <= 9) {
       return 'MEDIO';
     }
 
-    return 'ALTO';
+    if (valor <= 16) {
+      return 'ALTO';
+    }
+
+    return 'CRÍTICO';
   }
 
   Color _obtenerColorRiesgo(int valor) {
     if (valor <= 4) {
-      return Colors.green;
+      return Colors.green.shade700;
     }
 
-    if (valor <= 12) {
-      return Colors.amber.shade700;
+    if (valor <= 9) {
+      return Colors.amber.shade800;
     }
 
-    return Colors.red;
+    if (valor <= 16) {
+      return Colors.orange.shade800;
+    }
+
+    return Colors.red.shade700;
   }
 
   String _crearIdLocal() {
@@ -162,6 +204,42 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     }
 
     return null;
+  }
+
+  String? _validarItem(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'El número de ítem es obligatorio.';
+    }
+
+    final int? item = int.tryParse(value.trim());
+
+    if (item == null || item <= 0) {
+      return 'Ingrese un número de ítem válido.';
+    }
+
+    return null;
+  }
+
+  String? _validarPeligro(int? value) {
+    if (value == null || value <= 0) {
+      return 'Seleccione un peligro.';
+    }
+
+    return null;
+  }
+
+  String? _validarConsecuencia(int? value) {
+    if (value == null || value <= 0) {
+      return 'Seleccione una consecuencia.';
+    }
+
+    return null;
+  }
+
+  String? _textoOpcional(String value) {
+    final String texto = value.trim();
+
+    return texto.isEmpty ? null : texto;
   }
 
   Future<void> _seleccionarFechaCompromiso() async {
@@ -218,10 +296,37 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return;
     }
 
+    if (_peligroIdSeleccionado == null || _consecuenciaIdSeleccionada == null) {
+      _mostrarMensaje(
+        'Seleccione el peligro y la consecuencia.',
+        esError: true,
+      );
+      return;
+    }
+
     if (_registrarEvaluacionResidual &&
         (_severidadResidual == null || _frecuenciaResidual == null)) {
       _mostrarMensaje(
         'Complete la severidad y frecuencia residual.',
+        esError: true,
+      );
+      return;
+    }
+
+    final DetalleIpercCatalogosProvider catalogos = context
+        .read<DetalleIpercCatalogosProvider>();
+
+    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
+      _peligroIdSeleccionado,
+    );
+
+    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
+      _consecuenciaIdSeleccionada,
+    );
+
+    if (peligro == null || consecuencia == null) {
+      _mostrarMensaje(
+        'No se pudo obtener la información del peligro o consecuencia.',
         esError: true,
       );
       return;
@@ -238,39 +343,68 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     final DetalleIpercLocalModel detalle = DetalleIpercLocalModel(
       idLocal: anterior?.idLocal ?? _crearIdLocal(),
       idServidor: anterior?.idServidor,
+
       matrizIdLocal: widget.matrizIdLocal,
+      matrizIdServidor: anterior?.matrizIdServidor ?? widget.matrizIdServidor,
+
+      item: int.parse(_itemController.text.trim()),
+      tarea: _tareaController.text.trim(),
+
       actividadId: anterior?.actividadId,
-      peligroId: anterior?.peligroId,
-      consecuenciaId: anterior?.consecuenciaId,
+
+      peligroId: peligro.id.toString(),
+      consecuenciaId: consecuencia.id.toString(),
+
       actividadDescripcion: _actividadController.text.trim(),
-      peligroDescripcion: _peligroController.text.trim(),
-      consecuenciaDescripcion: _consecuenciaController.text.trim(),
+
+      peligroDescripcion: peligro.nombreCompleto,
+      consecuenciaDescripcion: consecuencia.nombreCompleto,
+
+      evaluacionInicialId: anterior?.evaluacionInicialId,
+
       severidadInicial: _severidadInicial,
       frecuenciaInicial: _frecuenciaInicial,
       valorRiesgoInicial: _valorRiesgoInicial,
       nivelRiesgoInicial: _obtenerNivelRiesgo(_valorRiesgoInicial),
+
       controlIds: anterior?.controlIds ?? const <String>[],
+
       equipoProteccionIds: anterior?.equipoProteccionIds ?? const <String>[],
+
       controlDescripcion: _textoOpcional(_controlController.text),
+
+      evaluacionResidualId: anterior?.evaluacionResidualId,
+
       severidadResidual: _registrarEvaluacionResidual
           ? _severidadResidual
           : null,
+
       frecuenciaResidual: _registrarEvaluacionResidual
           ? _frecuenciaResidual
           : null,
+
       valorRiesgoResidual: valorResidual,
+
       nivelRiesgoResidual: valorResidual == null
           ? null
           : _obtenerNivelRiesgo(valorResidual),
+
       responsableImplementacionId: _textoOpcional(_responsableController.text),
+
       fechaCompromiso: _fechaCompromiso,
       fechaImplementacion: _fechaImplementacion,
+
       estadoImplementacion: _estadoImplementacion,
+
       observaciones: _textoOpcional(_observacionesController.text),
+
       sincronizado: false,
       eliminado: false,
+
       fechaRegistro: anterior?.fechaRegistro ?? ahora,
+
       fechaActualizacion: widget.esEdicion ? ahora : null,
+
       fechaSincronizacion: anterior?.fechaSincronizacion,
     );
 
@@ -303,11 +437,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     Navigator.of(context).pop(true);
   }
 
-  String? _textoOpcional(String value) {
-    final String texto = value.trim();
-    return texto.isEmpty ? null : texto;
-  }
-
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -327,290 +456,524 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       (DetalleIpercOfflineProvider provider) => provider.guardando,
     );
 
+    final DetalleIpercCatalogosProvider catalogos = context
+        .watch<DetalleIpercCatalogosProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.esEdicion ? 'Editar detalle IPERC' : 'Nuevo detalle IPERC',
         ),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Actualizar catálogos',
+            onPressed:
+                catalogos.cargando || catalogos.actualizandoRemoto || guardando
+                ? null
+                : catalogos.recargar,
+            icon: catalogos.actualizandoRemoto
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+          ),
+        ],
       ),
       body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              _construirAvisoOffline(),
-              const SizedBox(height: 20),
-              _construirTituloSeccion(
-                'Identificación del peligro',
-                Icons.warning_amber_rounded,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _actividadController,
-                enabled: !guardando,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Actividad o tarea *',
-                  hintText: 'Ejemplo: mantenimiento de computadoras',
-                  prefixIcon: Icon(Icons.assignment_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: _validarCampoObligatorio,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _peligroController,
-                enabled: !guardando,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Peligro identificado *',
-                  hintText: 'Ejemplo: cables eléctricos expuestos',
-                  prefixIcon: Icon(Icons.warning_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: _validarCampoObligatorio,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _consecuenciaController,
-                enabled: !guardando,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Consecuencia posible *',
-                  hintText: 'Ejemplo: descarga eléctrica',
-                  prefixIcon: Icon(Icons.report_problem_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                validator: _validarCampoObligatorio,
-              ),
-              const SizedBox(height: 24),
-              _construirTituloSeccion(
-                'Evaluación inicial 5 × 5',
-                Icons.grid_view_rounded,
-              ),
-              const SizedBox(height: 12),
-              _construirSelectorValor(
-                titulo: 'Severidad',
-                valor: _severidadInicial,
-                habilitado: !guardando,
-                onChanged: (int valor) {
-                  setState(() {
-                    _severidadInicial = valor;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              _construirSelectorValor(
-                titulo: 'Frecuencia o probabilidad',
-                valor: _frecuenciaInicial,
-                habilitado: !guardando,
-                onChanged: (int valor) {
-                  setState(() {
-                    _frecuenciaInicial = valor;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              _construirResultadoRiesgo(
-                titulo: 'Riesgo inicial',
-                valor: _valorRiesgoInicial,
-              ),
-              const SizedBox(height: 24),
-              _construirTituloSeccion(
-                'Medidas de control',
-                Icons.health_and_safety_outlined,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _controlController,
-                enabled: !guardando,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Controles por implementar',
-                  hintText: 'Describa los controles y equipos de protección',
-                  prefixIcon: Icon(Icons.security_outlined),
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Registrar riesgo residual'),
-                subtitle: const Text(
-                  'Evaluar el riesgo después de aplicar los controles.',
-                ),
-                value: _registrarEvaluacionResidual,
-                onChanged: guardando
-                    ? null
-                    : (bool value) {
-                        setState(() {
-                          _registrarEvaluacionResidual = value;
+        child: catalogos.cargando && !catalogos.cargado
+            ? const Center(child: CircularProgressIndicator())
+            : _construirFormulario(catalogos: catalogos, guardando: guardando),
+      ),
+    );
+  }
 
-                          if (value) {
-                            _severidadResidual ??= 1;
-                            _frecuenciaResidual ??= 1;
-                          } else {
-                            _severidadResidual = null;
-                            _frecuenciaResidual = null;
-                          }
-                        });
-                      },
-              ),
-              if (_registrarEvaluacionResidual) ...<Widget>[
-                const SizedBox(height: 12),
-                _construirSelectorValor(
-                  titulo: 'Severidad residual',
-                  valor: _severidadResidual ?? 1,
-                  habilitado: !guardando,
-                  onChanged: (int valor) {
-                    setState(() {
-                      _severidadResidual = valor;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _construirSelectorValor(
-                  titulo: 'Frecuencia residual',
-                  valor: _frecuenciaResidual ?? 1,
-                  habilitado: !guardando,
-                  onChanged: (int valor) {
-                    setState(() {
-                      _frecuenciaResidual = valor;
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                _construirResultadoRiesgo(
-                  titulo: 'Riesgo residual',
-                  valor: _valorRiesgoResidual ?? 1,
-                ),
-              ],
-              const SizedBox(height: 24),
-              _construirTituloSeccion(
-                'Implementación',
-                Icons.task_alt_outlined,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _responsableController,
-                enabled: !guardando,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Responsable de implementación',
-                  prefixIcon: Icon(Icons.person_outline),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _estadoImplementacion,
-                decoration: const InputDecoration(
-                  labelText: 'Estado de implementación',
-                  prefixIcon: Icon(Icons.pending_actions_outlined),
-                  border: OutlineInputBorder(),
-                ),
-                items: _estadosImplementacion
-                    .map(
-                      (String estado) => DropdownMenuItem<String>(
-                        value: estado,
-                        child: Text(_nombreEstado(estado)),
-                      ),
-                    )
-                    .toList(growable: false),
-                onChanged: guardando
-                    ? null
-                    : (String? value) {
-                        if (value != null) {
-                          setState(() {
-                            _estadoImplementacion = value;
-                          });
-                        }
-                      },
-              ),
-              const SizedBox(height: 12),
-              _construirSelectorFecha(
-                titulo: 'Fecha de compromiso',
-                fecha: _fechaCompromiso,
-                onPressed: guardando ? null : _seleccionarFechaCompromiso,
-                onClear: guardando
-                    ? null
-                    : () {
-                        setState(() {
-                          _fechaCompromiso = null;
-                        });
-                      },
-              ),
-              const SizedBox(height: 12),
-              _construirSelectorFecha(
-                titulo: 'Fecha de implementación',
-                fecha: _fechaImplementacion,
-                onPressed: guardando ? null : _seleccionarFechaImplementacion,
-                onClear: guardando
-                    ? null
-                    : () {
-                        setState(() {
-                          _fechaImplementacion = null;
-                        });
-                      },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _observacionesController,
-                enabled: !guardando,
-                maxLines: 3,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Observaciones',
-                  prefixIcon: Icon(Icons.notes_outlined),
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: guardando ? null : _guardar,
-                icon: guardando
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: Text(
-                  guardando
-                      ? 'Guardando...'
-                      : widget.esEdicion
-                      ? 'Actualizar detalle'
-                      : 'Guardar detalle',
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
+  Widget _construirFormulario({
+    required DetalleIpercCatalogosProvider catalogos,
+    required bool guardando,
+  }) {
+    return Form(
+      key: _formKey,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: <Widget>[
+          _construirAvisoOffline(),
+
+          if (catalogos.tieneError) ...<Widget>[
+            const SizedBox(height: 12),
+            _construirErrorCatalogos(catalogos),
+          ],
+
+          if (catalogos.tieneAdvertencia) ...<Widget>[
+            const SizedBox(height: 12),
+            _construirAdvertenciaCatalogos(catalogos),
+          ],
+
+          const SizedBox(height: 20),
+
+          _construirTituloSeccion(
+            'Información de la tarea',
+            Icons.assignment_outlined,
           ),
-        ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _itemController,
+            enabled: !guardando && !widget.esEdicion,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Ítem *',
+              prefixIcon: Icon(Icons.numbers),
+              border: OutlineInputBorder(),
+            ),
+            validator: _validarItem,
+          ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _tareaController,
+            enabled: !guardando,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Tarea *',
+              hintText: 'Ejemplo: revisar instalaciones eléctricas',
+              prefixIcon: Icon(Icons.task_alt_outlined),
+              border: OutlineInputBorder(),
+            ),
+            validator: _validarCampoObligatorio,
+          ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _actividadController,
+            enabled: !guardando,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Actividad o proceso *',
+              hintText: 'Ejemplo: mantenimiento preventivo',
+              prefixIcon: Icon(Icons.work_outline),
+              border: OutlineInputBorder(),
+            ),
+            validator: _validarCampoObligatorio,
+          ),
+
+          const SizedBox(height: 24),
+
+          _construirTituloSeccion(
+            'Identificación del peligro',
+            Icons.warning_amber_rounded,
+          ),
+
+          const SizedBox(height: 12),
+
+          DropdownButtonFormField<int>(
+            initialValue: _valorPeligroValido(catalogos),
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Peligro identificado *',
+              prefixIcon: Icon(Icons.warning_outlined),
+              border: OutlineInputBorder(),
+            ),
+            items: catalogos.peligros.map((PeligroModel peligro) {
+              return DropdownMenuItem<int>(
+                value: peligro.id,
+                child: Text(
+                  peligro.nombreCompleto,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+            onChanged: guardando
+                ? null
+                : (int? value) {
+                    setState(() {
+                      _peligroIdSeleccionado = value;
+                    });
+                  },
+            validator: _validarPeligro,
+          ),
+
+          if (_peligroIdSeleccionado != null) ...<Widget>[
+            const SizedBox(height: 8),
+            _construirDescripcionPeligro(catalogos),
+          ],
+
+          const SizedBox(height: 12),
+
+          DropdownButtonFormField<int>(
+            initialValue: _valorConsecuenciaValido(catalogos),
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Consecuencia posible *',
+              prefixIcon: Icon(Icons.report_problem_outlined),
+              border: OutlineInputBorder(),
+            ),
+            items: catalogos.consecuencias.map((
+              ConsecuenciaModel consecuencia,
+            ) {
+              return DropdownMenuItem<int>(
+                value: consecuencia.id,
+                child: Text(
+                  consecuencia.nombreCompleto,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
+            onChanged: guardando
+                ? null
+                : (int? value) {
+                    setState(() {
+                      _consecuenciaIdSeleccionada = value;
+                    });
+                  },
+            validator: _validarConsecuencia,
+          ),
+
+          if (_consecuenciaIdSeleccionada != null) ...<Widget>[
+            const SizedBox(height: 8),
+            _construirDescripcionConsecuencia(catalogos),
+          ],
+
+          const SizedBox(height: 24),
+
+          _construirTituloSeccion(
+            'Evaluación inicial 5 × 5',
+            Icons.grid_view_rounded,
+          ),
+
+          const SizedBox(height: 12),
+
+          _construirSelectorValor(
+            titulo: 'Severidad',
+            valor: _severidadInicial,
+            habilitado: !guardando,
+            onChanged: (int valor) {
+              setState(() {
+                _severidadInicial = valor;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          _construirSelectorValor(
+            titulo: 'Frecuencia o probabilidad',
+            valor: _frecuenciaInicial,
+            habilitado: !guardando,
+            onChanged: (int valor) {
+              setState(() {
+                _frecuenciaInicial = valor;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          _construirResultadoRiesgo(
+            titulo: 'Riesgo inicial',
+            valor: _valorRiesgoInicial,
+          ),
+
+          const SizedBox(height: 24),
+
+          _construirTituloSeccion(
+            'Medidas de control',
+            Icons.health_and_safety_outlined,
+          ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _controlController,
+            enabled: !guardando,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Controles por implementar',
+              hintText: 'Describa los controles necesarios',
+              prefixIcon: Icon(Icons.security_outlined),
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Registrar riesgo residual'),
+            subtitle: const Text(
+              'Evaluar el riesgo después de aplicar los controles.',
+            ),
+            value: _registrarEvaluacionResidual,
+            onChanged: guardando
+                ? null
+                : (bool value) {
+                    setState(() {
+                      _registrarEvaluacionResidual = value;
+
+                      if (value) {
+                        _severidadResidual ??= 1;
+                        _frecuenciaResidual ??= 1;
+                      } else {
+                        _severidadResidual = null;
+                        _frecuenciaResidual = null;
+                      }
+                    });
+                  },
+          ),
+
+          if (_registrarEvaluacionResidual) ...<Widget>[
+            const SizedBox(height: 12),
+
+            _construirSelectorValor(
+              titulo: 'Severidad residual',
+              valor: _severidadResidual ?? 1,
+              habilitado: !guardando,
+              onChanged: (int valor) {
+                setState(() {
+                  _severidadResidual = valor;
+                });
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            _construirSelectorValor(
+              titulo: 'Frecuencia residual',
+              valor: _frecuenciaResidual ?? 1,
+              habilitado: !guardando,
+              onChanged: (int valor) {
+                setState(() {
+                  _frecuenciaResidual = valor;
+                });
+              },
+            ),
+
+            const SizedBox(height: 12),
+
+            _construirResultadoRiesgo(
+              titulo: 'Riesgo residual',
+              valor: _valorRiesgoResidual ?? 1,
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          _construirTituloSeccion('Implementación', Icons.engineering_outlined),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _responsableController,
+            enabled: !guardando,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'ID del responsable',
+              prefixIcon: Icon(Icons.person_outline),
+              border: OutlineInputBorder(),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          DropdownButtonFormField<String>(
+            initialValue: _estadoImplementacion,
+            decoration: const InputDecoration(
+              labelText: 'Estado de implementación',
+              prefixIcon: Icon(Icons.check_circle_outline),
+              border: OutlineInputBorder(),
+            ),
+            items: _estadosImplementacion.map((String estado) {
+              return DropdownMenuItem<String>(
+                value: estado,
+                child: Text(estado.replaceAll('_', ' ')),
+              );
+            }).toList(),
+            onChanged: guardando
+                ? null
+                : (String? value) {
+                    if (value == null) {
+                      return;
+                    }
+
+                    setState(() {
+                      _estadoImplementacion = value;
+                    });
+                  },
+          ),
+
+          const SizedBox(height: 12),
+
+          _construirSelectorFecha(
+            titulo: 'Fecha de compromiso',
+            fecha: _fechaCompromiso,
+            icono: Icons.event_outlined,
+            habilitado: !guardando,
+            onPressed: _seleccionarFechaCompromiso,
+            onLimpiar: () {
+              setState(() {
+                _fechaCompromiso = null;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          _construirSelectorFecha(
+            titulo: 'Fecha de implementación',
+            fecha: _fechaImplementacion,
+            icono: Icons.event_available,
+            habilitado: !guardando,
+            onPressed: _seleccionarFechaImplementacion,
+            onLimpiar: () {
+              setState(() {
+                _fechaImplementacion = null;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          TextFormField(
+            controller: _observacionesController,
+            enabled: !guardando,
+            maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Observaciones',
+              prefixIcon: Icon(Icons.notes_outlined),
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          FilledButton.icon(
+            onPressed: guardando || !catalogos.tieneCatalogos ? null : _guardar,
+            icon: guardando
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(
+              guardando
+                  ? 'Guardando...'
+                  : widget.esEdicion
+                  ? 'Actualizar detalle'
+                  : 'Guardar detalle',
+            ),
+          ),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  int? _valorPeligroValido(DetalleIpercCatalogosProvider catalogos) {
+    final bool existe = catalogos.peligros.any(
+      (PeligroModel peligro) => peligro.id == _peligroIdSeleccionado,
+    );
+
+    return existe ? _peligroIdSeleccionado : null;
+  }
+
+  int? _valorConsecuenciaValido(DetalleIpercCatalogosProvider catalogos) {
+    final bool existe = catalogos.consecuencias.any(
+      (ConsecuenciaModel consecuencia) =>
+          consecuencia.id == _consecuenciaIdSeleccionada,
+    );
+
+    return existe ? _consecuenciaIdSeleccionada : null;
+  }
+
+  Widget _construirDescripcionPeligro(DetalleIpercCatalogosProvider catalogos) {
+    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
+      _peligroIdSeleccionado,
+    );
+
+    if (peligro == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Text(
+      '${peligro.tipoVisible} · ${peligro.categoriaVisible}',
+      style: Theme.of(context).textTheme.bodySmall,
+    );
+  }
+
+  Widget _construirDescripcionConsecuencia(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
+      _consecuenciaIdSeleccionada,
+    );
+
+    if (consecuencia == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Text(
+      '${consecuencia.clasificacionVisible} · '
+      '${consecuencia.gravedadVisible}',
+      style: Theme.of(context).textTheme.bodySmall,
+    );
+  }
+
+  Widget _construirErrorCatalogos(DetalleIpercCatalogosProvider catalogos) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.error_outline, color: Colors.red.shade700),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              catalogos.error ?? 'No se pudieron cargar los catálogos.',
+            ),
+          ),
+          IconButton(
+            tooltip: 'Reintentar',
+            onPressed: catalogos.recargar,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
     );
   }
 
   Widget _construirAvisoOffline() {
-    return Card(
-      color: Colors.blue.shade50,
-      child: const Padding(
-        padding: EdgeInsets.all(14),
-        child: Row(
-          children: <Widget>[
-            Icon(Icons.cloud_off_outlined, color: Colors.blue),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'El registro se guardará en el dispositivo y quedará '
-                'pendiente de sincronización.',
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.cloud_off_outlined, color: Colors.blue.shade700),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'El detalle se guardará localmente y se sincronizará cuando exista conexión con el servidor.',
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -638,27 +1001,30 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     required bool habilitado,
     required ValueChanged<int> onChanged,
   }) {
-    return DropdownButtonFormField<int>(
-      initialValue: valor,
+    return InputDecorator(
       decoration: InputDecoration(
         labelText: titulo,
         border: const OutlineInputBorder(),
       ),
-      items: List<DropdownMenuItem<int>>.generate(5, (int index) {
-        final int numero = index + 1;
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: List<Widget>.generate(5, (int index) {
+          final int opcion = index + 1;
 
-        return DropdownMenuItem<int>(
-          value: numero,
-          child: Text('$numero - ${_descripcionValor(numero)}'),
-        );
-      }),
-      onChanged: habilitado
-          ? (int? nuevoValor) {
-              if (nuevoValor != null) {
-                onChanged(nuevoValor);
-              }
-            }
-          : null,
+          return ChoiceChip(
+            label: Text(opcion.toString()),
+            selected: valor == opcion,
+            onSelected: habilitado
+                ? (bool selected) {
+                    if (selected) {
+                      onChanged(opcion);
+                    }
+                  }
+                : null,
+          );
+        }),
+      ),
     );
   }
 
@@ -666,8 +1032,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     required String titulo,
     required int valor,
   }) {
-    final Color color = _obtenerColorRiesgo(valor);
     final String nivel = _obtenerNivelRiesgo(valor);
+    final Color color = _obtenerColorRiesgo(valor);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -678,18 +1044,11 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       ),
       child: Row(
         children: <Widget>[
-          CircleAvatar(
-            backgroundColor: color,
-            foregroundColor: Colors.white,
-            child: Text(
-              '$valor',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          Icon(Icons.shield_outlined, color: color),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '$titulo: $nivel',
+              '$titulo: $valor - $nivel',
               style: TextStyle(color: color, fontWeight: FontWeight.bold),
             ),
           ),
@@ -701,13 +1060,15 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   Widget _construirSelectorFecha({
     required String titulo,
     required DateTime? fecha,
-    required VoidCallback? onPressed,
-    required VoidCallback? onClear,
+    required IconData icono,
+    required bool habilitado,
+    required VoidCallback onPressed,
+    required VoidCallback onLimpiar,
   }) {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: titulo,
-        prefixIcon: const Icon(Icons.calendar_month_outlined),
+        prefixIcon: Icon(icono),
         border: const OutlineInputBorder(),
       ),
       child: Row(
@@ -715,48 +1076,42 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           Expanded(child: Text(_formatearFecha(fecha))),
           if (fecha != null)
             IconButton(
-              onPressed: onClear,
-              tooltip: 'Quitar fecha',
+              tooltip: 'Limpiar fecha',
+              onPressed: habilitado ? onLimpiar : null,
               icon: const Icon(Icons.clear),
             ),
           IconButton(
-            onPressed: onPressed,
             tooltip: 'Seleccionar fecha',
-            icon: const Icon(Icons.edit_calendar_outlined),
+            onPressed: habilitado ? onPressed : null,
+            icon: const Icon(Icons.calendar_month),
           ),
         ],
       ),
     );
   }
 
-  String _descripcionValor(int valor) {
-    switch (valor) {
-      case 1:
-        return 'Muy bajo';
-      case 2:
-        return 'Bajo';
-      case 3:
-        return 'Moderado';
-      case 4:
-        return 'Alto';
-      case 5:
-        return 'Muy alto';
-      default:
-        return '';
-    }
-  }
-
-  String _nombreEstado(String estado) {
-    switch (estado) {
-      case 'EN_PROCESO':
-        return 'En proceso';
-      case 'IMPLEMENTADO':
-        return 'Implementado';
-      case 'VERIFICADO':
-        return 'Verificado';
-      case 'PENDIENTE':
-      default:
-        return 'Pendiente';
-    }
+  Widget _construirAdvertenciaCatalogos(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.storage_outlined, color: Colors.orange.shade800),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              catalogos.advertencia ?? 'Se están utilizando catálogos locales.',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
