@@ -4,32 +4,38 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../controles/controles_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
-import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import 'detalles_iperc_screen.dart';
 
+/// Pantalla que muestra la información completa de una matriz IPERC.
 class MatrizIpercDetailScreen extends StatefulWidget {
   const MatrizIpercDetailScreen({required this.matriz, super.key});
 
   final MatrizIpercModel matriz;
 
   @override
-  State<MatrizIpercDetailScreen> createState() =>
-      _MatrizIpercDetailScreenState();
+  State<MatrizIpercDetailScreen> createState() {
+    return _MatrizIpercDetailScreenState();
+  }
 }
 
 class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
   final MatrizIpercRepository _repository = MatrizIpercRepository();
 
   late MatrizIpercModel matriz;
+
   bool _cargandoDetalle = false;
 
   @override
   void initState() {
     super.initState();
+
     matriz = widget.matriz;
+
     _cargarDetalleActualizado();
   }
 
+  /// Consulta nuevamente la matriz por su ID para mostrar
+  /// la información más reciente del backend.
   Future<void> _cargarDetalleActualizado() async {
     if (matriz.id <= 0) {
       return;
@@ -51,7 +57,10 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
         matriz = matrizActualizada;
       });
     } catch (_) {
-      // Si falla la recarga, se mantiene la información recibida del listado.
+      /*
+       * Si la recarga falla, se conserva la información
+       * recibida desde el listado de matrices.
+       */
     } finally {
       if (mounted) {
         setState(() {
@@ -61,6 +70,18 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
     }
   }
 
+  /// Abre la pantalla de detalles pertenecientes exclusivamente
+  /// a la matriz seleccionada.
+  void _abrirDetalles() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          return DetallesIpercScreen(matriz: matriz);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -68,145 +89,163 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
         title: Text(matriz.codigo),
         actions: <Widget>[
           IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _cargandoDetalle ? null : _cargarDetalleActualizado,
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
             tooltip: 'Editar matriz',
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'La edición se implementará en el siguiente paso.',
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'La edición de la matriz se implementará en el siguiente paso.',
+                    ),
                   ),
-                ),
-              );
+                );
             },
             icon: const Icon(Icons.edit_outlined),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          if (_cargandoDetalle) ...<Widget>[
-            const LinearProgressIndicator(),
+      body: RefreshIndicator(
+        onRefresh: _cargarDetalleActualizado,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            if (_cargandoDetalle) ...<Widget>[
+              const LinearProgressIndicator(),
+              const SizedBox(height: 16),
+            ],
+
+            _EncabezadoMatriz(matriz: matriz),
+
             const SizedBox(height: 16),
+
+            _SeccionCard(
+              titulo: 'Información general',
+              icono: Icons.info_outline,
+              children: <Widget>[
+                _DatoFila(etiqueta: 'Código', valor: matriz.codigo),
+                _DatoFila(etiqueta: 'Nombre', valor: matriz.nombre),
+                _DatoFila(
+                  etiqueta: 'Objetivo',
+                  valor: _textoOpcional(matriz.objetivo),
+                ),
+                _DatoFila(
+                  etiqueta: 'Estado',
+                  valor: matriz.activo ? 'Activa' : 'Inactiva',
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            _SeccionCard(
+              titulo: 'Organización',
+              icono: Icons.apartment_outlined,
+              children: <Widget>[
+                _DatoFila(
+                  etiqueta: 'Institución',
+                  valor: matriz.institucionVisible,
+                ),
+                _DatoFila(etiqueta: 'Área', valor: matriz.areaVisible),
+                _DatoFila(
+                  etiqueta: 'Actividad',
+                  valor: matriz.actividadVisible,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            _SeccionCard(
+              titulo: 'Evaluación IPERC',
+              icono: Icons.grid_view_outlined,
+              children: <Widget>[
+                _AccionMatriz(
+                  icono: Icons.list_alt,
+                  titulo: 'Peligros y riesgos',
+                  descripcion:
+                      'Consultar los peligros, consecuencias y evaluaciones registradas únicamente en esta matriz.',
+                  onTap: _abrirDetalles,
+                ),
+
+                const Divider(),
+
+                _AccionMatriz(
+                  icono: Icons.grid_on,
+                  titulo: 'Matriz de riesgo 5×5',
+                  descripcion:
+                      'Visualizar la relación entre probabilidad, severidad y nivel de riesgo.',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) {
+                          return const MatrizRiesgoScreen();
+                        },
+                      ),
+                    );
+                  },
+                ),
+
+                const Divider(),
+
+                _AccionMatriz(
+                  icono: Icons.shield_outlined,
+                  titulo: 'Controles',
+                  descripcion:
+                      'Consultar las medidas de control registradas en el sistema.',
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) {
+                          return const ControlesScreen();
+                        },
+                      ),
+                    );
+                  },
+                ),
+
+                const Divider(),
+
+                /*
+                 * Los seguimientos pertenecen a un detalle IPERC,
+                 * no directamente a la matriz.
+                 *
+                 * Por eso se abre primero la lista de detalles
+                 * correspondientes a esta matriz.
+                 */
+                _AccionMatriz(
+                  icono: Icons.fact_check_outlined,
+                  titulo: 'Seguimientos',
+                  descripcion:
+                      'Seleccionar un detalle IPERC de esta matriz para revisar sus avances, evidencias y observaciones.',
+                  onTap: _abrirDetalles,
+                ),
+              ],
+            ),
           ],
-          _EncabezadoMatriz(matriz: matriz),
-          const SizedBox(height: 16),
-
-          _SeccionCard(
-            titulo: 'Información general',
-            icono: Icons.info_outline,
-            children: <Widget>[
-              _DatoFila(etiqueta: 'Código', valor: matriz.codigo),
-              _DatoFila(etiqueta: 'Nombre', valor: matriz.nombre),
-              _DatoFila(
-                etiqueta: 'Objetivo',
-                valor: _textoOpcional(matriz.objetivo),
-              ),
-              _DatoFila(
-                etiqueta: 'Estado',
-                valor: matriz.activo ? 'Activa' : 'Inactiva',
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          _SeccionCard(
-            titulo: 'Organización',
-            icono: Icons.apartment_outlined,
-            children: <Widget>[
-              _DatoFila(
-                etiqueta: 'Institución',
-                valor: matriz.institucionVisible,
-              ),
-              _DatoFila(etiqueta: 'Área', valor: matriz.areaVisible),
-              _DatoFila(etiqueta: 'Actividad', valor: matriz.actividadVisible),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          _SeccionCard(
-            titulo: 'Evaluación IPERC',
-            icono: Icons.grid_view_outlined,
-            children: <Widget>[
-              _AccionMatriz(
-                icono: Icons.list_alt,
-                titulo: 'Peligros y riesgos',
-                descripcion:
-                    'Consultar los peligros, consecuencias y evaluaciones registradas.',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) {
-                        return DetallesIpercScreen(matriz: matriz);
-                      },
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              _AccionMatriz(
-                icono: Icons.grid_on,
-                titulo: 'Matriz de riesgo 5×5',
-                descripcion:
-                    'Visualizar probabilidad, severidad y nivel de riesgo.',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) {
-                        return const MatrizRiesgoScreen();
-                      },
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              _AccionMatriz(
-                icono: Icons.shield_outlined,
-                titulo: 'Controles',
-                descripcion: 'Consultar las medidas de control asociadas.',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) {
-                        return const ControlesScreen();
-                      },
-                    ),
-                  );
-                },
-              ),
-              const Divider(),
-              _AccionMatriz(
-                icono: Icons.fact_check_outlined,
-                titulo: 'Seguimientos',
-                descripcion: 'Revisar avances, evidencias y observaciones.',
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) {
-                        return const SeguimientosIpercScreen();
-                      },
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
   static String _textoOpcional(String? valor) {
-    if (valor == null || valor.trim().isEmpty) {
+    final String texto = valor?.trim() ?? '';
+
+    if (texto.isEmpty) {
       return 'No registrado';
     }
 
-    return valor;
+    return texto;
   }
 }
 
+/// Encabezado con el código, nombre y estado de la matriz.
 class _EncabezadoMatriz extends StatelessWidget {
   const _EncabezadoMatriz({required this.matriz});
 
@@ -266,6 +305,7 @@ class _EncabezadoMatriz extends StatelessWidget {
   }
 }
 
+/// Tarjeta reutilizable para agrupar secciones.
 class _SeccionCard extends StatelessWidget {
   const _SeccionCard({
     required this.titulo,
@@ -289,10 +329,12 @@ class _SeccionCard extends StatelessWidget {
               children: <Widget>[
                 Icon(icono, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 10),
-                Text(
-                  titulo,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                Expanded(
+                  child: Text(
+                    titulo,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -306,6 +348,7 @@ class _SeccionCard extends StatelessWidget {
   }
 }
 
+/// Fila utilizada para mostrar una etiqueta y su valor.
 class _DatoFila extends StatelessWidget {
   const _DatoFila({required this.etiqueta, required this.valor});
 
@@ -334,6 +377,7 @@ class _DatoFila extends StatelessWidget {
   }
 }
 
+/// Acción disponible dentro del detalle de una matriz.
 class _AccionMatriz extends StatelessWidget {
   const _AccionMatriz({
     required this.icono,

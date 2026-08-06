@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/dashboard_provider.dart';
+import '../areas/areas_screen.dart';
 import '../categorias_peligro/categorias_peligro_screen.dart';
 import '../clasificaciones_control/clasificaciones_control_screen.dart';
 import '../consecuencias/consecuencias_screen.dart';
@@ -8,7 +11,11 @@ import '../equipos_proteccion/equipos_proteccion_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
 import '../mapas_riesgo/mapas_riesgo_screen.dart';
+import '../mapas_riesgo/zonas_identificadas_screen.dart';
 import '../peligros/peligros_screen.dart';
+import '../procesos/procesos_screen.dart';
+import '../reportes/reportes_screen.dart';
+import '../seguimientos/seguimientos_screen.dart';
 import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
 
@@ -38,7 +45,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   /// Pantallas principales de la navegación.
   late final List<Widget> _pantallas = <Widget>[
-    InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
+    ChangeNotifierProvider<DashboardProvider>(
+      create: (_) {
+        final DashboardProvider provider = DashboardProvider();
+
+        Future<void>.microtask(provider.cargarResumen);
+
+        return provider;
+      },
+      child: InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
+    ),
     const IpercView(),
     const SstView(),
     const MapasView(),
@@ -110,47 +126,145 @@ class InicioView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        Text(
-          'Bienvenido, $nombreUsuario',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text('Rol: $rol', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 24),
-        const ResumenCard(
-          icono: Icons.assignment,
-          titulo: 'Matrices IPERC',
-          descripcion:
-              'Matrices registradas para identificar peligros y evaluar riesgos.',
-          resumen: '0 matrices registradas',
-        ),
-        const ResumenCard(
-          icono: Icons.warning_amber,
-          titulo: 'Riesgos críticos',
-          descripcion:
-              'Riesgos altos que requieren controles y atención prioritaria.',
-          resumen: '0 riesgos críticos',
-        ),
-        const ResumenCard(
-          icono: Icons.fact_check,
-          titulo: 'Seguimientos',
-          descripcion:
-              'Controles y medidas correctivas pendientes de verificación.',
-          resumen: '0 seguimientos pendientes',
-        ),
-        const ResumenCard(
-          icono: Icons.sync,
-          titulo: 'Sincronización',
-          descripcion:
-              'Estado de los registros guardados en modo online y offline.',
-          resumen: 'Datos sincronizados',
-        ),
-      ],
+    return Consumer<DashboardProvider>(
+      builder: (BuildContext context, DashboardProvider provider, Widget? child) {
+        return RefreshIndicator(
+          onRefresh: provider.cargarResumen,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Bienvenido, $nombreUsuario',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Rol: $rol',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Actualizar resumen',
+                    onPressed: provider.cargando
+                        ? null
+                        : provider.cargarResumen,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              if (provider.cargando) ...<Widget>[
+                const LinearProgressIndicator(),
+                const SizedBox(height: 16),
+              ],
+
+              if (provider.tieneError) ...<Widget>[
+                _DashboardError(
+                  mensaje: provider.error!,
+                  onReintentar: provider.cargarResumen,
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              ResumenCard(
+                icono: Icons.assignment,
+                titulo: 'Matrices IPERC',
+                descripcion:
+                    'Matrices registradas para identificar peligros y evaluar riesgos.',
+                resumen:
+                    '${provider.cantidadMatrices} '
+                    '${provider.cantidadMatrices == 1 ? 'matriz registrada' : 'matrices registradas'}',
+              ),
+
+              ResumenCard(
+                icono: Icons.warning_amber,
+                titulo: 'Riesgos críticos',
+                descripcion:
+                    'Riesgos altos que requieren controles y atención prioritaria.',
+                resumen:
+                    '${provider.cantidadRiesgosCriticos} '
+                    '${provider.cantidadRiesgosCriticos == 1 ? 'riesgo crítico' : 'riesgos críticos'}',
+              ),
+
+              ResumenCard(
+                icono: Icons.fact_check,
+                titulo: 'Seguimientos',
+                descripcion:
+                    'Controles y medidas correctivas pendientes de verificación.',
+                resumen:
+                    '${provider.cantidadSeguimientosPendientes} '
+                    '${provider.cantidadSeguimientosPendientes == 1 ? 'seguimiento pendiente' : 'seguimientos pendientes'}',
+              ),
+
+              ResumenCard(
+                icono: Icons.verified_outlined,
+                titulo: 'Seguimientos verificados',
+                descripcion:
+                    'Seguimientos que ya fueron revisados y aprobados.',
+                resumen:
+                    '${provider.cantidadSeguimientosVerificados} '
+                    '${provider.cantidadSeguimientosVerificados == 1 ? 'seguimiento verificado' : 'seguimientos verificados'}',
+              ),
+
+              const ResumenCard(
+                icono: Icons.sync,
+                titulo: 'Sincronización',
+                descripcion:
+                    'Estado de los registros guardados en modo online y offline.',
+                resumen: 'Sincronización automática activa',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Mensaje mostrado cuando no se puede cargar el resumen.
+class _DashboardError extends StatelessWidget {
+  const _DashboardError({required this.mensaje, required this.onReintentar});
+
+  final String mensaje;
+  final Future<void> Function() onReintentar;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.error_outline, color: colors.onErrorContainer),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              mensaje,
+              style: TextStyle(color: colors.onErrorContainer),
+            ),
+          ),
+          TextButton(onPressed: onReintentar, child: const Text('Reintentar')),
+        ],
+      ),
     );
   }
 }
@@ -202,11 +316,13 @@ class IpercView extends StatelessWidget {
           descripcion:
               'Registrar avances, evidencias, responsables y observaciones.',
           onTap: () {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                const SnackBar(content: Text('Seguimientos en construcción.')),
-              );
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const SeguimientosScreen();
+                },
+              ),
+            );
           },
         ),
       ],
@@ -386,17 +502,6 @@ class SstView extends StatelessWidget {
 class MapasView extends StatelessWidget {
   const MapasView({super.key});
 
-  /// Abre la pantalla funcional del mapa de riesgos.
-  void _abrirMapa(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (BuildContext context) {
-          return const MapasRiesgoScreen();
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return ModulosList(
@@ -405,18 +510,30 @@ class MapasView extends StatelessWidget {
           icono: Icons.map_outlined,
           titulo: 'Mapas de riesgo',
           descripcion:
-              'Ubicar los peligros y niveles de riesgo por área del colegio.',
+              'Consultar los peligros y niveles de riesgo registrados por matriz IPERC.',
           onTap: () {
-            _abrirMapa(context);
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const MapasRiesgoScreen();
+                },
+              ),
+            );
           },
         ),
         ModuloItem(
           icono: Icons.location_on_outlined,
           titulo: 'Zonas identificadas',
           descripcion:
-              'Consultar las zonas con riesgos bajos, medios, altos y críticos.',
+              'Consultar las áreas identificadas, su nivel máximo y cantidad de riesgos.',
           onTap: () {
-            _abrirMapa(context);
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const ZonasIdentificadasScreen();
+                },
+              ),
+            );
           },
         ),
       ],
@@ -430,30 +547,65 @@ class MasView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ModulosList(
+    return ModulosList(
       modulos: <ModuloItem>[
         ModuloItem(
           icono: Icons.apartment,
           titulo: 'Áreas',
-          descripcion: 'Administrar las áreas y ambientes de la institución.',
+          descripcion:
+              'Consultar las áreas y ambientes activos de la institución.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const AreasScreen();
+                },
+              ),
+            );
+          },
         ),
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.task_alt,
           titulo: 'Actividades',
           descripcion: 'Registrar actividades y tareas que serán evaluadas.',
         ),
-        ModuloItem(
+        const ModuloItem(
           icono: Icons.people,
           titulo: 'Usuarios',
           descripcion: 'Administrar usuarios, roles e instituciones.',
         ),
         ModuloItem(
+          icono: Icons.account_tree_outlined,
+          titulo: 'Procesos',
+          descripcion: 'Gestionar los procesos pertenecientes a cada área.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const ProcesosScreen();
+                },
+              ),
+            );
+          },
+        ),
+        // Módulo Reportes conectado.
+        ModuloItem(
           icono: Icons.bar_chart,
           titulo: 'Reportes',
           descripcion:
               'Consultar reportes de riesgos, controles y seguimientos.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const ReportesScreen();
+                },
+              ),
+            );
+          },
         ),
-        ModuloItem(
+
+        const ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',
           descripcion: 'Consultar la información de la cuenta y cerrar sesión.',

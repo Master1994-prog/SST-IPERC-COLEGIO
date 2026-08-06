@@ -6,6 +6,7 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/models/usuario_model.dart';
 import '../../providers/detalle_iperc_provider.dart';
 import '../../providers/usuario_provider.dart';
+import '../seguimientos/seguimientos_screen.dart';
 import 'editar_detalle_iperc_screen.dart';
 import 'nuevo_detalle_iperc_screen.dart';
 
@@ -114,6 +115,16 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
     }
 
     await _actualizar();
+  }
+
+  Future<void> _abrirSeguimientos(DetalleIpercModel detalle) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          return SeguimientosScreen(detalleIpercId: detalle.id);
+        },
+      ),
+    );
   }
 
   Future<void> _confirmarEliminar(DetalleIpercModel detalle) async {
@@ -259,6 +270,18 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                   icono: Icons.event_available_outlined,
                   etiqueta: 'Fecha de implementación',
                   valor: _formatearFecha(detalle.fechaImplementacion),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.of(bottomSheetContext).pop();
+                      _abrirSeguimientos(detalle);
+                    },
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Ver seguimientos'),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -449,6 +472,7 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
           ),
           procesando: provider.procesando,
           onTap: () => _mostrarDetalle(detalle),
+          onSeguimientos: () => _abrirSeguimientos(detalle),
           onEditar: () => _abrirEditarDetalle(detalle),
           onEliminar: () => _confirmarEliminar(detalle),
         );
@@ -562,6 +586,7 @@ class _DetalleCard extends StatelessWidget {
     required this.responsableNombre,
     required this.procesando,
     required this.onTap,
+    required this.onSeguimientos,
     required this.onEditar,
     required this.onEliminar,
   });
@@ -570,6 +595,7 @@ class _DetalleCard extends StatelessWidget {
   final String responsableNombre;
   final bool procesando;
   final VoidCallback onTap;
+  final VoidCallback onSeguimientos;
   final VoidCallback onEditar;
   final VoidCallback onEliminar;
 
@@ -654,7 +680,9 @@ class _DetalleCard extends StatelessWidget {
                 enabled: !procesando,
                 tooltip: 'Opciones',
                 onSelected: (String opcion) {
-                  if (opcion == 'editar') {
+                  if (opcion == 'seguimientos') {
+                    onSeguimientos();
+                  } else if (opcion == 'editar') {
                     onEditar();
                   } else if (opcion == 'eliminar') {
                     onEliminar();
@@ -662,6 +690,14 @@ class _DetalleCard extends StatelessWidget {
                 },
                 itemBuilder: (_) {
                   return const <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                      value: 'seguimientos',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.fact_check_outlined),
+                        title: Text('Seguimientos'),
+                      ),
+                    ),
                     PopupMenuItem<String>(
                       value: 'editar',
                       child: ListTile(
