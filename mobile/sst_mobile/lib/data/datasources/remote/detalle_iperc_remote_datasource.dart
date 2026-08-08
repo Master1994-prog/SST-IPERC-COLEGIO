@@ -1,61 +1,96 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/config/api_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../models/detalle_iperc_model.dart';
 
-/// Comunica el módulo Detalle IPERC con la API.
+/// ===============================================================
+/// DATASOURCE REMOTO - DETALLE IPERC
+/// ===============================================================
+///
+/// Esta clase se encarga exclusivamente de comunicarse con
+/// la API REST del backend para gestionar los detalles de
+/// una Matriz IPERC.
+///
+/// Endpoints utilizados:
+///
+/// GET    /api/detalles-iperc
+/// GET    /api/detalles-iperc/{id}
+/// GET    /api/detalles-iperc/matriz/{matrizId}
+/// POST   /api/detalles-iperc
+/// PUT    /api/detalles-iperc/{id}
+/// DELETE /api/detalles-iperc/{id}
+///
+/// No contiene lógica de interfaz.
+/// No contiene widgets.
+/// No contiene lógica de negocio visual.
+/// ===============================================================
 class DetalleIpercRemoteDatasource {
+  /// Constructor.
+  ///
+  /// Permite inyectar un ApiClient para pruebas.
+  /// Si no se envía ninguno, utiliza la instancia global.
   DetalleIpercRemoteDatasource({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient.instance;
 
+  /// Cliente HTTP principal de la aplicación.
   final ApiClient _apiClient;
 
-  static const String _endpoint = '/detalles-iperc';
+  // =============================================================
+  // OBTENER TODOS
+  // =============================================================
 
+  /// Obtiene todos los detalles IPERC registrados.
+  ///
+  /// Endpoint:
+  ///
+  /// GET /api/detalles-iperc
   Future<List<DetalleIpercModel>> obtenerTodos() async {
     try {
-      final Response<dynamic> response = await _apiClient.get(_endpoint);
+      final Response<dynamic> response = await _apiClient.get(
+        ApiConfig.detallesIpercEndpoint,
+      );
+
+      /// Convertimos la respuesta JSON del servidor
+      /// en una lista de modelos Dart.
       return DetalleIpercModel.listaDesdeJson(response.data);
     } on DioException catch (error) {
       throw Exception(
-        _obtenerMensaje(
+        _obtenerMensajeError(
           error,
-          predeterminado: 'No se pudieron cargar los detalles IPERC.',
+          mensajePredeterminado: 'No se pudieron cargar los detalles IPERC.',
         ),
       );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
     }
   }
 
-  Future<List<DetalleIpercModel>> obtenerPorMatriz(int matrizIpercId) async {
-    _validarId(matrizIpercId, 'matriz IPERC');
+  // =============================================================
+  // OBTENER POR ID
+  // =============================================================
+
+  /// Obtiene un detalle IPERC específico.
+  ///
+  /// Endpoint:
+  ///
+  /// GET /api/detalles-iperc/{id}
+  Future<DetalleIpercModel> obtenerPorId(int id) async {
+    /// Validamos antes de llamar a la API.
+    if (id <= 0) {
+      throw Exception('El identificador del detalle IPERC no es válido.');
+    }
 
     try {
       final Response<dynamic> response = await _apiClient.get(
-        '$_endpoint/matriz/$matrizIpercId',
+        '${ApiConfig.detallesIpercEndpoint}/$id',
       );
-      final List<DetalleIpercModel> detalles =
-          DetalleIpercModel.listaDesdeJson(response.data)..sort(
-            (DetalleIpercModel a, DetalleIpercModel b) =>
-                a.item.compareTo(b.item),
-          );
 
-      return detalles;
-    } on DioException catch (error) {
-      throw Exception(
-        _obtenerMensaje(
-          error,
-          predeterminado: 'No se pudieron cargar los peligros de la matriz.',
-        ),
+      /// Extraemos el objeto aunque el backend lo envíe
+      /// directamente o dentro de "data", "result", etc.
+      final Map<String, dynamic> json = DetalleIpercModel.objetoDesdeJson(
+        response.data,
       );
-    }
-  }
-
-  Future<DetalleIpercModel> obtenerPorId(int id) async {
-    _validarId(id, 'detalle IPERC');
-
-    try {
-      final Response<dynamic> response = await _apiClient.get('$_endpoint/$id');
-      final Map<String, dynamic> json = _extraerObjeto(response.data);
 
       if (json.isEmpty) {
         throw Exception('El servidor devolvió un detalle IPERC inválido.');
@@ -64,151 +99,508 @@ class DetalleIpercRemoteDatasource {
       return DetalleIpercModel.fromJson(json);
     } on DioException catch (error) {
       throw Exception(
-        _obtenerMensaje(
+        _obtenerMensajeError(
           error,
-          predeterminado: 'No se pudo obtener el detalle IPERC.',
+          mensajePredeterminado: 'No se pudo cargar el detalle IPERC.',
         ),
       );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
     }
   }
 
-  Future<DetalleIpercModel> crear(CrearDetalleIpercRequest request) async {
-    _validarDatos(
-      matrizIpercId: request.matrizIpercId,
-      item: request.item,
-      tarea: request.tarea,
-      peligroId: request.peligroId,
-      consecuenciaId: request.consecuenciaId,
-      evaluacionInicialId: request.evaluacionInicialId,
-    );
+  // =============================================================
+  // OBTENER DETALLES DE UNA MATRIZ
+  // =============================================================
+
+  /// Obtiene únicamente los detalles pertenecientes
+  /// a una Matriz IPERC.
+  ///
+  /// Endpoint:
+  ///
+  /// GET /api/detalles-iperc/matriz/{matrizIpercId}
+  Future<List<DetalleIpercModel>> obtenerPorMatriz(int matrizIpercId) async {
+    if (matrizIpercId <= 0) {
+      throw Exception('El identificador de la Matriz IPERC no es válido.');
+    }
 
     try {
-      final Response<dynamic> response = await _apiClient.post(
-        _endpoint,
-        data: request.toJson(),
+      final Response<dynamic> response = await _apiClient.get(
+        '${ApiConfig.detallesIpercEndpoint}/matriz/$matrizIpercId',
       );
-      final Map<String, dynamic> json = _extraerObjeto(response.data);
+
+      return DetalleIpercModel.listaDesdeJson(response.data);
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensajeError(
+          error,
+          mensajePredeterminado:
+              'No se pudieron cargar los detalles de la Matriz IPERC.',
+        ),
+      );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
+    }
+  }
+
+  // =============================================================
+  // CREAR DETALLE IPERC
+  // =============================================================
+
+  /// Registra un nuevo detalle dentro de una Matriz IPERC.
+  ///
+  /// Endpoint:
+  ///
+  /// POST /api/detalles-iperc
+  ///
+  /// IMPORTANTE:
+  ///
+  /// Flutter NO enviará EvaluacionInicialId.
+  ///
+  /// Enviará:
+  ///
+  /// - probabilidadInicialId
+  /// - severidadInicialId
+  ///
+  /// y el backend calculará automáticamente:
+  ///
+  /// Riesgo = Probabilidad x Severidad
+  ///
+  /// También determinará automáticamente el NivelRiesgo.
+  Future<DetalleIpercModel> crear({
+    required int matrizIpercId,
+    int item = 0,
+    required String tarea,
+    required int peligroId,
+    required int consecuenciaId,
+    String? descripcionPeligro,
+
+    // Evaluación inicial.
+    required int probabilidadInicialId,
+    required int severidadInicialId,
+    String? observacionesEvaluacionInicial,
+
+    // Evaluación residual opcional.
+    int? probabilidadResidualId,
+    int? severidadResidualId,
+    String? observacionesEvaluacionResidual,
+
+    // Controles.
+    List<int> controlIds = const <int>[],
+
+    // EPP.
+    List<int> equipoProteccionIds = const <int>[],
+
+    // Implementación.
+    int? responsableImplementacionId,
+    DateTime? fechaCompromiso,
+    DateTime? fechaImplementacion,
+    int estadoImplementacion = 0,
+  }) async {
+    /// Validaciones básicas antes de llamar al servidor.
+    _validarDatosPrincipales(
+      matrizIpercId: matrizIpercId,
+      tarea: tarea,
+      peligroId: peligroId,
+      consecuenciaId: consecuenciaId,
+      probabilidadInicialId: probabilidadInicialId,
+      severidadInicialId: severidadInicialId,
+    );
+
+    /// La evaluación residual debe estar completa.
+    _validarEvaluacionResidual(
+      probabilidadResidualId: probabilidadResidualId,
+      severidadResidualId: severidadResidualId,
+    );
+
+    /// Estado válido:
+    ///
+    /// 0 Pendiente
+    /// 1 EnProceso
+    /// 2 Implementado
+    /// 3 Verificado
+    /// 4 Cerrado
+    _validarEstadoImplementacion(estadoImplementacion);
+
+    try {
+      /// Construimos exactamente el JSON que espera
+      /// CreateDetalleIPERCDto en el backend.
+      final Map<String, dynamic> body = <String, dynamic>{
+        'matrizIPERCId': matrizIpercId,
+
+        /// Si se envía 0, el backend genera automáticamente
+        /// el siguiente item de la matriz.
+        'item': item,
+
+        'tarea': tarea.trim(),
+
+        'peligroId': peligroId,
+
+        'consecuenciaId': consecuenciaId,
+
+        'descripcionPeligro': _limpiarTextoNullable(descripcionPeligro),
+
+        // =======================================================
+        // EVALUACIÓN INICIAL
+        // =======================================================
+        'probabilidadInicialId': probabilidadInicialId,
+
+        'severidadInicialId': severidadInicialId,
+
+        'observacionesEvaluacionInicial': _limpiarTextoNullable(
+          observacionesEvaluacionInicial,
+        ),
+
+        // =======================================================
+        // EVALUACIÓN RESIDUAL
+        // =======================================================
+        'probabilidadResidualId': probabilidadResidualId,
+
+        'severidadResidualId': severidadResidualId,
+
+        'observacionesEvaluacionResidual': _limpiarTextoNullable(
+          observacionesEvaluacionResidual,
+        ),
+
+        // =======================================================
+        // CONTROLES
+        // =======================================================
+        'controlIds': _normalizarIds(controlIds),
+
+        // =======================================================
+        // EPP
+        // =======================================================
+        'equipoProteccionIds': _normalizarIds(equipoProteccionIds),
+
+        // =======================================================
+        // IMPLEMENTACIÓN
+        // =======================================================
+        'responsableImplementacionId': responsableImplementacionId,
+
+        'fechaCompromiso': fechaCompromiso?.toIso8601String(),
+
+        'fechaImplementacion': fechaImplementacion?.toIso8601String(),
+
+        'estadoImplementacion': estadoImplementacion,
+      };
+
+      final Response<dynamic> response = await _apiClient.post(
+        ApiConfig.detallesIpercEndpoint,
+        data: body,
+      );
+
+      final Map<String, dynamic> json = DetalleIpercModel.objetoDesdeJson(
+        response.data,
+      );
 
       if (json.isEmpty) {
         throw Exception(
-          'El detalle fue registrado, pero el servidor no devolvió sus datos.',
+          'El servidor registró el detalle, pero devolvió una respuesta inválida.',
         );
       }
 
       return DetalleIpercModel.fromJson(json);
     } on DioException catch (error) {
       throw Exception(
-        _obtenerMensaje(
+        _obtenerMensajeError(
           error,
-          predeterminado: 'No se pudo registrar el detalle IPERC.',
+          mensajePredeterminado: 'No se pudo registrar el detalle IPERC.',
         ),
       );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
     }
   }
 
-  Future<DetalleIpercModel> actualizar(
-    int id,
-    ActualizarDetalleIpercRequest request,
-  ) async {
-    _validarId(id, 'detalle IPERC');
-    _validarDatos(
-      matrizIpercId: request.matrizIpercId,
-      item: request.item,
-      tarea: request.tarea,
-      peligroId: request.peligroId,
-      consecuenciaId: request.consecuenciaId,
-      evaluacionInicialId: request.evaluacionInicialId,
-    );
+  // =============================================================
+  // ACTUALIZAR DETALLE IPERC
+  // =============================================================
 
-    try {
-      await _apiClient.put('$_endpoint/$id', data: request.toJson());
-      return obtenerPorId(id);
-    } on DioException catch (error) {
-      throw Exception(
-        _obtenerMensaje(
-          error,
-          predeterminado: 'No se pudo actualizar el detalle IPERC.',
-        ),
-      );
-    }
-  }
-
-  Future<void> eliminar(int id) async {
-    _validarId(id, 'detalle IPERC');
-
-    try {
-      await _apiClient.delete('$_endpoint/$id');
-    } on DioException catch (error) {
-      throw Exception(
-        _obtenerMensaje(
-          error,
-          predeterminado: 'No se pudo eliminar el detalle IPERC.',
-        ),
-      );
-    }
-  }
-
-  void _validarId(int id, String nombre) {
-    if (id <= 0) {
-      throw Exception('El identificador del $nombre no es válido.');
-    }
-  }
-
-  void _validarDatos({
+  /// Actualiza un detalle IPERC existente.
+  ///
+  /// Endpoint:
+  ///
+  /// PUT /api/detalles-iperc/{id}
+  ///
+  /// El backend volverá a calcular la evaluación
+  /// inicial y residual según los valores enviados.
+  Future<String> actualizar({
+    required int id,
     required int matrizIpercId,
     required int item,
     required String tarea,
     required int peligroId,
     required int consecuenciaId,
-    required int evaluacionInicialId,
+    String? descripcionPeligro,
+
+    // Evaluación inicial.
+    required int probabilidadInicialId,
+    required int severidadInicialId,
+    String? observacionesEvaluacionInicial,
+
+    // Evaluación residual opcional.
+    int? probabilidadResidualId,
+    int? severidadResidualId,
+    String? observacionesEvaluacionResidual,
+
+    // Controles.
+    List<int> controlIds = const <int>[],
+
+    // EPP.
+    List<int> equipoProteccionIds = const <int>[],
+
+    // Implementación.
+    int? responsableImplementacionId,
+    DateTime? fechaCompromiso,
+    DateTime? fechaImplementacion,
+    int estadoImplementacion = 0,
+  }) async {
+    if (id <= 0) {
+      throw Exception('El identificador del detalle IPERC no es válido.');
+    }
+
+    _validarDatosPrincipales(
+      matrizIpercId: matrizIpercId,
+      tarea: tarea,
+      peligroId: peligroId,
+      consecuenciaId: consecuenciaId,
+      probabilidadInicialId: probabilidadInicialId,
+      severidadInicialId: severidadInicialId,
+    );
+
+    _validarEvaluacionResidual(
+      probabilidadResidualId: probabilidadResidualId,
+      severidadResidualId: severidadResidualId,
+    );
+
+    _validarEstadoImplementacion(estadoImplementacion);
+
+    try {
+      final Map<String, dynamic> body = <String, dynamic>{
+        'matrizIPERCId': matrizIpercId,
+        'item': item,
+        'tarea': tarea.trim(),
+
+        'peligroId': peligroId,
+
+        'consecuenciaId': consecuenciaId,
+
+        'descripcionPeligro': _limpiarTextoNullable(descripcionPeligro),
+
+        // Evaluación inicial.
+        'probabilidadInicialId': probabilidadInicialId,
+
+        'severidadInicialId': severidadInicialId,
+
+        'observacionesEvaluacionInicial': _limpiarTextoNullable(
+          observacionesEvaluacionInicial,
+        ),
+
+        // Evaluación residual.
+        'probabilidadResidualId': probabilidadResidualId,
+
+        'severidadResidualId': severidadResidualId,
+
+        'observacionesEvaluacionResidual': _limpiarTextoNullable(
+          observacionesEvaluacionResidual,
+        ),
+
+        // Controles.
+        'controlIds': _normalizarIds(controlIds),
+
+        // EPP.
+        'equipoProteccionIds': _normalizarIds(equipoProteccionIds),
+
+        // Responsable y fechas.
+        'responsableImplementacionId': responsableImplementacionId,
+
+        'fechaCompromiso': fechaCompromiso?.toIso8601String(),
+
+        'fechaImplementacion': fechaImplementacion?.toIso8601String(),
+
+        'estadoImplementacion': estadoImplementacion,
+      };
+
+      final Response<dynamic> response = await _apiClient.put(
+        '${ApiConfig.detallesIpercEndpoint}/$id',
+        data: body,
+      );
+
+      /// El controlador actual devuelve:
+      ///
+      /// {
+      ///   "mensaje": "Detalle IPERC actualizado correctamente."
+      /// }
+      return _extraerMensaje(
+        response.data,
+        mensajePredeterminado: 'Detalle IPERC actualizado correctamente.',
+      );
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensajeError(
+          error,
+          mensajePredeterminado: 'No se pudo actualizar el detalle IPERC.',
+        ),
+      );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
+    }
+  }
+
+  // =============================================================
+  // CERRAR DETALLE IPERC
+  // =============================================================
+
+  /// Cierra un detalle IPERC.
+  ///
+  /// Endpoint:
+  ///
+  /// DELETE /api/detalles-iperc/{id}
+  ///
+  /// IMPORTANTE:
+  ///
+  /// Según tu backend actual, DELETE NO elimina físicamente
+  /// el registro.
+  ///
+  /// El servicio cambia:
+  ///
+  /// EstadoImplementacion = Cerrado
+  ///
+  /// por lo tanto conservamos toda la información histórica.
+  Future<String> cerrar(int id) async {
+    if (id <= 0) {
+      throw Exception('El identificador del detalle IPERC no es válido.');
+    }
+
+    try {
+      final Response<dynamic> response = await _apiClient.delete(
+        '${ApiConfig.detallesIpercEndpoint}/$id',
+      );
+
+      return _extraerMensaje(
+        response.data,
+        mensajePredeterminado: 'Detalle IPERC cerrado correctamente.',
+      );
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensajeError(
+          error,
+          mensajePredeterminado: 'No se pudo cerrar el detalle IPERC.',
+        ),
+      );
+    } catch (error) {
+      throw Exception(_limpiarMensaje(error));
+    }
+  }
+
+  // =============================================================
+  // VALIDACIONES LOCALES
+  // =============================================================
+
+  /// Valida los campos fundamentales antes de enviar
+  /// información al servidor.
+  void _validarDatosPrincipales({
+    required int matrizIpercId,
+    required String tarea,
+    required int peligroId,
+    required int consecuenciaId,
+    required int probabilidadInicialId,
+    required int severidadInicialId,
   }) {
-    _validarId(matrizIpercId, 'matriz IPERC');
-
-    if (item <= 0) {
-      throw Exception('El ítem del detalle IPERC no es válido.');
+    if (matrizIpercId <= 0) {
+      throw Exception('Debe seleccionar una Matriz IPERC válida.');
     }
 
-    if (tarea.trim().isEmpty) {
-      throw Exception('La tarea es obligatoria.');
+    if (tarea.trim().length < 2) {
+      throw Exception('La tarea debe tener al menos 2 caracteres.');
     }
 
-    _validarId(peligroId, 'peligro');
-    _validarId(consecuenciaId, 'consecuencia');
-    _validarId(evaluacionInicialId, 'evaluación inicial');
+    if (peligroId <= 0) {
+      throw Exception('Debe seleccionar un peligro.');
+    }
+
+    if (consecuenciaId <= 0) {
+      throw Exception('Debe seleccionar una consecuencia.');
+    }
+
+    if (probabilidadInicialId <= 0) {
+      throw Exception('Debe seleccionar la probabilidad inicial.');
+    }
+
+    if (severidadInicialId <= 0) {
+      throw Exception('Debe seleccionar la severidad inicial.');
+    }
   }
 
-  Map<String, dynamic> _extraerObjeto(dynamic data) {
-    if (data is! Map) {
-      return <String, dynamic>{};
+  /// Comprueba que la evaluación residual se complete
+  /// correctamente.
+  ///
+  /// No permitimos:
+  ///
+  /// Probabilidad residual = seleccionada
+  /// Severidad residual = null
+  ///
+  /// ni al contrario.
+  void _validarEvaluacionResidual({
+    required int? probabilidadResidualId,
+    required int? severidadResidualId,
+  }) {
+    final bool tieneProbabilidad =
+        probabilidadResidualId != null && probabilidadResidualId > 0;
+
+    final bool tieneSeveridad =
+        severidadResidualId != null && severidadResidualId > 0;
+
+    if (tieneProbabilidad != tieneSeveridad) {
+      throw Exception(
+        'Para realizar la evaluación residual debe seleccionar probabilidad y severidad.',
+      );
     }
-
-    final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
-    final dynamic contenido =
-        mapa['data'] ??
-        mapa['result'] ??
-        mapa['value'] ??
-        mapa['detalle'] ??
-        mapa['detalleIPERC'] ??
-        mapa['detalleIperc'];
-
-    if (contenido is Map) {
-      return Map<String, dynamic>.from(contenido);
-    }
-
-    return mapa;
   }
 
-  String _obtenerMensaje(DioException error, {required String predeterminado}) {
-    final dynamic data = error.response?.data;
+  /// Valida el enum EstadoImplementacion utilizado
+  /// por el backend.
+  void _validarEstadoImplementacion(int estado) {
+    if (estado < 0 || estado > 4) {
+      throw Exception('El estado de implementación no es válido.');
+    }
+  }
 
+  // =============================================================
+  // UTILIDADES
+  // =============================================================
+
+  /// Elimina IDs inválidos y duplicados.
+  ///
+  /// Ejemplo:
+  ///
+  /// [1, 1, 2, 0, -1]
+  ///
+  /// se convierte en:
+  ///
+  /// [1, 2]
+  List<int> _normalizarIds(Iterable<int> ids) {
+    return ids.where((int id) => id > 0).toSet().toList();
+  }
+
+  /// Limpia texto opcional.
+  ///
+  /// Si llega vacío, devuelve null.
+  String? _limpiarTextoNullable(String? texto) {
+    final String valor = texto?.trim() ?? '';
+
+    return valor.isEmpty ? null : valor;
+  }
+
+  /// Extrae el mensaje enviado por el backend.
+  String _extraerMensaje(
+    dynamic data, {
+    required String mensajePredeterminado,
+  }) {
     if (data is Map) {
       final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
-      final dynamic mensaje =
-          mapa['mensaje'] ??
-          mapa['message'] ??
-          mapa['detail'] ??
-          mapa['error'] ??
-          mapa['title'];
+
+      final dynamic mensaje = mapa['mensaje'] ?? mapa['message'];
 
       if (mensaje != null && mensaje.toString().trim().isNotEmpty) {
         return mensaje.toString().trim();
@@ -219,17 +611,132 @@ class DetalleIpercRemoteDatasource {
       return data.trim();
     }
 
+    return mensajePredeterminado;
+  }
+
+  // =============================================================
+  // MANEJO DE ERRORES DE DIO
+  // =============================================================
+
+  /// Intenta obtener un mensaje entendible a partir
+  /// de los diferentes errores devueltos por ASP.NET.
+  String _obtenerMensajeError(
+    DioException error, {
+    required String mensajePredeterminado,
+  }) {
+    final dynamic data = error.response?.data;
+
+    // -----------------------------------------------------------
+    // RESPUESTA JSON
+    // -----------------------------------------------------------
+
+    if (data is Map) {
+      final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
+
+      /// Errores comunes enviados manualmente
+      /// por nuestros controladores.
+      final dynamic mensaje =
+          mapa['mensaje'] ??
+          mapa['message'] ??
+          mapa['detail'] ??
+          mapa['error'] ??
+          mapa['title'];
+
+      if (mensaje != null && mensaje.toString().trim().isNotEmpty) {
+        return mensaje.toString().trim();
+      }
+
+      // ---------------------------------------------------------
+      // ERRORES DE VALIDACIÓN ASP.NET
+      // ---------------------------------------------------------
+
+      /// ASP.NET puede devolver:
+      ///
+      /// {
+      ///   "errors": {
+      ///      "Tarea": [
+      ///        "La tarea es obligatoria."
+      ///      ]
+      ///   }
+      /// }
+      final dynamic errores = mapa['errors'];
+
+      if (errores is Map && errores.isNotEmpty) {
+        final List<String> mensajes = <String>[];
+
+        for (final dynamic valor in errores.values) {
+          if (valor is List) {
+            mensajes.addAll(
+              valor
+                  .map((dynamic item) => item.toString().trim())
+                  .where((String item) => item.isNotEmpty),
+            );
+          } else if (valor != null) {
+            final String texto = valor.toString().trim();
+
+            if (texto.isNotEmpty) {
+              mensajes.add(texto);
+            }
+          }
+        }
+
+        if (mensajes.isNotEmpty) {
+          return mensajes.join('\n');
+        }
+      }
+    }
+
+    // -----------------------------------------------------------
+    // RESPUESTA EN TEXTO
+    // -----------------------------------------------------------
+
+    if (data is String && data.trim().isNotEmpty) {
+      return data.trim();
+    }
+
+    // -----------------------------------------------------------
+    // ERRORES POR TIPO
+    // -----------------------------------------------------------
+
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
       DioExceptionType.receiveTimeout =>
         'Se agotó el tiempo de conexión con el servidor.',
+
       DioExceptionType.connectionError =>
-        'No se pudo conectar con el servidor. Verifica la API y tu conexión.',
-      DioExceptionType.badCertificate =>
-        'El certificado del servidor no es válido.',
+        'No se pudo conectar con el servidor. '
+            'Verifica que la API esté ejecutándose.',
+
+      DioExceptionType.badResponse when error.response?.statusCode == 400 =>
+        'Los datos enviados para el detalle IPERC no son válidos.',
+
+      DioExceptionType.badResponse when error.response?.statusCode == 401 =>
+        'La sesión venció. Inicia sesión nuevamente.',
+
+      DioExceptionType.badResponse when error.response?.statusCode == 403 =>
+        'No tienes permiso para realizar esta operación.',
+
+      DioExceptionType.badResponse when error.response?.statusCode == 404 =>
+        'No se encontró el detalle IPERC solicitado.',
+
+      DioExceptionType.badResponse when error.response?.statusCode == 409 =>
+        'Existe un conflicto con los datos del detalle IPERC.',
+
+      DioExceptionType.badResponse
+          when error.response?.statusCode != null &&
+              error.response!.statusCode! >= 500 =>
+        'El servidor presentó un error al procesar el detalle IPERC.',
+
       DioExceptionType.cancel => 'La solicitud fue cancelada.',
-      _ => predeterminado,
+
+      _ => mensajePredeterminado,
     };
+  }
+
+  /// Elimina prefijos innecesarios cuando capturamos
+  /// una Exception estándar de Dart.
+  String _limpiarMensaje(Object error) {
+    return error.toString().replaceFirst('Exception: ', '').trim();
   }
 }

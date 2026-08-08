@@ -249,7 +249,6 @@ class DetalleIpercSyncService {
         DetalleIpercSyncMapper.toActualizarRequest(detalle);
 
     final DetalleIpercModel actualizado = await _remoteRepository.actualizar(
-      idServidor,
       request,
     );
 

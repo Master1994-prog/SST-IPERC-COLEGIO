@@ -1,26 +1,31 @@
-/// Representa una institución educativa registrada
-/// en el sistema SST/IPERC.
-class InstitucionModel {
-  const InstitucionModel({
+/// Representa una sede perteneciente a una institución.
+class SedeModel {
+  const SedeModel({
     required this.id,
     required this.nombre,
+    required this.institucionId,
     required this.activo,
     this.codigo = '',
+    this.direccion = '',
     this.descripcion = '',
   });
 
   final int id;
   final String codigo;
   final String nombre;
+  final String direccion;
   final String descripcion;
+  final int institucionId;
   final bool activo;
 
-  factory InstitucionModel.fromJson(Map<String, dynamic> json) {
-    return InstitucionModel(
+  factory SedeModel.fromJson(Map<String, dynamic> json) {
+    return SedeModel(
       id: _toInt(json['id'] ?? json['Id']),
       codigo: _toString(json['codigo'] ?? json['Codigo']),
       nombre: _toString(json['nombre'] ?? json['Nombre']),
+      direccion: _toString(json['direccion'] ?? json['Direccion']),
       descripcion: _toString(json['descripcion'] ?? json['Descripcion']),
+      institucionId: _toInt(json['institucionId'] ?? json['InstitucionId']),
       activo: _toBool(
         json['activo'] ?? json['Activo'],
         valorPredeterminado: true,
@@ -28,18 +33,17 @@ class InstitucionModel {
     );
   }
 
-  static List<InstitucionModel> listaDesdeJson(dynamic data) {
+  static List<SedeModel> listaDesdeJson(dynamic data) {
     final List<dynamic> elementos = _extraerLista(data);
 
     return elementos
         .whereType<Map>()
         .map((Map elemento) {
-          return InstitucionModel.fromJson(Map<String, dynamic>.from(elemento));
+          return SedeModel.fromJson(Map<String, dynamic>.from(elemento));
         })
-        .where(
-          (InstitucionModel institucion) =>
-              institucion.id > 0 && institucion.nombre.isNotEmpty,
-        )
+        .where((SedeModel sede) {
+          return sede.id > 0 && sede.nombre.isNotEmpty;
+        })
         .toList();
   }
 
@@ -51,13 +55,33 @@ class InstitucionModel {
     final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
 
     final dynamic contenido =
-        mapa['data'] ?? mapa['result'] ?? mapa['value'] ?? mapa['institucion'];
+        mapa['data'] ?? mapa['result'] ?? mapa['value'] ?? mapa['sede'];
 
     if (contenido is Map) {
       return Map<String, dynamic>.from(contenido);
     }
 
     return mapa;
+  }
+
+  SedeModel copyWith({
+    int? id,
+    String? codigo,
+    String? nombre,
+    String? direccion,
+    String? descripcion,
+    int? institucionId,
+    bool? activo,
+  }) {
+    return SedeModel(
+      id: id ?? this.id,
+      codigo: codigo ?? this.codigo,
+      nombre: nombre ?? this.nombre,
+      direccion: direccion ?? this.direccion,
+      descripcion: descripcion ?? this.descripcion,
+      institucionId: institucionId ?? this.institucionId,
+      activo: activo ?? this.activo,
+    );
   }
 
   static List<dynamic> _extraerLista(dynamic data) {
@@ -74,7 +98,7 @@ class InstitucionModel {
         mapa['result'],
         mapa['results'],
         mapa['value'],
-        mapa['instituciones'],
+        mapa['sedes'],
       ];
 
       for (final dynamic opcion in opciones) {

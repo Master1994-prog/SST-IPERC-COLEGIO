@@ -13,7 +13,6 @@ import '../../../data/models/usuario_model.dart';
 import '../../../data/repositories/consecuencia_repository.dart';
 import '../../../data/repositories/control_repository.dart';
 import '../../../data/repositories/equipo_proteccion_repository.dart';
-import '../../../data/repositories/evaluacion_riesgo_repository.dart';
 import '../../../data/repositories/peligro_repository.dart';
 import '../../providers/detalle_iperc_provider.dart';
 import '../../providers/usuario_provider.dart';
@@ -48,8 +47,6 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   final ControlRepository _controlRepository = ControlRepository();
   final EquipoProteccionRepository _equipoProteccionRepository =
       EquipoProteccionRepository();
-  final EvaluacionRiesgoRepository _evaluacionRiesgoRepository =
-      EvaluacionRiesgoRepository();
 
   List<PeligroModel> _peligros = <PeligroModel>[];
   List<ConsecuenciaModel> _consecuencias = <ConsecuenciaModel>[];
@@ -119,25 +116,12 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
     });
 
     try {
-      final Future<EvaluacionRiesgoModel?> evaluacionResidualFuture =
-          widget.detalle.tieneEvaluacionResidual
-          ? _evaluacionRiesgoRepository
-                .obtenerPorId(widget.detalle.evaluacionResidualId!)
-                .then<EvaluacionRiesgoModel?>(
-                  (EvaluacionRiesgoModel evaluacion) => evaluacion,
-                )
-          : Future<EvaluacionRiesgoModel?>.value(null);
-
       final List<dynamic> resultados =
           await Future.wait<dynamic>(<Future<dynamic>>[
             _peligroRepository.obtenerActivos(),
             _consecuenciaRepository.obtenerActivos(),
             _controlRepository.obtenerActivos(),
             _equipoProteccionRepository.obtenerActivos(),
-            _evaluacionRiesgoRepository.obtenerPorId(
-              widget.detalle.evaluacionInicialId,
-            ),
-            evaluacionResidualFuture,
           ]);
 
       if (!mounted) {
@@ -147,41 +131,53 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
       final List<PeligroModel> peligros = (resultados[0] as List<dynamic>)
           .whereType<PeligroModel>()
           .toList();
+
       final List<ConsecuenciaModel> consecuencias =
           (resultados[1] as List<dynamic>)
               .whereType<ConsecuenciaModel>()
               .toList();
+
       final List<ControlModel> controles = (resultados[2] as List<dynamic>)
           .whereType<ControlModel>()
           .toList();
-      final List<EquipoProteccionModel> equiposProteccion =
+
+      final List<EquipoProteccionModel> equipos =
           (resultados[3] as List<dynamic>)
               .whereType<EquipoProteccionModel>()
               .toList();
-      final EvaluacionRiesgoModel evaluacion =
-          resultados[4] as EvaluacionRiesgoModel;
-      final EvaluacionRiesgoModel? evaluacionResidual =
-          resultados[5] as EvaluacionRiesgoModel?;
 
       setState(() {
         _peligros = peligros;
         _consecuencias = consecuencias;
         _controles = controles;
-        _equiposProteccion = equiposProteccion;
+        _equiposProteccion = equipos;
+
         _peligroSeleccionado = _buscarPeligro(widget.detalle.peligroId);
+
         _consecuenciaSeleccionada = _buscarConsecuencia(
           widget.detalle.consecuenciaId,
         );
+
+        /// El DetalleIpercModel ya trae
+        /// la evaluación completa desde la API.
         _probabilidadSeleccionada = _buscarProbabilidad(
-          evaluacion.probabilidadId,
+          widget.detalle.evaluacionInicial.probabilidadId,
         );
-        _severidadSeleccionada = _buscarSeveridad(evaluacion.severidadId);
-        _probabilidadResidualSeleccionada = evaluacionResidual == null
+
+        _severidadSeleccionada = _buscarSeveridad(
+          widget.detalle.evaluacionInicial.severidadId,
+        );
+
+        final EvaluacionDetalleIpercModel? residual =
+            widget.detalle.evaluacionResidual;
+
+        _probabilidadResidualSeleccionada = residual == null
             ? null
-            : _buscarProbabilidad(evaluacionResidual.probabilidadId);
-        _severidadResidualSeleccionada = evaluacionResidual == null
+            : _buscarProbabilidad(residual.probabilidadId);
+
+        _severidadResidualSeleccionada = residual == null
             ? null
-            : _buscarSeveridad(evaluacionResidual.severidadId);
+            : _buscarSeveridad(residual.severidadId);
       });
     } catch (error) {
       if (!mounted) {
@@ -216,11 +212,15 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
             _severidadResidualSeleccionada != null);
 
     final bool responsableValido = _responsableImplementacionId != null;
+
     final bool compromisoValido = _fechaCompromiso != null;
+
     final bool requiereFechaImplementacion =
         _estadoImplementacion >= EstadoImplementacionIperc.implementado;
+
     final bool implementacionCompleta =
         !requiereFechaImplementacion || _fechaImplementacion != null;
+
     final bool ordenFechasValido =
         _fechaCompromiso == null ||
         _fechaImplementacion == null ||
@@ -236,85 +236,64 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
     }
 
     final DetalleIpercProvider provider = context.read<DetalleIpercProvider>();
+
     setState(() {
       _guardando = true;
     });
 
     try {
-      // 1. Actualizamos la evaluación inicial existente.
-      final int valorRiesgo =
-          _probabilidadSeleccionada!.valor * _severidadSeleccionada!.valor;
-      final NivelRiesgoIpercOption nivel = obtenerNivelRiesgoIperc(valorRiesgo);
-
-      await _evaluacionRiesgoRepository.actualizar(
-        widget.detalle.evaluacionInicialId,
-        ActualizarEvaluacionRiesgoRequest(
-          probabilidadId: _probabilidadSeleccionada!.id,
-          severidadId: _severidadSeleccionada!.id,
-          nivelRiesgoId: nivel.id,
-          observaciones:
-              'Evaluacion inicial actualizada desde el detalle IPERC.',
-        ),
-      );
-
-      // 2. Si se activó la evaluación residual, la actualizamos o la creamos.
-      int? evaluacionResidualId;
-
-      if (_registrarEvaluacionResidual) {
-        final int valorResidual =
-            _probabilidadResidualSeleccionada!.valor *
-            _severidadResidualSeleccionada!.valor;
-        final NivelRiesgoIpercOption nivelResidual = obtenerNivelRiesgoIperc(
-          valorResidual,
-        );
-
-        if (widget.detalle.tieneEvaluacionResidual) {
-          evaluacionResidualId = widget.detalle.evaluacionResidualId;
-
-          await _evaluacionRiesgoRepository.actualizar(
-            evaluacionResidualId!,
-            ActualizarEvaluacionRiesgoRequest(
-              probabilidadId: _probabilidadResidualSeleccionada!.id,
-              severidadId: _severidadResidualSeleccionada!.id,
-              nivelRiesgoId: nivelResidual.id,
-              observaciones:
-                  'Evaluacion residual actualizada desde el detalle IPERC.',
-            ),
-          );
-        } else {
-          final EvaluacionRiesgoModel evaluacionResidual =
-              await _evaluacionRiesgoRepository.crear(
-                CrearEvaluacionRiesgoRequest(
-                  probabilidadId: _probabilidadResidualSeleccionada!.id,
-                  severidadId: _severidadResidualSeleccionada!.id,
-                  nivelRiesgoId: nivelResidual.id,
-                  observaciones:
-                      'Evaluacion residual generada desde el detalle IPERC.',
-                ),
-              );
-
-          evaluacionResidualId = evaluacionResidual.id;
-        }
-      }
-
-      // 3. Guardamos el detalle usando los IDs de evaluación internamente.
+      /// Ya no actualizamos EvaluacionRiesgo
+      /// por separado.
+      ///
+      /// El backend actualiza automáticamente
+      /// evaluación inicial y residual.
       final ActualizarDetalleIpercRequest request =
           ActualizarDetalleIpercRequest(
+            id: widget.detalle.id,
+
             matrizIpercId: widget.matriz.id,
+
             item: int.parse(_itemController.text.trim()),
+
             tarea: _tareaController.text,
+
             peligroId: _peligroSeleccionado!.id,
+
             consecuenciaId: _consecuenciaSeleccionada!.id,
+
             descripcionPeligro: _descripcionController.text,
-            evaluacionInicialId: widget.detalle.evaluacionInicialId,
-            evaluacionResidualId: evaluacionResidualId,
+
+            probabilidadInicialId: _probabilidadSeleccionada!.id,
+
+            severidadInicialId: _severidadSeleccionada!.id,
+
+            observacionesEvaluacionInicial:
+                widget.detalle.evaluacionInicial.observaciones,
+
+            probabilidadResidualId: _registrarEvaluacionResidual
+                ? _probabilidadResidualSeleccionada!.id
+                : null,
+
+            severidadResidualId: _registrarEvaluacionResidual
+                ? _severidadResidualSeleccionada!.id
+                : null,
+
+            observacionesEvaluacionResidual: _registrarEvaluacionResidual
+                ? widget.detalle.evaluacionResidual?.observaciones
+                : null,
+
             controlIds: _controlIdsSeleccionados.toList(growable: false),
+
             equipoProteccionIds: _equipoProteccionIdsSeleccionados.toList(
               growable: false,
             ),
+
             responsableImplementacionId: _responsableImplementacionId,
+
             fechaCompromiso: _fechaCompromiso,
+
             fechaImplementacion: _fechaImplementacion,
+
             estadoImplementacion: _estadoImplementacion,
           );
 

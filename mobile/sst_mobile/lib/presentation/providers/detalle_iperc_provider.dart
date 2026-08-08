@@ -157,7 +157,6 @@ class DetalleIpercProvider extends ChangeNotifier {
 
     try {
       final DetalleIpercModel actualizado = await _repository.actualizar(
-        id,
         request,
       );
       _matrizIpercIdActual = request.matrizIpercId;

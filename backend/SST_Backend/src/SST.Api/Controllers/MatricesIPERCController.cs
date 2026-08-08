@@ -11,7 +11,8 @@ public sealed class MatricesIPERCController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
 
-    public MatricesIPERCController(SSTDbContext dbContext)
+    public MatricesIPERCController(
+        SSTDbContext dbContext)
     {
         _dbContext = dbContext;
     }
@@ -20,73 +21,278 @@ public sealed class MatricesIPERCController : ControllerBase
     // GET: api/MatricesIPERC
     // ============================================================
 
+    /// <summary>
+    /// Obtiene las matrices IPERC.
+    ///
+    /// Ejemplos:
+    ///
+    /// GET /api/MatricesIPERC
+    ///     -> muestra matrices activas e inactivas.
+    ///
+    /// GET /api/MatricesIPERC?estado=true
+    ///     -> muestra solo matrices activas.
+    ///
+    /// GET /api/MatricesIPERC?estado=false
+    ///     -> muestra solo matrices inactivas.
+    ///
+    /// También puede filtrar por institución, sede,
+    /// área, puesto, proceso o actividad.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(
         typeof(IEnumerable<MatrizIPERCResponse>),
         StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerTodas(
+        [FromQuery] bool? estado,
+        [FromQuery] long? institucionId,
+        [FromQuery] long? sedeId,
+        [FromQuery] long? areaId,
+        [FromQuery] long? puestoTrabajoId,
+        [FromQuery] long? procesoId,
+        [FromQuery] long? actividadId,
         CancellationToken cancellationToken)
     {
+        IQueryable<MatrizIPERC> consulta =
+            _dbContext.MatricesIPERC
+                .AsNoTracking();
+
+        // --------------------------------------------------------
+        // FILTRO POR ESTADO
+        // --------------------------------------------------------
+
+        if (estado.HasValue)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.Estado ==
+                    estado.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR INSTITUCIÓN
+        // --------------------------------------------------------
+
+        if (institucionId.HasValue &&
+            institucionId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.InstitucionId ==
+                    institucionId.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR SEDE
+        // --------------------------------------------------------
+
+        if (sedeId.HasValue &&
+            sedeId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.SedeId ==
+                    sedeId.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR ÁREA
+        // --------------------------------------------------------
+
+        if (areaId.HasValue &&
+            areaId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.AreaId ==
+                    areaId.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR PUESTO
+        // --------------------------------------------------------
+
+        if (puestoTrabajoId.HasValue &&
+            puestoTrabajoId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.PuestoTrabajoId ==
+                    puestoTrabajoId.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR PROCESO
+        // --------------------------------------------------------
+
+        if (procesoId.HasValue &&
+            procesoId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.ProcesoId ==
+                    procesoId.Value);
+        }
+
+        // --------------------------------------------------------
+        // FILTRO POR ACTIVIDAD
+        // --------------------------------------------------------
+
+        if (actividadId.HasValue &&
+            actividadId.Value > 0)
+        {
+            consulta = consulta.Where(
+                x =>
+                    x.ActividadId ==
+                    actividadId.Value);
+        }
+
+        // --------------------------------------------------------
+        // RESULTADO
+        // --------------------------------------------------------
+
         List<MatrizIPERCResponse> matrices =
-            await _dbContext.MatricesIPERC
-                .AsNoTracking()
-                .OrderByDescending(x => x.FechaRegistro)
-                .Select(x => new MatrizIPERCResponse
-                {
-                    Id = x.Id,
-                    Codigo = x.Codigo,
-                    Nombre = x.Nombre,
-                    Objetivo = x.Objetivo,
+            await consulta
+                .OrderByDescending(
+                    x => x.FechaRegistro)
+                .Select(
+                    x =>
+                        new MatrizIPERCResponse
+                        {
+                            Id = x.Id,
 
-                    InstitucionId = x.InstitucionId,
+                            Codigo =
+                                x.Codigo,
 
-                    InstitucionNombre =
-                        _dbContext.Instituciones
-                            .Where(i =>
-                                i.Id == x.InstitucionId)
-                            .Select(i => i.Nombre)
-                            .FirstOrDefault(),
+                            Nombre =
+                                x.Nombre,
 
-                    SedeId = x.SedeId,
+                            Objetivo =
+                                x.Objetivo,
 
-                    AreaId = x.AreaId,
+                            InstitucionId =
+                                x.InstitucionId,
 
-                    AreaNombre =
-                        _dbContext.Areas
-                            .Where(a =>
-                                a.Id == x.AreaId)
-                            .Select(a => a.Nombre)
-                            .FirstOrDefault(),
+                            InstitucionNombre =
+                                _dbContext
+                                    .Instituciones
+                                    .Where(
+                                        i =>
+                                            i.Id ==
+                                            x.InstitucionId)
+                                    .Select(
+                                        i =>
+                                            i.Nombre)
+                                    .FirstOrDefault(),
 
-                    PuestoTrabajoId =
-                        x.PuestoTrabajoId,
+                            SedeId =
+                                x.SedeId,
 
-                    ProcesoId = x.ProcesoId,
+                            SedeNombre =
+                                _dbContext
+                                    .Sedes
+                                    .Where(
+                                        s =>
+                                            s.Id ==
+                                            x.SedeId)
+                                    .Select(
+                                        s =>
+                                            s.Nombre)
+                                    .FirstOrDefault(),
 
-                    ActividadId = x.ActividadId,
+                            AreaId =
+                                x.AreaId,
 
-                    ActividadNombre =
-                        _dbContext.Actividades
-                            .Where(a =>
-                                a.Id == x.ActividadId)
-                            .Select(a => a.Nombre)
-                            .FirstOrDefault(),
+                            AreaNombre =
+                                _dbContext
+                                    .Areas
+                                    .Where(
+                                        a =>
+                                            a.Id ==
+                                            x.AreaId)
+                                    .Select(
+                                        a =>
+                                            a.Nombre)
+                                    .FirstOrDefault(),
 
-                    ResponsableId =
-                        x.ResponsableId,
+                            PuestoTrabajoId =
+                                x.PuestoTrabajoId,
 
-                    Estado = x.Estado,
-                    FechaRegistro = x.FechaRegistro,
-                    FechaActualizacion =
-                        x.FechaActualizacion
-                })
-                .ToListAsync(cancellationToken);
+                            PuestoTrabajoNombre =
+                                _dbContext
+                                    .PuestosTrabajo
+                                    .Where(
+                                        p =>
+                                            p.Id ==
+                                            x.PuestoTrabajoId)
+                                    .Select(
+                                        p =>
+                                            p.Nombre)
+                                    .FirstOrDefault(),
+
+                            ProcesoId =
+                                x.ProcesoId,
+
+                            ProcesoNombre =
+                                _dbContext
+                                    .Procesos
+                                    .Where(
+                                        p =>
+                                            p.Id ==
+                                            x.ProcesoId)
+                                    .Select(
+                                        p =>
+                                            p.Nombre)
+                                    .FirstOrDefault(),
+
+                            ActividadId =
+                                x.ActividadId,
+
+                            ActividadNombre =
+                                _dbContext
+                                    .Actividades
+                                    .Where(
+                                        a =>
+                                            a.Id ==
+                                            x.ActividadId)
+                                    .Select(
+                                        a =>
+                                            a.Nombre)
+                                    .FirstOrDefault(),
+
+                            ResponsableId =
+                                x.ResponsableId,
+
+                            ResponsableNombre =
+                                _dbContext
+                                    .Usuarios
+                                    .Where(
+                                        u =>
+                                            u.Id ==
+                                            x.ResponsableId)
+                                    .Select(
+                                        u =>
+                                            u.Nombres +
+                                            " " +
+                                            u.Apellidos)
+                                    .FirstOrDefault(),
+
+                            Estado =
+                                x.Estado,
+
+                            FechaRegistro =
+                                x.FechaRegistro,
+
+                            FechaActualizacion =
+                                x.FechaActualizacion
+                        })
+                .ToListAsync(
+                    cancellationToken);
 
         return Ok(matrices);
     }
 
     // ============================================================
-    // GET: api/MatricesIPERC/1
+    // GET: api/MatricesIPERC/{id}
     // ============================================================
 
     [HttpGet("{id:long}")]
@@ -94,11 +300,22 @@ public sealed class MatricesIPERCController : ControllerBase
         typeof(MatrizIPERCResponse),
         StatusCodes.Status200OK)]
     [ProducesResponseType(
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
         StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerPorId(
         long id,
         CancellationToken cancellationToken)
     {
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El identificador de la matriz no es válido."
+            });
+        }
+
         MatrizIPERCResponse? matriz =
             await ObtenerRespuestaPorIdAsync(
                 id,
@@ -132,7 +349,12 @@ public sealed class MatricesIPERCController : ControllerBase
         [FromBody] CrearMatrizIPERCRequest request,
         CancellationToken cancellationToken)
     {
-        string nombre = request.Nombre.Trim();
+        string nombre =
+            request.Nombre.Trim();
+
+        // --------------------------------------------------------
+        // VALIDAR NOMBRE
+        // --------------------------------------------------------
 
         if (nombre.Length < 5)
         {
@@ -142,6 +364,10 @@ public sealed class MatricesIPERCController : ControllerBase
                     "El nombre debe tener al menos 5 caracteres."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR CAMPOS OBLIGATORIOS
+        // --------------------------------------------------------
 
         if (request.InstitucionId <= 0 ||
             request.SedeId <= 0 ||
@@ -158,6 +384,10 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR INSTITUCIÓN
+        // --------------------------------------------------------
+
         bool institucionValida =
             await _dbContext.Instituciones
                 .AsNoTracking()
@@ -172,16 +402,21 @@ public sealed class MatricesIPERCController : ControllerBase
             return BadRequest(new
             {
                 mensaje =
-                    "La institución no existe."
+                    "La institución seleccionada no existe."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR SEDE
+        // --------------------------------------------------------
 
         bool sedeValida =
             await _dbContext.Sedes
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
-                        x.Id == request.SedeId &&
+                        x.Id ==
+                        request.SedeId &&
                         x.InstitucionId ==
                         request.InstitucionId,
                     cancellationToken);
@@ -195,12 +430,17 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR ÁREA
+        // --------------------------------------------------------
+
         bool areaValida =
             await _dbContext.Areas
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
-                        x.Id == request.AreaId,
+                        x.Id ==
+                        request.AreaId,
                     cancellationToken);
 
         if (!areaValida)
@@ -211,6 +451,10 @@ public sealed class MatricesIPERCController : ControllerBase
                     "El área seleccionada no existe."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR PUESTO
+        // --------------------------------------------------------
 
         bool puestoValido =
             await _dbContext.PuestosTrabajo
@@ -228,9 +472,13 @@ public sealed class MatricesIPERCController : ControllerBase
             return BadRequest(new
             {
                 mensaje =
-                    "El puesto no existe o no pertenece al área."
+                    "El puesto de trabajo no existe o no pertenece al área seleccionada."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR PROCESO
+        // --------------------------------------------------------
 
         bool procesoValido =
             await _dbContext.Procesos
@@ -250,13 +498,19 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR ACTIVIDAD
+        // --------------------------------------------------------
+
         bool actividadValida =
             await _dbContext.Actividades
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
                         x.Id ==
-                        request.ActividadId,
+                        request.ActividadId &&
+                        x.ProcesoId ==
+                        request.ProcesoId,
                     cancellationToken);
 
         if (!actividadValida)
@@ -264,9 +518,13 @@ public sealed class MatricesIPERCController : ControllerBase
             return BadRequest(new
             {
                 mensaje =
-                    "La actividad seleccionada no existe."
+                    "La actividad no existe o no pertenece al proceso seleccionado."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR USUARIO
+        // --------------------------------------------------------
 
         bool usuarioValido =
             await _dbContext.Usuarios
@@ -275,6 +533,7 @@ public sealed class MatricesIPERCController : ControllerBase
                     x =>
                         x.Id ==
                         request.UsuarioRegistroId &&
+                        x.Estado &&
                         x.Activo,
                     cancellationToken);
 
@@ -287,11 +546,18 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR NOMBRE DUPLICADO
+        // --------------------------------------------------------
+
         bool nombreDuplicado =
             await _dbContext.MatricesIPERC
                 .AsNoTracking()
                 .AnyAsync(
-                    x => x.Nombre == nombre,
+                    x =>
+                        x.Nombre ==
+                        nombre &&
+                        x.Estado,
                     cancellationToken);
 
         if (nombreDuplicado)
@@ -299,56 +565,74 @@ public sealed class MatricesIPERCController : ControllerBase
             return Conflict(new
             {
                 mensaje =
-                    "Ya existe una matriz con el mismo nombre."
+                    "Ya existe una matriz activa con el mismo nombre."
             });
         }
+
+        // --------------------------------------------------------
+        // GENERAR CÓDIGO
+        // --------------------------------------------------------
 
         string codigo =
             await GenerarCodigoAsync(
                 cancellationToken);
 
-        MatrizIPERC matriz = new()
-        {
-            Codigo = codigo,
-            Nombre = nombre,
+        // --------------------------------------------------------
+        // CREAR MATRIZ
+        // --------------------------------------------------------
 
-            Objetivo =
-                string.IsNullOrWhiteSpace(
-                    request.Objetivo)
-                    ? null
-                    : request.Objetivo.Trim(),
+        MatrizIPERC matriz =
+            new()
+            {
+                Codigo =
+                    codigo,
 
-            InstitucionId =
-                request.InstitucionId,
+                Nombre =
+                    nombre,
 
-            SedeId =
-                request.SedeId,
+                Objetivo =
+                    string.IsNullOrWhiteSpace(
+                        request.Objetivo)
+                        ? null
+                        : request
+                            .Objetivo
+                            .Trim(),
 
-            AreaId =
-                request.AreaId,
+                InstitucionId =
+                    request.InstitucionId,
 
-            PuestoTrabajoId =
-                request.PuestoTrabajoId,
+                SedeId =
+                    request.SedeId,
 
-            ProcesoId =
-                request.ProcesoId,
+                AreaId =
+                    request.AreaId,
 
-            ActividadId =
-                request.ActividadId,
+                PuestoTrabajoId =
+                    request.PuestoTrabajoId,
 
-            ResponsableId =
-                request.UsuarioRegistroId,
+                ProcesoId =
+                    request.ProcesoId,
 
-            Estado = true,
-            FechaRegistro = DateTime.UtcNow,
+                ActividadId =
+                    request.ActividadId,
 
-            UsuarioRegistroId =
-                request.UsuarioRegistroId
-        };
+                ResponsableId =
+                    request.UsuarioRegistroId,
 
-        await _dbContext.MatricesIPERC.AddAsync(
-            matriz,
-            cancellationToken);
+                Estado =
+                    true,
+
+                FechaRegistro =
+                    DateTime.UtcNow,
+
+                UsuarioRegistroId =
+                    request.UsuarioRegistroId
+            };
+
+        await _dbContext.MatricesIPERC
+            .AddAsync(
+                matriz,
+                cancellationToken);
 
         await _dbContext.SaveChangesAsync(
             cancellationToken);
@@ -372,12 +656,15 @@ public sealed class MatricesIPERCController : ControllerBase
 
         return CreatedAtAction(
             nameof(ObtenerPorId),
-            new { id = matriz.Id },
+            new
+            {
+                id = matriz.Id
+            },
             response);
     }
 
     // ============================================================
-    // PUT: api/MatricesIPERC/1
+    // PUT: api/MatricesIPERC/{id}
     // ============================================================
 
     [HttpPut("{id:long}")]
@@ -395,10 +682,20 @@ public sealed class MatricesIPERCController : ControllerBase
         [FromBody] ActualizarMatrizIPERCRequest request,
         CancellationToken cancellationToken)
     {
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El identificador de la matriz no es válido."
+            });
+        }
+
         MatrizIPERC? matriz =
             await _dbContext.MatricesIPERC
                 .FirstOrDefaultAsync(
-                    x => x.Id == id,
+                    x =>
+                        x.Id == id,
                     cancellationToken);
 
         if (matriz is null)
@@ -410,7 +707,12 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
-        string nombre = request.Nombre.Trim();
+        string nombre =
+            request.Nombre.Trim();
+
+        // --------------------------------------------------------
+        // VALIDAR NOMBRE
+        // --------------------------------------------------------
 
         if (nombre.Length < 5)
         {
@@ -420,6 +722,10 @@ public sealed class MatricesIPERCController : ControllerBase
                     "El nombre debe tener al menos 5 caracteres."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR CAMPOS OBLIGATORIOS
+        // --------------------------------------------------------
 
         if (request.InstitucionId <= 0 ||
             request.SedeId <= 0 ||
@@ -436,6 +742,10 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR INSTITUCIÓN
+        // --------------------------------------------------------
+
         bool institucionValida =
             await _dbContext.Instituciones
                 .AsNoTracking()
@@ -450,16 +760,21 @@ public sealed class MatricesIPERCController : ControllerBase
             return BadRequest(new
             {
                 mensaje =
-                    "La institución no existe."
+                    "La institución seleccionada no existe."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR SEDE
+        // --------------------------------------------------------
 
         bool sedeValida =
             await _dbContext.Sedes
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
-                        x.Id == request.SedeId &&
+                        x.Id ==
+                        request.SedeId &&
                         x.InstitucionId ==
                         request.InstitucionId,
                     cancellationToken);
@@ -473,12 +788,17 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR ÁREA
+        // --------------------------------------------------------
+
         bool areaValida =
             await _dbContext.Areas
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
-                        x.Id == request.AreaId,
+                        x.Id ==
+                        request.AreaId,
                     cancellationToken);
 
         if (!areaValida)
@@ -489,6 +809,10 @@ public sealed class MatricesIPERCController : ControllerBase
                     "El área seleccionada no existe."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR PUESTO
+        // --------------------------------------------------------
 
         bool puestoValido =
             await _dbContext.PuestosTrabajo
@@ -510,6 +834,10 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR PROCESO
+        // --------------------------------------------------------
+
         bool procesoValido =
             await _dbContext.Procesos
                 .AsNoTracking()
@@ -528,13 +856,19 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR ACTIVIDAD
+        // --------------------------------------------------------
+
         bool actividadValida =
             await _dbContext.Actividades
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
                         x.Id ==
-                        request.ActividadId,
+                        request.ActividadId &&
+                        x.ProcesoId ==
+                        request.ProcesoId,
                     cancellationToken);
 
         if (!actividadValida)
@@ -542,9 +876,13 @@ public sealed class MatricesIPERCController : ControllerBase
             return BadRequest(new
             {
                 mensaje =
-                    "La actividad seleccionada no existe."
+                    "La actividad no existe o no pertenece al proceso seleccionado."
             });
         }
+
+        // --------------------------------------------------------
+        // VALIDAR USUARIO
+        // --------------------------------------------------------
 
         bool usuarioValido =
             await _dbContext.Usuarios
@@ -553,6 +891,7 @@ public sealed class MatricesIPERCController : ControllerBase
                     x =>
                         x.Id ==
                         request.UsuarioActualizacionId &&
+                        x.Estado &&
                         x.Activo,
                     cancellationToken);
 
@@ -565,13 +904,19 @@ public sealed class MatricesIPERCController : ControllerBase
             });
         }
 
+        // --------------------------------------------------------
+        // VALIDAR NOMBRE DUPLICADO
+        // --------------------------------------------------------
+
         bool nombreDuplicado =
             await _dbContext.MatricesIPERC
                 .AsNoTracking()
                 .AnyAsync(
                     x =>
                         x.Id != id &&
-                        x.Nombre == nombre,
+                        x.Nombre ==
+                        nombre &&
+                        x.Estado,
                     cancellationToken);
 
         if (nombreDuplicado)
@@ -579,17 +924,24 @@ public sealed class MatricesIPERCController : ControllerBase
             return Conflict(new
             {
                 mensaje =
-                    "Ya existe una matriz con el mismo nombre."
+                    "Ya existe una matriz activa con el mismo nombre."
             });
         }
 
-        matriz.Nombre = nombre;
+        // --------------------------------------------------------
+        // ACTUALIZAR
+        // --------------------------------------------------------
+
+        matriz.Nombre =
+            nombre;
 
         matriz.Objetivo =
             string.IsNullOrWhiteSpace(
                 request.Objetivo)
                 ? null
-                : request.Objetivo.Trim();
+                : request
+                    .Objetivo
+                    .Trim();
 
         matriz.InstitucionId =
             request.InstitucionId;
@@ -642,7 +994,211 @@ public sealed class MatricesIPERCController : ControllerBase
     }
 
     // ============================================================
-    // CONSULTA COMÚN PARA RESPUESTAS
+    // PATCH: api/MatricesIPERC/{id}/estado
+    // ============================================================
+
+    /// <summary>
+    /// Activa o desactiva una matriz IPERC.
+    /// </summary>
+    [HttpPatch("{id:long}/estado")]
+    [ProducesResponseType(
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CambiarEstado(
+        long id,
+        [FromBody] CambiarEstadoMatrizIPERCRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El identificador de la matriz no es válido."
+            });
+        }
+
+        if (request.UsuarioActualizacionId <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El usuario que realiza la operación es obligatorio."
+            });
+        }
+
+        MatrizIPERC? matriz =
+            await _dbContext.MatricesIPERC
+                .FirstOrDefaultAsync(
+                    x =>
+                        x.Id == id,
+                    cancellationToken);
+
+        if (matriz is null)
+        {
+            return NotFound(new
+            {
+                mensaje =
+                    "No se encontró la matriz IPERC."
+            });
+        }
+
+        bool usuarioValido =
+            await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    x =>
+                        x.Id ==
+                        request.UsuarioActualizacionId &&
+                        x.Estado &&
+                        x.Activo,
+                    cancellationToken);
+
+        if (!usuarioValido)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El usuario que realiza la operación no existe o está inactivo."
+            });
+        }
+
+        matriz.Estado =
+            request.Estado;
+
+        matriz.FechaActualizacion =
+            DateTime.UtcNow;
+
+        matriz.UsuarioActualizacionId =
+            request.UsuarioActualizacionId;
+
+        await _dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        return Ok(new
+        {
+            mensaje =
+                request.Estado
+                    ? "Matriz IPERC activada correctamente."
+                    : "Matriz IPERC desactivada correctamente.",
+
+            id =
+                matriz.Id,
+
+            estado =
+                matriz.Estado
+        });
+    }
+
+    // ============================================================
+    // DELETE: api/MatricesIPERC/{id}
+    // ============================================================
+
+    /// <summary>
+    /// Realiza eliminación lógica.
+    ///
+    /// No borra físicamente la matriz.
+    /// Establece Estado = false.
+    /// </summary>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Eliminar(
+        long id,
+        [FromQuery] long usuarioId,
+        CancellationToken cancellationToken)
+    {
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El identificador de la matriz no es válido."
+            });
+        }
+
+        if (usuarioId <= 0)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El usuario que elimina la matriz es obligatorio."
+            });
+        }
+
+        MatrizIPERC? matriz =
+            await _dbContext.MatricesIPERC
+                .FirstOrDefaultAsync(
+                    x =>
+                        x.Id == id,
+                    cancellationToken);
+
+        if (matriz is null)
+        {
+            return NotFound(new
+            {
+                mensaje =
+                    "No se encontró la matriz IPERC."
+            });
+        }
+
+        if (!matriz.Estado)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "La matriz IPERC ya se encuentra inactiva."
+            });
+        }
+
+        bool usuarioValido =
+            await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    x =>
+                        x.Id ==
+                        usuarioId &&
+                        x.Estado &&
+                        x.Activo,
+                    cancellationToken);
+
+        if (!usuarioValido)
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "El usuario que realiza la eliminación no existe o está inactivo."
+            });
+        }
+
+        matriz.Estado =
+            false;
+
+        matriz.FechaActualizacion =
+            DateTime.UtcNow;
+
+        matriz.UsuarioActualizacionId =
+            usuarioId;
+
+        await _dbContext.SaveChangesAsync(
+            cancellationToken);
+
+        return Ok(new
+        {
+            mensaje =
+                "Matriz IPERC eliminada lógicamente correctamente."
+        });
+    }
+
+    // ============================================================
+    // CONSULTA COMÚN
     // ============================================================
 
     private async Task<MatrizIPERCResponse?>
@@ -652,58 +1208,141 @@ public sealed class MatricesIPERCController : ControllerBase
     {
         return await _dbContext.MatricesIPERC
             .AsNoTracking()
-            .Where(x => x.Id == id)
-            .Select(x => new MatrizIPERCResponse
-            {
-                Id = x.Id,
-                Codigo = x.Codigo,
-                Nombre = x.Nombre,
-                Objetivo = x.Objetivo,
+            .Where(
+                x =>
+                    x.Id == id)
+            .Select(
+                x =>
+                    new MatrizIPERCResponse
+                    {
+                        Id =
+                            x.Id,
 
-                InstitucionId =
-                    x.InstitucionId,
+                        Codigo =
+                            x.Codigo,
 
-                InstitucionNombre =
-                    _dbContext.Instituciones
-                        .Where(i =>
-                            i.Id ==
-                            x.InstitucionId)
-                        .Select(i => i.Nombre)
-                        .FirstOrDefault(),
+                        Nombre =
+                            x.Nombre,
 
-                SedeId = x.SedeId,
+                        Objetivo =
+                            x.Objetivo,
 
-                AreaId = x.AreaId,
+                        InstitucionId =
+                            x.InstitucionId,
 
-                AreaNombre =
-                    _dbContext.Areas
-                        .Where(a =>
-                            a.Id == x.AreaId)
-                        .Select(a => a.Nombre)
-                        .FirstOrDefault(),
+                        InstitucionNombre =
+                            _dbContext
+                                .Instituciones
+                                .Where(
+                                    i =>
+                                        i.Id ==
+                                        x.InstitucionId)
+                                .Select(
+                                    i =>
+                                        i.Nombre)
+                                .FirstOrDefault(),
 
-                PuestoTrabajoId =
-                    x.PuestoTrabajoId,
+                        SedeId =
+                            x.SedeId,
 
-                ProcesoId = x.ProcesoId,
+                        SedeNombre =
+                            _dbContext
+                                .Sedes
+                                .Where(
+                                    s =>
+                                        s.Id ==
+                                        x.SedeId)
+                                .Select(
+                                    s =>
+                                        s.Nombre)
+                                .FirstOrDefault(),
 
-                ActividadId = x.ActividadId,
+                        AreaId =
+                            x.AreaId,
 
-                ActividadNombre =
-                    _dbContext.Actividades
-                        .Where(a =>
-                            a.Id == x.ActividadId)
-                        .Select(a => a.Nombre)
-                        .FirstOrDefault(),
+                        AreaNombre =
+                            _dbContext
+                                .Areas
+                                .Where(
+                                    a =>
+                                        a.Id ==
+                                        x.AreaId)
+                                .Select(
+                                    a =>
+                                        a.Nombre)
+                                .FirstOrDefault(),
 
-                ResponsableId =
-                    x.ResponsableId,
+                        PuestoTrabajoId =
+                            x.PuestoTrabajoId,
 
-                Estado = x.Estado,
-                FechaRegistro = x.FechaRegistro,
-                FechaActualizacion =
-                    x.FechaActualizacion
-            })
+                        PuestoTrabajoNombre =
+                            _dbContext
+                                .PuestosTrabajo
+                                .Where(
+                                    p =>
+                                        p.Id ==
+                                        x.PuestoTrabajoId)
+                                .Select(
+                                    p =>
+                                        p.Nombre)
+                                .FirstOrDefault(),
+
+                        ProcesoId =
+                            x.ProcesoId,
+
+                        ProcesoNombre =
+                            _dbContext
+                                .Procesos
+                                .Where(
+                                    p =>
+                                        p.Id ==
+                                        x.ProcesoId)
+                                .Select(
+                                    p =>
+                                        p.Nombre)
+                                .FirstOrDefault(),
+
+                        ActividadId =
+                            x.ActividadId,
+
+                        ActividadNombre =
+                            _dbContext
+                                .Actividades
+                                .Where(
+                                    a =>
+                                        a.Id ==
+                                        x.ActividadId)
+                                .Select(
+                                    a =>
+                                        a.Nombre)
+                                .FirstOrDefault(),
+
+                        ResponsableId =
+                            x.ResponsableId,
+
+                        ResponsableNombre =
+                            _dbContext
+                                .Usuarios
+                                .Where(
+                                    u =>
+                                        u.Id ==
+                                        x.ResponsableId)
+                                .Select(
+                                    u =>
+                                        u.Nombres +
+                                        " " +
+                                        u.Apellidos)
+                                .FirstOrDefault(),
+
+                        Estado =
+                            x.Estado,
+
+                        FechaRegistro =
+                            x.FechaRegistro,
+
+                        FechaActualizacion =
+                            x.FechaActualizacion
+                    })
             .FirstOrDefaultAsync(
                 cancellationToken);
     }
@@ -715,21 +1354,30 @@ public sealed class MatricesIPERCController : ControllerBase
     private async Task<string> GenerarCodigoAsync(
         CancellationToken cancellationToken)
     {
-        int anio = DateTime.UtcNow.Year;
-        string prefijo = $"IPERC-{anio}-";
+        int anio =
+            DateTime.UtcNow.Year;
+
+        string prefijo =
+            $"IPERC-{anio}-";
 
         string? ultimoCodigo =
             await _dbContext.MatricesIPERC
                 .AsNoTracking()
-                .Where(x =>
-                    x.Codigo.StartsWith(prefijo))
-                .OrderByDescending(x =>
-                    x.Codigo)
-                .Select(x => x.Codigo)
+                .Where(
+                    x =>
+                        x.Codigo.StartsWith(
+                            prefijo))
+                .OrderByDescending(
+                    x =>
+                        x.Codigo)
+                .Select(
+                    x =>
+                        x.Codigo)
                 .FirstOrDefaultAsync(
                     cancellationToken);
 
-        int siguiente = 1;
+        int siguiente =
+            1;
 
         if (!string.IsNullOrWhiteSpace(
                 ultimoCodigo))
@@ -743,16 +1391,18 @@ public sealed class MatricesIPERCController : ControllerBase
                     numero,
                     out int actual))
             {
-                siguiente = actual + 1;
+                siguiente =
+                    actual + 1;
             }
         }
 
-        return $"{prefijo}{siguiente:D4}";
+        return
+            $"{prefijo}{siguiente:D4}";
     }
 }
 
 // ================================================================
-// REQUEST PARA CREAR
+// REQUEST: CREAR
 // ================================================================
 
 public sealed class CrearMatrizIPERCRequest
@@ -778,7 +1428,7 @@ public sealed class CrearMatrizIPERCRequest
 }
 
 // ================================================================
-// REQUEST PARA ACTUALIZAR
+// REQUEST: ACTUALIZAR
 // ================================================================
 
 public sealed class ActualizarMatrizIPERCRequest
@@ -800,13 +1450,25 @@ public sealed class ActualizarMatrizIPERCRequest
 
     public long ActividadId { get; set; }
 
-    public bool Estado { get; set; } = true;
+    public bool Estado { get; set; } =
+        true;
 
     public long UsuarioActualizacionId { get; set; }
 }
 
 // ================================================================
-// RESPUESTA COMPLETA
+// REQUEST: CAMBIAR ESTADO
+// ================================================================
+
+public sealed class CambiarEstadoMatrizIPERCRequest
+{
+    public bool Estado { get; set; }
+
+    public long UsuarioActualizacionId { get; set; }
+}
+
+// ================================================================
+// RESPONSE
 // ================================================================
 
 public sealed class MatrizIPERCResponse
@@ -827,19 +1489,27 @@ public sealed class MatrizIPERCResponse
 
     public long SedeId { get; set; }
 
+    public string? SedeNombre { get; set; }
+
     public long AreaId { get; set; }
 
     public string? AreaNombre { get; set; }
 
     public long PuestoTrabajoId { get; set; }
 
+    public string? PuestoTrabajoNombre { get; set; }
+
     public long ProcesoId { get; set; }
+
+    public string? ProcesoNombre { get; set; }
 
     public long ActividadId { get; set; }
 
     public string? ActividadNombre { get; set; }
 
     public long ResponsableId { get; set; }
+
+    public string? ResponsableNombre { get; set; }
 
     public bool Estado { get; set; }
 

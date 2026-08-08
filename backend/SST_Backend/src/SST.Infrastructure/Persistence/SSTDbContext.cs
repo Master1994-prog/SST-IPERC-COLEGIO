@@ -56,10 +56,14 @@ public class SSTDbContext : DbContext
 
     #region Security
 
-    public DbSet<Usuario> Usuarios { get; set; }
+    public DbSet<Usuario> Usuarios =>
+    Set<Usuario>();
 
-    public DbSet<Rol> Roles { get; set; }
-    public DbSet<UsuarioRol> UsuariosRoles { get; set; }
+    public DbSet<Rol> Roles =>
+        Set<Rol>();
+
+    public DbSet<UsuarioRol> UsuariosRoles =>
+        Set<UsuarioRol>();
 
     #endregion
 

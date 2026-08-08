@@ -639,14 +639,19 @@ class _DetalleCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 6,
                       children: <Widget>[
-                        if (detalle.evaluacionInicial != null)
-                          _NivelRiesgoEtiqueta(
-                            evaluacion: detalle.evaluacionInicial!,
-                          ),
+                        // La evaluación inicial siempre existe
+                        // en el modelo DetalleIpercModel actual.
+                        _NivelRiesgoEtiqueta(
+                          evaluacion: detalle.evaluacionInicial,
+                        ),
+
+                        // Consecuencia asociada al peligro.
                         _Etiqueta(
                           icono: Icons.report_problem_outlined,
                           texto: detalle.consecuenciaVisible,
                         ),
+
+                        // Estado de la evaluación residual.
                         _Etiqueta(
                           icono: detalle.tieneEvaluacionResidual
                               ? Icons.verified_user_outlined
@@ -655,21 +660,21 @@ class _DetalleCard extends StatelessWidget {
                               ? 'Con riesgo residual'
                               : 'Residual pendiente',
                         ),
+
+                        // Controles asociados al detalle IPERC.
                         _Etiqueta(
                           icono: Icons.security_outlined,
                           texto: detalle.tieneControles
                               ? '${detalle.controlIds.length} control(es)'
                               : 'Sin controles',
                         ),
+
+                        // Equipos de protección personal asociados.
                         _Etiqueta(
                           icono: Icons.health_and_safety_outlined,
                           texto: detalle.tieneEquiposProteccion
                               ? '${detalle.equipoProteccionIds.length} EPP'
                               : 'Sin EPP',
-                        ),
-                        _Etiqueta(
-                          icono: Icons.person_outline,
-                          texto: responsableNombre,
                         ),
                       ],
                     ),

@@ -1,45 +1,62 @@
-/// Representa una institución educativa registrada
-/// en el sistema SST/IPERC.
-class InstitucionModel {
-  const InstitucionModel({
+/// Representa una actividad perteneciente a un proceso.
+class ActividadModel {
+  const ActividadModel({
     required this.id,
     required this.nombre,
+    required this.descripcion,
     required this.activo,
-    this.codigo = '',
-    this.descripcion = '',
+    required this.procesoId,
+    required this.procesoNombre,
+    required this.areaId,
+    required this.areaNombre,
+    this.fechaRegistro,
+    this.fechaActualizacion,
   });
 
   final int id;
-  final String codigo;
   final String nombre;
   final String descripcion;
   final bool activo;
+  final int procesoId;
+  final String procesoNombre;
+  final int areaId;
+  final String areaNombre;
+  final DateTime? fechaRegistro;
+  final DateTime? fechaActualizacion;
 
-  factory InstitucionModel.fromJson(Map<String, dynamic> json) {
-    return InstitucionModel(
+  factory ActividadModel.fromJson(Map<String, dynamic> json) {
+    return ActividadModel(
       id: _toInt(json['id'] ?? json['Id']),
-      codigo: _toString(json['codigo'] ?? json['Codigo']),
       nombre: _toString(json['nombre'] ?? json['Nombre']),
       descripcion: _toString(json['descripcion'] ?? json['Descripcion']),
       activo: _toBool(
         json['activo'] ?? json['Activo'],
         valorPredeterminado: true,
       ),
+      procesoId: _toInt(json['procesoId'] ?? json['ProcesoId']),
+      procesoNombre: _toString(json['procesoNombre'] ?? json['ProcesoNombre']),
+      areaId: _toInt(json['areaId'] ?? json['AreaId']),
+      areaNombre: _toString(json['areaNombre'] ?? json['AreaNombre']),
+      fechaRegistro: _toDateTime(
+        json['fechaRegistro'] ?? json['FechaRegistro'],
+      ),
+      fechaActualizacion: _toDateTime(
+        json['fechaActualizacion'] ?? json['FechaActualizacion'],
+      ),
     );
   }
 
-  static List<InstitucionModel> listaDesdeJson(dynamic data) {
+  static List<ActividadModel> listaDesdeJson(dynamic data) {
     final List<dynamic> elementos = _extraerLista(data);
 
     return elementos
         .whereType<Map>()
         .map((Map elemento) {
-          return InstitucionModel.fromJson(Map<String, dynamic>.from(elemento));
+          return ActividadModel.fromJson(Map<String, dynamic>.from(elemento));
         })
-        .where(
-          (InstitucionModel institucion) =>
-              institucion.id > 0 && institucion.nombre.isNotEmpty,
-        )
+        .where((ActividadModel actividad) {
+          return actividad.id > 0 && actividad.nombre.isNotEmpty;
+        })
         .toList();
   }
 
@@ -51,7 +68,7 @@ class InstitucionModel {
     final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
 
     final dynamic contenido =
-        mapa['data'] ?? mapa['result'] ?? mapa['value'] ?? mapa['institucion'];
+        mapa['data'] ?? mapa['result'] ?? mapa['value'] ?? mapa['actividad'];
 
     if (contenido is Map) {
       return Map<String, dynamic>.from(contenido);
@@ -74,7 +91,7 @@ class InstitucionModel {
         mapa['result'],
         mapa['results'],
         mapa['value'],
-        mapa['instituciones'],
+        mapa['actividades'],
       ];
 
       for (final dynamic opcion in opciones) {
@@ -123,5 +140,13 @@ class InstitucionModel {
     }
 
     return valorPredeterminado;
+  }
+
+  static DateTime? _toDateTime(dynamic valor) {
+    if (valor == null) {
+      return null;
+    }
+
+    return DateTime.tryParse(valor.toString());
   }
 }

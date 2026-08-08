@@ -12,7 +12,6 @@ import '../../../data/models/peligro_model.dart';
 import '../../../data/repositories/consecuencia_repository.dart';
 import '../../../data/repositories/control_repository.dart';
 import '../../../data/repositories/equipo_proteccion_repository.dart';
-import '../../../data/repositories/evaluacion_riesgo_repository.dart';
 import '../../../data/repositories/peligro_repository.dart';
 import '../../providers/detalle_iperc_provider.dart';
 
@@ -41,8 +40,6 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   final ControlRepository _controlRepository = ControlRepository();
   final EquipoProteccionRepository _equipoProteccionRepository =
       EquipoProteccionRepository();
-  final EvaluacionRiesgoRepository _evaluacionRiesgoRepository =
-      EvaluacionRiesgoRepository();
 
   List<PeligroModel> _peligros = <PeligroModel>[];
   List<ConsecuenciaModel> _consecuencias = <ConsecuenciaModel>[];
@@ -139,8 +136,6 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
       _mostrarErroresEvaluacion = true;
     });
 
-    // Probabilidad y severidad son datos obligatorios de la evaluación.
-    // No se solicita ningún ID: el ID se obtiene automáticamente del backend.
     if (!formularioValido ||
         _probabilidadSeleccionada == null ||
         _severidadSeleccionada == null) {
@@ -148,41 +143,43 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     }
 
     final DetalleIpercProvider provider = context.read<DetalleIpercProvider>();
+
     setState(() {
       _guardando = true;
     });
 
     try {
-      // 1. Calculamos el nivel con la matriz 5x5.
-      final int valorRiesgo =
-          _probabilidadSeleccionada!.valor * _severidadSeleccionada!.valor;
-      final NivelRiesgoIpercOption nivel = obtenerNivelRiesgoIperc(valorRiesgo);
-
-      // 2. Registramos la evaluación y el backend devuelve su ID.
-      final EvaluacionRiesgoModel evaluacionInicial =
-          await _evaluacionRiesgoRepository.crear(
-            CrearEvaluacionRiesgoRequest(
-              probabilidadId: _probabilidadSeleccionada!.id,
-              severidadId: _severidadSeleccionada!.id,
-              nivelRiesgoId: nivel.id,
-              observaciones:
-                  'Evaluacion inicial generada desde el detalle IPERC.',
-            ),
-          );
-
-      // 3. Usamos ese ID internamente para registrar el detalle IPERC.
+      /// El backend crea automáticamente
+      /// EvaluacionRiesgo.
+      ///
+      /// Flutter solamente envía probabilidad
+      /// y severidad.
       final CrearDetalleIpercRequest request = CrearDetalleIpercRequest(
         matrizIpercId: widget.matriz.id,
+
         item: int.parse(_itemController.text.trim()),
+
         tarea: _tareaController.text,
+
         peligroId: _peligroSeleccionado!.id,
+
         consecuenciaId: _consecuenciaSeleccionada!.id,
+
         descripcionPeligro: _descripcionController.text,
-        evaluacionInicialId: evaluacionInicial.id,
+
+        probabilidadInicialId: _probabilidadSeleccionada!.id,
+
+        severidadInicialId: _severidadSeleccionada!.id,
+
+        observacionesEvaluacionInicial:
+            'Evaluación inicial registrada desde Detalle IPERC.',
+
         controlIds: _controlIdsSeleccionados.toList(growable: false),
+
         equipoProteccionIds: _equipoProteccionIdsSeleccionados.toList(
           growable: false,
         ),
+
         estadoImplementacion: _estadoImplementacion,
       );
 

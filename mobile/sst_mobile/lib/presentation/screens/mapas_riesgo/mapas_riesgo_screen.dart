@@ -5,29 +5,66 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/detalle_iperc_repository.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 
-/// Mapa dinámico de riesgos agrupado por las áreas de las matrices IPERC.
+/// ===============================================================
+/// PANTALLA - MAPA DE RIESGOS
+/// ===============================================================
+///
+/// Muestra dinámicamente los riesgos registrados en las
+/// matrices IPERC.
+///
+/// Los riesgos se agrupan según las áreas de las matrices.
+///
+/// La evaluación mostrada utiliza:
+///
+/// 1. Evaluación residual, cuando existe.
+/// 2. Evaluación inicial, cuando todavía no existe residual.
+/// ===============================================================
 class MapasRiesgoScreen extends StatefulWidget {
   const MapasRiesgoScreen({super.key});
 
   @override
-  State<MapasRiesgoScreen> createState() => _MapasRiesgoScreenState();
+  State<MapasRiesgoScreen> createState() {
+    return _MapasRiesgoScreenState();
+  }
 }
 
 class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
+  // =============================================================
+  // REPOSITORIOS
+  // =============================================================
+
   final MatrizIpercRepository _matrizRepository = MatrizIpercRepository();
+
   final DetalleIpercRepository _detalleRepository = DetalleIpercRepository();
 
+  // =============================================================
+  // ESTADO
+  // =============================================================
+
   bool _cargando = true;
+
   String? _error;
+
   int? _matrizSeleccionadaId;
+
   List<MatrizIpercModel> _matrices = <MatrizIpercModel>[];
+
   List<DetalleIpercModel> _detalles = <DetalleIpercModel>[];
+
+  // =============================================================
+  // CICLO DE VIDA
+  // =============================================================
 
   @override
   void initState() {
     super.initState();
+
     _cargar();
   }
+
+  // =============================================================
+  // CARGAR DATOS
+  // =============================================================
 
   Future<void> _cargar() async {
     setState(() {
@@ -36,48 +73,93 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
     });
 
     try {
+      /// Primero obtenemos las matrices IPERC.
       final List<MatrizIpercModel> matrices = await _matrizRepository
           .obtenerMatrices();
-      final List<List<DetalleIpercModel>> resultados = await Future.wait(
-        matrices
-            .where((MatrizIpercModel matriz) => matriz.id > 0)
-            .map(
-              (MatrizIpercModel matriz) =>
-                  _detalleRepository.obtenerPorMatriz(matriz.id),
-            ),
-      );
 
-      if (!mounted) return;
+      /// Después cargamos simultáneamente los detalles
+      /// correspondientes a cada matriz.
+      final List<List<DetalleIpercModel>> resultados =
+          await Future.wait<List<DetalleIpercModel>>(
+            matrices
+                .where((MatrizIpercModel matriz) {
+                  return matriz.id > 0;
+                })
+                .map((MatrizIpercModel matriz) {
+                  return _detalleRepository.obtenerPorMatriz(matriz.id);
+                }),
+          );
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _matrices = matrices;
-        _detalles = resultados.expand((lista) => lista).toList();
+
+        _detalles = resultados
+            .expand((List<DetalleIpercModel> lista) => lista)
+            .toList();
+
+        /// Si la matriz seleccionada dejó de existir,
+        /// regresamos al filtro general.
         if (_matrizSeleccionadaId != null &&
-            !matrices.any((matriz) => matriz.id == _matrizSeleccionadaId)) {
+            !matrices.any((MatrizIpercModel matriz) {
+              return matriz.id == _matrizSeleccionadaId;
+            })) {
           _matrizSeleccionadaId = null;
         }
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _error = error.toString().replaceFirst('Exception:', '').trim();
       });
     } finally {
-      if (mounted) setState(() => _cargando = false);
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+        });
+      }
     }
   }
+
+  // =============================================================
+  // ZONAS DE RIESGO
+  // =============================================================
 
   List<_ZonaRiesgo> get _zonas {
     final Iterable<MatrizIpercModel> matrices = _matrizSeleccionadaId == null
         ? _matrices
-        : _matrices.where((matriz) => matriz.id == _matrizSeleccionadaId);
+        : _matrices.where((MatrizIpercModel matriz) {
+            return matriz.id == _matrizSeleccionadaId;
+          });
 
-    return matrices.map((MatrizIpercModel matriz) {
-      final List<DetalleIpercModel> detalles = _detalles
-          .where((detalle) => detalle.matrizIpercId == matriz.id)
-          .toList();
+    final List<_ZonaRiesgo> zonas = matrices.map((MatrizIpercModel matriz) {
+      final List<DetalleIpercModel> detalles = _detalles.where((
+        DetalleIpercModel detalle,
+      ) {
+        return detalle.matrizIpercId == matriz.id;
+      }).toList();
+
       return _ZonaRiesgo(matriz: matriz, detalles: detalles);
-    }).toList()..sort((a, b) => b.valorMayor.compareTo(a.valorMayor));
+    }).toList();
+
+    /// Mostramos primero las zonas que tengan
+    /// los riesgos de mayor valor.
+    zonas.sort((_ZonaRiesgo primero, _ZonaRiesgo segundo) {
+      return segundo.valorMayor.compareTo(primero.valorMayor);
+    });
+
+    return zonas;
   }
+
+  // =============================================================
+  // INTERFAZ
+  // =============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -97,9 +179,17 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
   }
 
   Widget _contenido() {
+    // -----------------------------------------------------------
+    // CARGANDO
+    // -----------------------------------------------------------
+
     if (_cargando) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    // -----------------------------------------------------------
+    // ERROR
+    // -----------------------------------------------------------
 
     if (_error != null) {
       return ListView(
@@ -127,10 +217,18 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       );
     }
 
+    // -----------------------------------------------------------
+    // CONTENIDO
+    // -----------------------------------------------------------
+
     final List<_ZonaRiesgo> zonas = _zonas;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: <Widget>[
+        // -------------------------------------------------------
+        // FILTRO DE MATRIZ
+        // -------------------------------------------------------
         DropdownButtonFormField<int?>(
           key: ValueKey<int?>(_matrizSeleccionadaId),
           initialValue: _matrizSeleccionadaId,
@@ -145,79 +243,134 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
               value: null,
               child: Text('Todas las matrices'),
             ),
-            ..._matrices.map(
-              (matriz) => DropdownMenuItem<int?>(
+
+            ..._matrices.map((MatrizIpercModel matriz) {
+              return DropdownMenuItem<int?>(
                 value: matriz.id,
                 child: Text(
-                  '${matriz.codigo} - ${matriz.nombre}',
+                  '${matriz.codigo} - '
+                  '${matriz.nombre}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ),
+              );
+            }),
           ],
           onChanged: (int? valor) {
-            setState(() => _matrizSeleccionadaId = valor);
+            setState(() {
+              _matrizSeleccionadaId = valor;
+            });
           },
         ),
+
         const SizedBox(height: 16),
+
+        // -------------------------------------------------------
+        // LEYENDA
+        // -------------------------------------------------------
         const _LeyendaRiesgo(),
+
         const SizedBox(height: 16),
+
         Text(
-          '${zonas.length} zona${zonas.length == 1 ? '' : 's'} identificada${zonas.length == 1 ? '' : 's'}',
+          '${zonas.length} '
+          'zona${zonas.length == 1 ? '' : 's'} '
+          'identificada${zonas.length == 1 ? '' : 's'}',
           style: Theme.of(
             context,
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
+
         const SizedBox(height: 8),
+
+        // -------------------------------------------------------
+        // ZONAS
+        // -------------------------------------------------------
         if (zonas.isEmpty)
           const Card(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'No existen matrices para construir el mapa de riesgos.',
+                'No existen matrices para '
+                'construir el mapa de riesgos.',
                 textAlign: TextAlign.center,
               ),
             ),
           )
         else
-          ...zonas.map((zona) => _ZonaRiesgoCard(zona: zona)),
+          ...zonas.map((_ZonaRiesgo zona) {
+            return _ZonaRiesgoCard(zona: zona);
+          }),
       ],
     );
   }
 }
 
+// ===============================================================
+// MODELO INTERNO DE ZONA
+// ===============================================================
+
 class _ZonaRiesgo {
   const _ZonaRiesgo({required this.matriz, required this.detalles});
 
   final MatrizIpercModel matriz;
+
   final List<DetalleIpercModel> detalles;
 
-  Iterable<EvaluacionDetalleIpercModel> get evaluaciones => detalles
-      .map((detalle) => detalle.evaluacionResidual ?? detalle.evaluacionInicial)
-      .whereType<EvaluacionDetalleIpercModel>();
-
-  int get valorMayor => evaluaciones.fold<int>(
-    0,
-    (mayor, evaluacion) =>
-        evaluacion.valorRiesgo > mayor ? evaluacion.valorRiesgo : mayor,
-  );
-
-  String get nivelMayor {
-    if (evaluaciones.isEmpty) return 'Sin evaluar';
-    return evaluaciones
-        .reduce((a, b) => a.valorRiesgo >= b.valorRiesgo ? a : b)
-        .nivelRiesgoNombre;
+  /// Devuelve la evaluación que representa el riesgo actual.
+  ///
+  /// Si existe evaluación residual se utiliza esa.
+  /// En caso contrario se utiliza la inicial.
+  Iterable<EvaluacionDetalleIpercModel> get evaluaciones {
+    return detalles.map((DetalleIpercModel detalle) {
+      return detalle.evaluacionResidual ?? detalle.evaluacionInicial;
+    });
   }
 
-  Color get color => _colorRiesgo(
-    evaluaciones.isEmpty
-        ? '#9E9E9E'
-        : evaluaciones
-              .reduce((a, b) => a.valorRiesgo >= b.valorRiesgo ? a : b)
-              .color,
-  );
+  /// Mayor valor de riesgo registrado en la zona.
+  int get valorMayor {
+    return evaluaciones.fold<int>(0, (
+      int mayor,
+      EvaluacionDetalleIpercModel evaluacion,
+    ) {
+      return evaluacion.valorRiesgo > mayor ? evaluacion.valorRiesgo : mayor;
+    });
+  }
+
+  /// Nombre del nivel de riesgo más alto.
+  String get nivelMayor {
+    if (evaluaciones.isEmpty) {
+      return 'Sin evaluar';
+    }
+
+    return evaluaciones.reduce((
+      EvaluacionDetalleIpercModel a,
+      EvaluacionDetalleIpercModel b,
+    ) {
+      return a.valorRiesgo >= b.valorRiesgo ? a : b;
+    }).nivelRiesgoNombre;
+  }
+
+  /// Color correspondiente al mayor riesgo.
+  Color get color {
+    if (evaluaciones.isEmpty) {
+      return _colorRiesgo('#9E9E9E');
+    }
+
+    final EvaluacionDetalleIpercModel mayor = evaluaciones.reduce((
+      EvaluacionDetalleIpercModel a,
+      EvaluacionDetalleIpercModel b,
+    ) {
+      return a.valorRiesgo >= b.valorRiesgo ? a : b;
+    });
+
+    return _colorRiesgo(mayor.color);
+  }
 }
+
+// ===============================================================
+// TARJETA DE ZONA
+// ===============================================================
 
 class _ZonaRiesgoCard extends StatelessWidget {
   const _ZonaRiesgoCard({required this.zona});
@@ -235,46 +388,63 @@ class _ZonaRiesgoCard extends StatelessWidget {
           foregroundColor: Colors.white,
           child: const Icon(Icons.location_on),
         ),
+
         title: Text(
           zona.matriz.areaVisible,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
+
         subtitle: Text(
-          '${zona.matriz.codigo} · ${zona.detalles.length} riesgo(s) · ${zona.nivelMayor}',
+          '${zona.matriz.codigo} · '
+          '${zona.detalles.length} riesgo(s) · '
+          '${zona.nivelMayor}',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
+
         children: zona.detalles.isEmpty
             ? const <Widget>[
                 ListTile(
-                  title: Text('Esta zona todavía no tiene evaluaciones.'),
+                  title: Text(
+                    'Esta zona todavía '
+                    'no tiene evaluaciones.',
+                  ),
                 ),
               ]
-            : zona.detalles.map((detalle) {
-                final EvaluacionDetalleIpercModel? evaluacion =
+            : zona.detalles.map((DetalleIpercModel detalle) {
+                /// CORRECCIÓN:
+                ///
+                /// Este valor nunca puede ser null,
+                /// porque evaluacionInicial siempre existe.
+                final EvaluacionDetalleIpercModel evaluacion =
                     detalle.evaluacionResidual ?? detalle.evaluacionInicial;
+
                 return ListTile(
                   leading: Container(
                     width: 12,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: _colorRiesgo(evaluacion?.color ?? '#9E9E9E'),
+                      color: _colorRiesgo(evaluacion.color),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
+
                   title: Text(detalle.peligroVisible),
+
                   subtitle: Text(
-                    '${detalle.tarea}\n${detalle.consecuenciaVisible}',
+                    '${detalle.tarea}\n'
+                    '${detalle.consecuenciaVisible}',
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
+
                   trailing: Text(
-                    evaluacion == null
-                        ? 'S/E'
-                        : '${evaluacion.valorRiesgo}\n${evaluacion.nivelRiesgoNombre}',
+                    '${evaluacion.valorRiesgo}\n'
+                    '${evaluacion.nivelRiesgoNombre}',
                     textAlign: TextAlign.end,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
+
                   isThreeLine: true,
                 );
               }).toList(),
@@ -283,15 +453,19 @@ class _ZonaRiesgoCard extends StatelessWidget {
   }
 }
 
+// ===============================================================
+// LEYENDA
+// ===============================================================
+
 class _LeyendaRiesgo extends StatelessWidget {
   const _LeyendaRiesgo();
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
+    return const Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: const <Widget>[
+      children: <Widget>[
         _LeyendaItem(texto: 'Bajo', color: Colors.green),
         _LeyendaItem(texto: 'Medio', color: Colors.amber),
         _LeyendaItem(texto: 'Alto', color: Colors.orange),
@@ -306,6 +480,7 @@ class _LeyendaItem extends StatelessWidget {
   const _LeyendaItem({required this.texto, required this.color});
 
   final String texto;
+
   final Color color;
 
   @override
@@ -318,8 +493,14 @@ class _LeyendaItem extends StatelessWidget {
   }
 }
 
+// ===============================================================
+// CONVERTIR COLOR HEXADECIMAL
+// ===============================================================
+
 Color _colorRiesgo(String hexadecimal) {
   final String limpio = hexadecimal.replaceAll('#', '').trim();
+
   final String completo = limpio.length == 6 ? 'FF$limpio' : limpio;
+
   return Color(int.tryParse(completo, radix: 16) ?? 0xFF9E9E9E);
 }

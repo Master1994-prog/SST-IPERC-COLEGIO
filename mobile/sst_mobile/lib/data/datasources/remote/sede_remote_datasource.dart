@@ -2,28 +2,37 @@ import 'package:dio/dio.dart';
 
 import '../../../core/config/api_config.dart';
 import '../../../core/network/api_client.dart';
-import '../../models/institucion_model.dart';
+import '../../models/sede_model.dart';
 
-/// Accede al endpoint remoto de instituciones.
-class InstitucionRemoteDatasource {
-  InstitucionRemoteDatasource({ApiClient? apiClient})
+/// Accede al endpoint remoto de sedes.
+class SedeRemoteDatasource {
+  SedeRemoteDatasource({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient.instance;
 
   final ApiClient _apiClient;
 
-  /// Obtiene todas las instituciones activas.
-  Future<List<InstitucionModel>> obtenerTodas() async {
+  /// Obtiene todas las sedes activas.
+  ///
+  /// Puede filtrar por institución.
+  Future<List<SedeModel>> obtenerTodas({int? institucionId}) async {
     try {
+      final Map<String, dynamic> parametros = <String, dynamic>{};
+
+      if (institucionId != null && institucionId > 0) {
+        parametros['institucionId'] = institucionId;
+      }
+
       final Response<dynamic> response = await _apiClient.get(
-        ApiConfig.institucionesEndpoint,
+        ApiConfig.sedesEndpoint,
+        queryParameters: parametros.isEmpty ? null : parametros,
       );
 
-      return InstitucionModel.listaDesdeJson(response.data);
+      return SedeModel.listaDesdeJson(response.data);
     } on DioException catch (error) {
       throw Exception(
         _obtenerMensajeError(
           error,
-          mensajePredeterminado: 'No se pudieron cargar las instituciones.',
+          mensajePredeterminado: 'No se pudieron cargar las sedes.',
         ),
       );
     } catch (error) {
@@ -31,31 +40,31 @@ class InstitucionRemoteDatasource {
     }
   }
 
-  /// Obtiene una institución por su identificador.
-  Future<InstitucionModel> obtenerPorId(int id) async {
+  /// Obtiene una sede por su identificador.
+  Future<SedeModel> obtenerPorId(int id) async {
     if (id <= 0) {
-      throw Exception('El identificador de la institución no es válido.');
+      throw Exception('El identificador de la sede no es válido.');
     }
 
     try {
       final Response<dynamic> response = await _apiClient.get(
-        '${ApiConfig.institucionesEndpoint}/$id',
+        '${ApiConfig.sedesEndpoint}/$id',
       );
 
-      final Map<String, dynamic> json = InstitucionModel.objetoDesdeJson(
+      final Map<String, dynamic> json = SedeModel.objetoDesdeJson(
         response.data,
       );
 
       if (json.isEmpty) {
-        throw Exception('El servidor devolvió una institución inválida.');
+        throw Exception('El servidor devolvió una sede inválida.');
       }
 
-      return InstitucionModel.fromJson(json);
+      return SedeModel.fromJson(json);
     } on DioException catch (error) {
       throw Exception(
         _obtenerMensajeError(
           error,
-          mensajePredeterminado: 'No se pudo cargar la institución.',
+          mensajePredeterminado: 'No se pudo cargar la sede.',
         ),
       );
     } catch (error) {
@@ -131,10 +140,10 @@ class InstitucionRemoteDatasource {
         'La sesión venció. Inicia sesión nuevamente.',
 
       DioExceptionType.badResponse when error.response?.statusCode == 403 =>
-        'No tienes permiso para consultar las instituciones.',
+        'No tienes permiso para consultar las sedes.',
 
       DioExceptionType.badResponse when error.response?.statusCode == 404 =>
-        'No se encontró la institución solicitada.',
+        'No se encontró la sede solicitada.',
 
       DioExceptionType.badResponse
           when error.response?.statusCode != null &&

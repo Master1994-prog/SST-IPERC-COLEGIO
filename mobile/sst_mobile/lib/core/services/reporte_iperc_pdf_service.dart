@@ -8,23 +8,52 @@ import 'package:printing/printing.dart';
 import '../../data/models/detalle_iperc_model.dart';
 import '../../data/models/matriz_iperc_model.dart';
 
-/// Genera y abre el diálogo del sistema para guardar o imprimir el reporte.
+/// ===============================================================
+/// SERVICIO PDF - REPORTE IPERC
+/// ===============================================================
+///
+/// Genera un reporte PDF con:
+///
+/// - Matrices IPERC.
+/// - Peligros.
+/// - Consecuencias.
+/// - Evaluación inicial.
+/// - Evaluación residual.
+/// - Controles.
+/// - EPP.
+/// - Estado de implementación.
+///
+/// También abre el diálogo del sistema para guardar
+/// o imprimir el documento.
+/// ===============================================================
 class ReporteIpercPdfService {
   const ReporteIpercPdfService();
 
+  // =============================================================
+  // EXPORTAR REPORTE
+  // =============================================================
+
+  /// Genera el documento PDF y abre el diálogo
+  /// de impresión o guardado.
   Future<void> exportar({
     required List<MatrizIpercModel> matrices,
     required List<DetalleIpercModel> detalles,
     required String filtroMatriz,
     required String filtroNivel,
   }) async {
-    final String fecha = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+    final DateTime ahora = DateTime.now();
+
+    final String fecha = DateFormat('dd/MM/yyyy HH:mm').format(ahora);
+
     final String nombre =
-        'reporte_iperc_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf';
+        'reporte_iperc_'
+        '${DateFormat('yyyyMMdd_HHmm').format(ahora)}'
+        '.pdf';
 
     await Printing.layoutPdf(
       name: nombre,
       format: PdfPageFormat.a4.landscape,
+
       onLayout: (PdfPageFormat formato) {
         return _crearDocumento(
           formato: formato,
@@ -37,6 +66,10 @@ class ReporteIpercPdfService {
       },
     );
   }
+
+  // =============================================================
+  // CREAR DOCUMENTO
+  // =============================================================
 
   Future<Uint8List> _crearDocumento({
     required PdfPageFormat formato,
@@ -52,6 +85,8 @@ class ReporteIpercPdfService {
       creator: 'Aplicación móvil SST/IPERC',
     );
 
+    /// Creamos un mapa para localizar rápidamente
+    /// las matrices mediante su ID.
     final Map<int, MatrizIpercModel> matricesPorId = <int, MatrizIpercModel>{
       for (final MatrizIpercModel matriz in matrices) matriz.id: matriz,
     };
@@ -59,71 +94,122 @@ class ReporteIpercPdfService {
     documento.addPage(
       pw.MultiPage(
         pageFormat: formato,
+
         margin: const pw.EdgeInsets.all(24),
-        header: (pw.Context context) => _encabezado(fecha),
-        footer: (pw.Context context) => pw.Align(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Text(
-            'Página ${context.pageNumber} de ${context.pagesCount}',
-            style: const pw.TextStyle(fontSize: 8),
-          ),
-        ),
-        build: (pw.Context context) => <pw.Widget>[
-          pw.Text(
-            'REPORTE DE IDENTIFICACIÓN DE PELIGROS Y EVALUACIÓN DE RIESGOS',
-            textAlign: pw.TextAlign.center,
-            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 10),
-          _filtros(filtroMatriz, filtroNivel),
-          pw.SizedBox(height: 10),
-          _resumen(detalles),
-          pw.SizedBox(height: 14),
-          pw.Text(
-            'Evaluaciones IPERC (${detalles.length})',
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 6),
-          _tabla(detalles, matricesPorId),
-        ],
+
+        header: (pw.Context context) {
+          return _encabezado(fecha);
+        },
+
+        footer: (pw.Context context) {
+          return pw.Align(
+            alignment: pw.Alignment.centerRight,
+
+            child: pw.Text(
+              'Página '
+              '${context.pageNumber} '
+              'de '
+              '${context.pagesCount}',
+
+              style: const pw.TextStyle(fontSize: 8),
+            ),
+          );
+        },
+
+        build: (pw.Context context) {
+          return <pw.Widget>[
+            pw.Text(
+              'REPORTE DE IDENTIFICACIÓN '
+              'DE PELIGROS Y EVALUACIÓN '
+              'DE RIESGOS',
+
+              textAlign: pw.TextAlign.center,
+
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+
+            pw.SizedBox(height: 10),
+
+            _filtros(filtroMatriz, filtroNivel),
+
+            pw.SizedBox(height: 10),
+
+            _resumen(detalles),
+
+            pw.SizedBox(height: 14),
+
+            pw.Text(
+              'Evaluaciones IPERC '
+              '(${detalles.length})',
+
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+
+            pw.SizedBox(height: 6),
+
+            _tabla(detalles, matricesPorId),
+          ];
+        },
       ),
     );
 
     return documento.save();
   }
 
+  // =============================================================
+  // ENCABEZADO
+  // =============================================================
+
   pw.Widget _encabezado(String fecha) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 10),
+
       padding: const pw.EdgeInsets.only(bottom: 6),
+
       decoration: const pw.BoxDecoration(
         border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey500)),
       ),
+
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+
         children: <pw.Widget>[
           pw.Text(
-            'SISTEMA DE SEGURIDAD Y SALUD EN EL TRABAJO',
+            'SISTEMA DE SEGURIDAD '
+            'Y SALUD EN EL TRABAJO',
+
             style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
           ),
+
           pw.Text('Generado: $fecha', style: const pw.TextStyle(fontSize: 8)),
         ],
       ),
     );
   }
 
+  // =============================================================
+  // FILTROS
+  // =============================================================
+
   pw.Widget _filtros(String matriz, String nivel) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(8),
+
       color: PdfColors.grey200,
+
       child: pw.Row(
         children: <pw.Widget>[
           pw.Expanded(child: pw.Text('Matriz: $matriz')),
+
           pw.Expanded(child: pw.Text('Nivel inicial: $nivel')),
         ],
       ),
     );
   }
+
+  // =============================================================
+  // RESUMEN DE RIESGOS
+  // =============================================================
 
   pw.Widget _resumen(List<DetalleIpercModel> detalles) {
     int bajo = 0;
@@ -132,16 +218,24 @@ class ReporteIpercPdfService {
     int critico = 0;
 
     for (final DetalleIpercModel detalle in detalles) {
-      switch (_clasificarNivel(detalle.evaluacionInicial?.nivelRiesgoNombre)) {
+      /// evaluacionInicial ya NO es nullable.
+      ///
+      /// Por eso eliminamos el operador ?.
+      final String nivelInicial = detalle.evaluacionInicial.nivelRiesgoNombre;
+
+      switch (_clasificarNivel(nivelInicial)) {
         case 'Bajo':
           bajo++;
           break;
+
         case 'Medio':
           medio++;
           break;
+
         case 'Alto':
           alto++;
           break;
+
         case 'Crítico':
           critico++;
           break;
@@ -151,35 +245,53 @@ class ReporteIpercPdfService {
     return pw.Row(
       children: <pw.Widget>[
         _indicador('Total', detalles.length, PdfColors.blue700),
+
         _indicador('Bajo', bajo, PdfColors.green700),
+
         _indicador('Medio', medio, PdfColors.amber700),
+
         _indicador('Alto', alto, PdfColors.orange800),
+
         _indicador('Crítico', critico, PdfColors.red700),
       ],
     );
   }
 
+  // =============================================================
+  // INDICADOR
+  // =============================================================
+
   pw.Widget _indicador(String titulo, int valor, PdfColor color) {
     return pw.Expanded(
       child: pw.Container(
         margin: const pw.EdgeInsets.symmetric(horizontal: 2),
+
         padding: const pw.EdgeInsets.all(7),
+
         decoration: pw.BoxDecoration(
           border: pw.Border.all(color: color),
+
           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
         ),
+
         child: pw.Column(
           children: <pw.Widget>[
             pw.Text(
               '$valor',
+
               style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
+
             pw.Text(titulo, style: const pw.TextStyle(fontSize: 8)),
           ],
         ),
       ),
     );
   }
+
+  // =============================================================
+  // TABLA
+  // =============================================================
 
   pw.Widget _tabla(
     List<DetalleIpercModel> detalles,
@@ -199,76 +311,133 @@ class ReporteIpercPdfService {
 
     final List<List<String>> filas = detalles.map((DetalleIpercModel detalle) {
       final MatrizIpercModel? matriz = matrices[detalle.matrizIpercId];
+
+      /// matrizIpercCodigo ya es String no nullable.
+      ///
+      /// Si no encontramos la matriz usamos:
+      ///
+      /// 1. Código almacenado en el detalle.
+      /// 2. ID de la matriz como último recurso.
+      final String codigoMatriz =
+          matriz?.codigo ??
+          (detalle.matrizIpercCodigo.trim().isNotEmpty
+              ? detalle.matrizIpercCodigo
+              : detalle.matrizIpercId.toString());
+
       return <String>[
         detalle.item.toString(),
-        matriz?.codigo ??
-            detalle.matrizIpercCodigo ??
-            '${detalle.matrizIpercId}',
+
+        codigoMatriz,
+
         detalle.tarea,
+
         detalle.peligroVisible,
+
         detalle.consecuenciaVisible,
+
+        /// Evaluación inicial siempre existe.
         _evaluacionTexto(detalle.evaluacionInicial),
+
+        /// Evaluación residual sí puede ser null.
         _evaluacionTexto(detalle.evaluacionResidual),
-        '${detalle.controlIds.length} / ${detalle.equipoProteccionIds.length}',
+
+        '${detalle.controlIds.length} / '
+            '${detalle.equipoProteccionIds.length}',
+
         detalle.estadoImplementacionNombre,
       ];
     }).toList();
 
     return pw.TableHelper.fromTextArray(
       headers: encabezados,
+
       data: filas,
+
       border: pw.TableBorder.all(color: PdfColors.grey500, width: 0.5),
+
       headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey700),
+
       headerStyle: pw.TextStyle(
         color: PdfColors.white,
+
         fontSize: 7,
+
         fontWeight: pw.FontWeight.bold,
       ),
+
       cellStyle: const pw.TextStyle(fontSize: 6.5),
+
       cellPadding: const pw.EdgeInsets.all(3),
+
       columnWidths: const <int, pw.TableColumnWidth>{
         0: pw.FixedColumnWidth(25),
+
         1: pw.FixedColumnWidth(55),
+
         2: pw.FlexColumnWidth(1.2),
+
         3: pw.FlexColumnWidth(1.1),
+
         4: pw.FlexColumnWidth(1.1),
+
         5: pw.FlexColumnWidth(1.0),
+
         6: pw.FlexColumnWidth(1.0),
+
         7: pw.FixedColumnWidth(48),
+
         8: pw.FixedColumnWidth(62),
       },
     );
   }
 
+  // =============================================================
+  // TEXTO DE EVALUACIÓN
+  // =============================================================
+
   String _evaluacionTexto(EvaluacionDetalleIpercModel? evaluacion) {
+    /// La evaluación residual puede no existir.
     if (evaluacion == null) {
       return 'Pendiente';
     }
 
-    return '${evaluacion.nivelRiesgoNombre} (${evaluacion.valorRiesgo})\n'
-        'P:${evaluacion.valorProbabilidad} × S:${evaluacion.valorSeveridad}';
+    return '${evaluacion.nivelRiesgoNombre} '
+        '(${evaluacion.valorRiesgo})\n'
+        'P:${evaluacion.valorProbabilidad} '
+        '× '
+        'S:${evaluacion.valorSeveridad}';
   }
 
-  String _clasificarNivel(String? nombre) {
-    final String texto = nombre?.trim().toLowerCase() ?? '';
+  // =============================================================
+  // CLASIFICAR NIVEL
+  // =============================================================
+
+  String _clasificarNivel(String nombre) {
+    /// nombre ya no es nullable.
+    final String texto = nombre.trim().toLowerCase();
+
     if (texto.contains('crít') ||
         texto.contains('crit') ||
         texto.contains('intolerable')) {
       return 'Crítico';
     }
+
     if (texto.contains('alto') ||
         texto.contains('importante') ||
         texto.contains('significativo')) {
       return 'Alto';
     }
+
     if (texto.contains('medio') ||
         texto.contains('moderado') ||
         texto.contains('tolerable')) {
       return 'Medio';
     }
+
     if (texto.contains('bajo') || texto.contains('trivial')) {
       return 'Bajo';
     }
+
     return 'Sin nivel';
   }
 }

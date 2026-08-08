@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/dashboard_provider.dart';
+import '../actividades/actividades_screen.dart';
 import '../areas/areas_screen.dart';
 import '../categorias_peligro/categorias_peligro_screen.dart';
 import '../clasificaciones_control/clasificaciones_control_screen.dart';
@@ -14,10 +15,13 @@ import '../mapas_riesgo/mapas_riesgo_screen.dart';
 import '../mapas_riesgo/zonas_identificadas_screen.dart';
 import '../peligros/peligros_screen.dart';
 import '../procesos/procesos_screen.dart';
+import '../puestos_trabajo/puestos_trabajo_screen.dart';
 import '../reportes/reportes_screen.dart';
+import '../roles/roles_screen.dart';
 import '../seguimientos/seguimientos_screen.dart';
 import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
+import '../usuarios/usuarios_screen.dart';
 
 /// Pantalla principal de navegación de la aplicación.
 class MainNavigationScreen extends StatefulWidget {
@@ -564,16 +568,6 @@ class MasView extends StatelessWidget {
             );
           },
         ),
-        const ModuloItem(
-          icono: Icons.task_alt,
-          titulo: 'Actividades',
-          descripcion: 'Registrar actividades y tareas que serán evaluadas.',
-        ),
-        const ModuloItem(
-          icono: Icons.people,
-          titulo: 'Usuarios',
-          descripcion: 'Administrar usuarios, roles e instituciones.',
-        ),
         ModuloItem(
           icono: Icons.account_tree_outlined,
           titulo: 'Procesos',
@@ -583,6 +577,65 @@ class MasView extends StatelessWidget {
               MaterialPageRoute<void>(
                 builder: (_) {
                   return const ProcesosScreen();
+                },
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.task_alt,
+          titulo: 'Actividades',
+          descripcion: 'Registrar actividades y tareas que serán evaluadas.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const ActividadesScreen();
+                },
+              ),
+            );
+          },
+        ),
+        ModuloItem(
+          icono: Icons.badge_outlined,
+          titulo: 'Puestos de trabajo',
+          descripcion: 'Administrar los puestos pertenecientes a cada área.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const PuestosTrabajoScreen();
+                },
+              ),
+            );
+          },
+        ),
+
+        ModuloItem(
+          icono: Icons.people_alt_outlined,
+          titulo: 'Usuarios',
+          descripcion: 'Administrar usuarios, roles y acceso al sistema.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const UsuariosScreen();
+                },
+              ),
+            );
+          },
+        ),
+
+        ModuloItem(
+          icono: Icons.admin_panel_settings_outlined,
+          titulo: 'Roles',
+          descripcion:
+              'Administrar los roles y permisos generales del sistema.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) {
+                  return const RolesScreen();
                 },
               ),
             );

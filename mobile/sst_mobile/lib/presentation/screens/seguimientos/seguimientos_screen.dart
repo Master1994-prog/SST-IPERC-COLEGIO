@@ -7,13 +7,25 @@ import '../../../data/repositories/detalle_iperc_repository.dart';
 import '../../../data/repositories/seguimiento_iperc_repository.dart';
 import '../../../data/repositories/usuario_repository.dart';
 
-/// Pantalla principal para consultar y administrar
-/// los seguimientos registrados en los detalles IPERC.
+/// ===============================================================
+/// PANTALLA - SEGUIMIENTOS IPERC
+/// ===============================================================
+///
+/// Permite:
+///
+/// - Consultar seguimientos.
+/// - Buscar.
+/// - Filtrar por estado.
+/// - Crear.
+/// - Editar.
+/// - Verificar.
+/// - Eliminar.
+/// ===============================================================
 class SeguimientosScreen extends StatefulWidget {
   const SeguimientosScreen({this.detalleIpercId, super.key});
 
-  /// Cuando se recibe un detalle, la pantalla muestra únicamente
-  /// los seguimientos asociados a ese detalle IPERC.
+  /// Si se proporciona un detalle IPERC,
+  /// solamente se muestran sus seguimientos.
   final int? detalleIpercId;
 
   @override
@@ -30,21 +42,34 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
   List<SeguimientoIpercModel> _seguimientos = <SeguimientoIpercModel>[];
 
   bool _cargando = false;
+
   String? _error;
+
   String _busqueda = '';
+
   bool? _filtroVerificado;
+
+  // =============================================================
+  // CICLO DE VIDA
+  // =============================================================
 
   @override
   void initState() {
     super.initState();
+
     _cargarSeguimientos();
   }
 
   @override
   void dispose() {
     _buscarController.dispose();
+
     super.dispose();
   }
+
+  // =============================================================
+  // FILTROS
+  // =============================================================
 
   List<SeguimientoIpercModel> get _seguimientosFiltrados {
     final String texto = _busqueda.toLowerCase().trim();
@@ -68,6 +93,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
           (seguimiento.usuarioNombre ?? '').toLowerCase().contains(texto);
     }).toList();
   }
+
+  // =============================================================
+  // CARGAR
+  // =============================================================
 
   Future<void> _cargarSeguimientos() async {
     if (_cargando) {
@@ -118,6 +147,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     }
   }
 
+  // =============================================================
+  // FORMULARIO
+  // =============================================================
+
   Future<void> _abrirFormulario({SeguimientoIpercModel? seguimiento}) async {
     final bool? guardado = await showDialog<bool>(
       context: context,
@@ -136,9 +169,14 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     }
   }
 
+  // =============================================================
+  // VERIFICAR
+  // =============================================================
+
   Future<void> _verificar(SeguimientoIpercModel seguimiento) async {
     if (seguimiento.verificado) {
       _mostrarMensaje('El seguimiento ya se encuentra verificado.');
+
       return;
     }
 
@@ -173,6 +211,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     }
   }
 
+  // =============================================================
+  // ELIMINAR
+  // =============================================================
+
   Future<void> _eliminar(SeguimientoIpercModel seguimiento) async {
     final bool confirmar =
         await _confirmarAccion(
@@ -205,6 +247,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     }
   }
 
+  // =============================================================
+  // CONFIRMACIÓN
+  // =============================================================
+
   Future<bool?> _confirmarAccion({
     required String titulo,
     required String mensaje,
@@ -215,7 +261,9 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text(titulo),
+
           content: Text(mensaje),
+
           actions: <Widget>[
             TextButton(
               onPressed: () {
@@ -223,6 +271,7 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
               },
               child: const Text('Cancelar'),
             ),
+
             FilledButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
@@ -235,6 +284,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     );
   }
 
+  // =============================================================
+  // MENSAJES
+  // =============================================================
+
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -245,6 +298,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
         ),
       );
   }
+
+  // =============================================================
+  // INTERFAZ
+  // =============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -261,6 +318,7 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
           ),
         ],
       ),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _cargando
             ? null
@@ -270,13 +328,18 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Nuevo'),
       ),
+
       body: RefreshIndicator(
         onRefresh: _cargarSeguimientos,
+
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
+
           slivers: <Widget>[
             SliverToBoxAdapter(child: _construirResumen()),
+
             SliverToBoxAdapter(child: _construirFiltros()),
+
             if (_cargando && _seguimientos.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -298,15 +361,19 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
                 hasScrollBody: false,
                 child: _EstadoVacio(
                   icono: Icons.fact_check_outlined,
+
                   titulo: _seguimientos.isEmpty
                       ? 'No hay seguimientos registrados'
                       : 'No se encontraron resultados',
+
                   descripcion: _seguimientos.isEmpty
                       ? 'Registra el primer seguimiento para controlar el avance de las medidas.'
                       : 'Modifica la búsqueda o los filtros seleccionados.',
+
                   textoBoton: _seguimientos.isEmpty
                       ? 'Registrar seguimiento'
                       : null,
+
                   onPressed: _seguimientos.isEmpty
                       ? () {
                           _abrirFormulario();
@@ -317,22 +384,28 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
             else
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+
                 sliver: SliverList.separated(
                   itemCount: filtrados.length,
+
                   separatorBuilder: (BuildContext context, int index) {
                     return const SizedBox(height: 12);
                   },
+
                   itemBuilder: (BuildContext context, int index) {
                     final SeguimientoIpercModel seguimiento = filtrados[index];
 
                     return _SeguimientoCard(
                       seguimiento: seguimiento,
+
                       onEditar: () {
                         _abrirFormulario(seguimiento: seguimiento);
                       },
+
                       onVerificar: () {
                         _verificar(seguimiento);
                       },
+
                       onEliminar: () {
                         _eliminar(seguimiento);
                       },
@@ -346,12 +419,16 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     );
   }
 
+  // =============================================================
+  // RESUMEN
+  // =============================================================
+
   Widget _construirResumen() {
     final int total = _seguimientos.length;
 
-    final int verificados = _seguimientos
-        .where((SeguimientoIpercModel item) => item.verificado)
-        .length;
+    final int verificados = _seguimientos.where((SeguimientoIpercModel item) {
+      return item.verificado;
+    }).length;
 
     final int pendientes = total - verificados;
 
@@ -373,12 +450,17 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
             Card(
               child: ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.assignment)),
-                title: Text('Detalle IPERC ${widget.detalleIpercId}'),
+                title: Text(
+                  'Detalle IPERC '
+                  '${widget.detalleIpercId}',
+                ),
                 subtitle: const Text(
-                  'Mostrando seguimientos del detalle seleccionado.',
+                  'Mostrando seguimientos '
+                  'del detalle seleccionado.',
                 ),
               ),
             ),
+
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -392,16 +474,19 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
                 titulo: 'Total',
                 valor: total.toString(),
               ),
+
               _ResumenItem(
                 icono: Icons.pending_actions,
                 titulo: 'Pendientes',
                 valor: pendientes.toString(),
               ),
+
               _ResumenItem(
                 icono: Icons.verified_outlined,
                 titulo: 'Verificados',
                 valor: verificados.toString(),
               ),
+
               _ResumenItem(
                 icono: Icons.percent,
                 titulo: 'Avance promedio',
@@ -414,6 +499,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
     );
   }
 
+  // =============================================================
+  // FILTROS
+  // =============================================================
+
   Widget _construirFiltros() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -421,15 +510,18 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
         children: <Widget>[
           TextField(
             controller: _buscarController,
+
             onChanged: (String value) {
               setState(() {
                 _busqueda = value;
               });
             },
+
             decoration: InputDecoration(
               labelText: 'Buscar seguimiento',
               hintText: 'Descripción, tarea o usuario',
               prefixIcon: const Icon(Icons.search),
+
               suffixIcon: _busqueda.isEmpty
                   ? null
                   : IconButton(
@@ -443,10 +535,13 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
                       },
                       icon: const Icon(Icons.clear),
                     ),
+
               border: const OutlineInputBorder(),
             ),
           ),
+
           const SizedBox(height: 10),
+
           SegmentedButton<bool?>(
             segments: const <ButtonSegment<bool?>>[
               ButtonSegment<bool?>(
@@ -454,18 +549,22 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
                 label: Text('Todos'),
                 icon: Icon(Icons.list),
               ),
+
               ButtonSegment<bool?>(
                 value: false,
                 label: Text('Pendientes'),
                 icon: Icon(Icons.pending_actions),
               ),
+
               ButtonSegment<bool?>(
                 value: true,
                 label: Text('Verificados'),
                 icon: Icon(Icons.verified_outlined),
               ),
             ],
+
             selected: <bool?>{_filtroVerificado},
+
             onSelectionChanged: (Set<bool?> seleccion) {
               setState(() {
                 _filtroVerificado = seleccion.first;
@@ -476,6 +575,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
       ),
     );
   }
+
+  // =============================================================
+  // ERROR
+  // =============================================================
 
   String _obtenerMensajeError(Object error) {
     String mensaje = error.toString().trim();
@@ -497,7 +600,10 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
   }
 }
 
-/// Tarjeta utilizada para mostrar un seguimiento.
+// ===============================================================
+// TARJETA DE SEGUIMIENTO
+// ===============================================================
+
 class _SeguimientoCard extends StatelessWidget {
   const _SeguimientoCard({
     required this.seguimiento,
@@ -507,8 +613,11 @@ class _SeguimientoCard extends StatelessWidget {
   });
 
   final SeguimientoIpercModel seguimiento;
+
   final VoidCallback onEditar;
+
   final VoidCallback onVerificar;
+
   final VoidCallback onEliminar;
 
   @override
@@ -523,40 +632,53 @@ class _SeguimientoCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
+
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 8, 14),
+
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+
           children: <Widget>[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
+
               children: <Widget>[
                 CircleAvatar(
                   backgroundColor: estadoColor.withValues(alpha: 0.15),
+
                   child: Icon(
                     seguimiento.verificado
                         ? Icons.verified
                         : Icons.pending_actions,
+
                     color: estadoColor,
                   ),
                 ),
+
                 const SizedBox(width: 12),
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+
                     children: <Widget>[
                       Text(
                         seguimiento.detalleVisible,
+
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
+
                       const SizedBox(height: 4),
+
                       Text(_formatearFecha(seguimiento.fechaSeguimiento)),
                     ],
                   ),
                 ),
+
                 PopupMenuButton<String>(
                   onSelected: (String opcion) {
                     switch (opcion) {
@@ -573,6 +695,7 @@ class _SeguimientoCard extends StatelessWidget {
                         break;
                     }
                   },
+
                   itemBuilder: (BuildContext context) {
                     return <PopupMenuEntry<String>>[
                       const PopupMenuItem<String>(
@@ -583,6 +706,7 @@ class _SeguimientoCard extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+
                       if (!seguimiento.verificado)
                         const PopupMenuItem<String>(
                           value: 'verificar',
@@ -592,6 +716,7 @@ class _SeguimientoCard extends StatelessWidget {
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
+
                       const PopupMenuItem<String>(
                         value: 'eliminar',
                         child: ListTile(
@@ -605,19 +730,25 @@ class _SeguimientoCard extends StatelessWidget {
                 ),
               ],
             ),
+
             const SizedBox(height: 14),
+
             Text(seguimiento.descripcion),
+
             if ((seguimiento.observaciones ?? '')
                 .trim()
                 .isNotEmpty) ...<Widget>[
               const SizedBox(height: 10),
+
               Text(
                 'Observaciones: '
                 '${seguimiento.observaciones}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
+
             const SizedBox(height: 14),
+
             Row(
               children: <Widget>[
                 Expanded(
@@ -627,17 +758,22 @@ class _SeguimientoCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
+
                 const SizedBox(width: 12),
+
                 Text(
                   '${porcentaje.toStringAsFixed(0)} %',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
+
             Wrap(
               spacing: 8,
               runSpacing: 8,
+
               children: <Widget>[
                 Chip(
                   avatar: Icon(
@@ -648,11 +784,13 @@ class _SeguimientoCard extends StatelessWidget {
                   ),
                   label: Text(seguimiento.estadoVisible),
                 ),
+
                 if ((seguimiento.usuarioNombre ?? '').trim().isNotEmpty)
                   Chip(
                     avatar: const Icon(Icons.person_outline, size: 18),
                     label: Text(seguimiento.usuarioNombre!),
                   ),
+
                 if ((seguimiento.nombreArchivo ?? '').trim().isNotEmpty)
                   Chip(
                     avatar: const Icon(Icons.attach_file, size: 18),
@@ -675,7 +813,10 @@ class _SeguimientoCard extends StatelessWidget {
   }
 }
 
-/// Tarjeta de los indicadores superiores.
+// ===============================================================
+// RESUMEN
+// ===============================================================
+
 class _ResumenItem extends StatelessWidget {
   const _ResumenItem({
     required this.icono,
@@ -684,7 +825,9 @@ class _ResumenItem extends StatelessWidget {
   });
 
   final IconData icono;
+
   final String titulo;
+
   final String valor;
 
   @override
@@ -692,14 +835,19 @@ class _ResumenItem extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
+
         child: Row(
           children: <Widget>[
             CircleAvatar(child: Icon(icono)),
+
             const SizedBox(width: 10),
+
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+
                 crossAxisAlignment: CrossAxisAlignment.start,
+
                 children: <Widget>[
                   Text(
                     valor,
@@ -708,6 +856,7 @@ class _ResumenItem extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+
                   Text(titulo, maxLines: 2, overflow: TextOverflow.ellipsis),
                 ],
               ),
@@ -719,7 +868,10 @@ class _ResumenItem extends StatelessWidget {
   }
 }
 
-/// Estado vacío o de error.
+// ===============================================================
+// ESTADO VACÍO
+// ===============================================================
+
 class _EstadoVacio extends StatelessWidget {
   const _EstadoVacio({
     required this.icono,
@@ -730,9 +882,13 @@ class _EstadoVacio extends StatelessWidget {
   });
 
   final IconData icono;
+
   final String titulo;
+
   final String descripcion;
+
   final String? textoBoton;
+
   final VoidCallback? onPressed;
 
   @override
@@ -740,20 +896,28 @@ class _EstadoVacio extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
+
         child: Column(
           mainAxisSize: MainAxisSize.min,
+
           children: <Widget>[
             Icon(icono, size: 68, color: Theme.of(context).colorScheme.outline),
+
             const SizedBox(height: 16),
+
             Text(
               titulo,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
+
             const SizedBox(height: 8),
+
             Text(descripcion, textAlign: TextAlign.center),
+
             if (textoBoton != null && onPressed != null) ...<Widget>[
               const SizedBox(height: 20),
+
               FilledButton.icon(
                 onPressed: onPressed,
                 icon: const Icon(Icons.refresh),
@@ -767,10 +931,10 @@ class _EstadoVacio extends StatelessWidget {
   }
 }
 
-/// Diálogo para registrar o editar un seguimiento.
-///
-/// Los detalles IPERC y los usuarios se muestran mediante
-/// listas desplegables. No es necesario escribir IDs.
+// ===============================================================
+// FORMULARIO SEGUIMIENTO
+// ===============================================================
+
 class _SeguimientoFormDialog extends StatefulWidget {
   const _SeguimientoFormDialog({
     required this.repository,
@@ -779,7 +943,9 @@ class _SeguimientoFormDialog extends StatefulWidget {
   });
 
   final SeguimientoIpercRepository repository;
+
   final SeguimientoIpercModel? seguimiento;
+
   final int? detalleIpercIdInicial;
 
   @override
@@ -787,6 +953,10 @@ class _SeguimientoFormDialog extends StatefulWidget {
     return _SeguimientoFormDialogState();
   }
 }
+
+// ===============================================================
+// ESTADO DEL FORMULARIO
+// ===============================================================
 
 class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -810,16 +980,21 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
   List<UsuarioModel> _usuarios = <UsuarioModel>[];
 
   int? _detalleSeleccionadoId;
+
   int? _usuarioSeleccionadoId;
 
   late DateTime _fechaSeguimiento;
+
   late double _porcentajeAvance;
+
   late bool _verificado;
 
   bool _cargandoCatalogos = true;
+
   bool _guardando = false;
 
   String? _errorCatalogos;
+
   String? _error;
 
   bool get _esEdicion {
@@ -830,6 +1005,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     return widget.detalleIpercIdInicial != null &&
         widget.detalleIpercIdInicial! > 0;
   }
+
+  // =============================================================
+  // INICIALIZAR
+  // =============================================================
 
   @override
   void initState() {
@@ -871,16 +1050,28 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     _cargarCatalogos();
   }
 
+  // =============================================================
+  // LIBERAR CONTROLADORES
+  // =============================================================
+
   @override
   void dispose() {
     _descripcionController.dispose();
+
     _observacionesController.dispose();
+
     _archivoController.dispose();
+
     _nombreArchivoController.dispose();
+
     _tipoArchivoController.dispose();
 
     super.dispose();
   }
+
+  // =============================================================
+  // CARGAR CATÁLOGOS
+  // =============================================================
 
   Future<void> _cargarCatalogos() async {
     setState(() {
@@ -901,9 +1092,18 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
 
       final List<UsuarioModel> usuarios = resultados[1] as List<UsuarioModel>;
 
+      // ---------------------------------------------------------
+      // ORDENAR DETALLES
+      // ---------------------------------------------------------
+      //
+      // CORRECCIÓN:
+      // matrizIpercCodigo ya NO es nullable.
+      // Por eso eliminamos los operadores ?? ''.
+
       detalles.sort((DetalleIpercModel primero, DetalleIpercModel segundo) {
-        final int comparacionMatriz = (primero.matrizIpercCodigo ?? '')
-            .compareTo(segundo.matrizIpercCodigo ?? '');
+        final int comparacionMatriz = primero.matrizIpercCodigo.compareTo(
+          segundo.matrizIpercCodigo,
+        );
 
         if (comparacionMatriz != 0) {
           return comparacionMatriz;
@@ -924,6 +1124,7 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
 
       setState(() {
         _detalles = detalles;
+
         _usuarios = usuarios;
 
         if (_usuarioSeleccionadoId == null && usuarios.length == 1) {
@@ -947,6 +1148,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     }
   }
 
+  // =============================================================
+  // SELECCIONAR FECHA
+  // =============================================================
+
   Future<void> _seleccionarFecha() async {
     final DateTime? fecha = await showDatePicker(
       context: context,
@@ -963,6 +1168,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
       _fechaSeguimiento = fecha;
     });
   }
+
+  // =============================================================
+  // GUARDAR
+  // =============================================================
 
   Future<void> _guardar() async {
     if (_guardando) {
@@ -1062,6 +1271,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     }
   }
 
+  // =============================================================
+  // INTERFAZ FORMULARIO
+  // =============================================================
+
   @override
   Widget build(BuildContext context) {
     final String fechaTexto =
@@ -1071,8 +1284,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
 
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar seguimiento' : 'Nuevo seguimiento'),
+
       content: SizedBox(
         width: 520,
+
         child: _cargandoCatalogos
             ? const SizedBox(
                 height: 220,
@@ -1082,17 +1297,25 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
             ? _construirErrorCatalogos()
             : Form(
                 key: _formKey,
+
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+
                     children: <Widget>[
                       _construirSelectorDetalle(),
+
                       const SizedBox(height: 12),
+
                       _construirSelectorUsuario(),
+
                       const SizedBox(height: 12),
+
                       InkWell(
                         onTap: _seleccionarFecha,
+
                         borderRadius: BorderRadius.circular(8),
+
                         child: InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'Fecha de seguimiento',
@@ -1102,10 +1325,14 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           child: Text(fechaTexto),
                         ),
                       ),
+
                       const SizedBox(height: 12),
+
                       TextFormField(
                         controller: _descripcionController,
+
                         maxLines: 3,
+
                         decoration: const InputDecoration(
                           labelText: 'Descripción',
                           hintText: 'Describe el avance realizado',
@@ -1113,6 +1340,7 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           border: OutlineInputBorder(),
                           alignLabelWithHint: true,
                         ),
+
                         validator: (String? value) {
                           final String texto = value?.trim() ?? '';
 
@@ -1127,15 +1355,20 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           return null;
                         },
                       ),
+
                       const SizedBox(height: 14),
+
                       Align(
                         alignment: Alignment.centerLeft,
+
                         child: Text(
                           'Porcentaje de avance: '
                           '${_porcentajeAvance.toStringAsFixed(0)} %',
+
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
+
                       Slider(
                         value: _porcentajeAvance,
                         min: 0,
@@ -1148,20 +1381,27 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           });
                         },
                       ),
+
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
+
                         title: const Text('Seguimiento verificado'),
+
                         subtitle: const Text(
                           'Indica que el avance fue revisado y aprobado.',
                         ),
+
                         value: _verificado,
+
                         onChanged: (bool value) {
                           setState(() {
                             _verificado = value;
                           });
                         },
                       ),
+
                       const SizedBox(height: 8),
+
                       TextFormField(
                         controller: _observacionesController,
                         maxLines: 3,
@@ -1172,7 +1412,9 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           alignLabelWithHint: true,
                         ),
                       ),
+
                       const SizedBox(height: 12),
+
                       ExpansionTile(
                         tilePadding: EdgeInsets.zero,
                         title: const Text('Información de evidencia'),
@@ -1185,7 +1427,9 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                               border: OutlineInputBorder(),
                             ),
                           ),
+
                           const SizedBox(height: 12),
+
                           TextFormField(
                             controller: _tipoArchivoController,
                             decoration: const InputDecoration(
@@ -1194,7 +1438,9 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                               border: OutlineInputBorder(),
                             ),
                           ),
+
                           const SizedBox(height: 12),
+
                           TextFormField(
                             controller: _archivoController,
                             maxLines: 2,
@@ -1205,8 +1451,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                           ),
                         ],
                       ),
+
                       if (_error != null) ...<Widget>[
                         const SizedBox(height: 14),
+
                         _construirMensajeError(_error!),
                       ],
                     ],
@@ -1214,6 +1462,7 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                 ),
               ),
       ),
+
       actions: <Widget>[
         TextButton(
           onPressed: _guardando
@@ -1223,10 +1472,12 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                 },
           child: const Text('Cancelar'),
         ),
+
         FilledButton.icon(
           onPressed: _guardando || _cargandoCatalogos || _errorCatalogos != null
               ? null
               : _guardar,
+
           icon: _guardando
               ? const SizedBox(
                   width: 18,
@@ -1234,29 +1485,36 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save),
+
           label: Text(_guardando ? 'Guardando...' : 'Guardar'),
         ),
       ],
     );
   }
 
+  // =============================================================
+  // SELECTOR DETALLE
+  // =============================================================
+
   Widget _construirSelectorDetalle() {
     final bool valorExiste =
         _detalleSeleccionadoId == null ||
-        _detalles.any(
-          (DetalleIpercModel detalle) => detalle.id == _detalleSeleccionadoId,
-        );
+        _detalles.any((DetalleIpercModel detalle) {
+          return detalle.id == _detalleSeleccionadoId;
+        });
 
     final int? valorSeleccionado = valorExiste ? _detalleSeleccionadoId : null;
 
     return DropdownButtonFormField<int>(
       initialValue: valorSeleccionado,
       isExpanded: true,
+
       decoration: const InputDecoration(
         labelText: 'Detalle IPERC',
         prefixIcon: Icon(Icons.assignment_outlined),
         border: OutlineInputBorder(),
       ),
+
       items: _detalles.map((DetalleIpercModel detalle) {
         return DropdownMenuItem<int>(
           value: detalle.id,
@@ -1267,6 +1525,7 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
           ),
         );
       }).toList(),
+
       onChanged: _detalleBloqueado
           ? null
           : (int? value) {
@@ -1274,6 +1533,7 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
                 _detalleSeleccionadoId = value;
               });
             },
+
       validator: (int? value) {
         if (value == null || value <= 0) {
           return 'Selecciona un detalle IPERC.';
@@ -1284,23 +1544,29 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     );
   }
 
+  // =============================================================
+  // SELECTOR USUARIO
+  // =============================================================
+
   Widget _construirSelectorUsuario() {
     final bool valorExiste =
         _usuarioSeleccionadoId == null ||
-        _usuarios.any(
-          (UsuarioModel usuario) => usuario.id == _usuarioSeleccionadoId,
-        );
+        _usuarios.any((UsuarioModel usuario) {
+          return usuario.id == _usuarioSeleccionadoId;
+        });
 
     final int? valorSeleccionado = valorExiste ? _usuarioSeleccionadoId : null;
 
     return DropdownButtonFormField<int>(
       initialValue: valorSeleccionado,
       isExpanded: true,
+
       decoration: const InputDecoration(
         labelText: 'Usuario responsable',
         prefixIcon: Icon(Icons.person_outline),
         border: OutlineInputBorder(),
       ),
+
       items: _usuarios.map((UsuarioModel usuario) {
         return DropdownMenuItem<int>(
           value: usuario.id,
@@ -1311,11 +1577,13 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
           ),
         );
       }).toList(),
+
       onChanged: (int? value) {
         setState(() {
           _usuarioSeleccionadoId = value;
         });
       },
+
       validator: (int? value) {
         if (value == null || value <= 0) {
           return 'Selecciona un usuario.';
@@ -1326,25 +1594,37 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     );
   }
 
+  // =============================================================
+  // ERROR CATÁLOGOS
+  // =============================================================
+
   Widget _construirErrorCatalogos() {
     return SizedBox(
       height: 240,
+
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+
         children: <Widget>[
           Icon(
             Icons.cloud_off,
             size: 54,
             color: Theme.of(context).colorScheme.error,
           ),
+
           const SizedBox(height: 14),
+
           const Text(
             'No se pudieron cargar los datos',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
+
           const SizedBox(height: 8),
+
           Text(_errorCatalogos!, textAlign: TextAlign.center),
+
           const SizedBox(height: 16),
+
           FilledButton.icon(
             onPressed: _cargarCatalogos,
             icon: const Icon(Icons.refresh),
@@ -1355,23 +1635,40 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
     );
   }
 
+  // =============================================================
+  // MENSAJE ERROR
+  // =============================================================
+
   Widget _construirMensajeError(String mensaje) {
     return Container(
       width: double.infinity,
+
       padding: const EdgeInsets.all(12),
+
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.errorContainer,
+
         borderRadius: BorderRadius.circular(8),
       ),
+
       child: Text(
         mensaje,
+
         style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
       ),
     );
   }
 
+  // =============================================================
+  // NOMBRE DEL DETALLE
+  // =============================================================
+
   String _nombreDetalle(DetalleIpercModel detalle) {
-    final String codigo = detalle.matrizIpercCodigo?.trim() ?? '';
+    /// CORRECCIÓN:
+    ///
+    /// matrizIpercCodigo ya es String no nullable.
+    /// Por eso eliminamos ?.
+    final String codigo = detalle.matrizIpercCodigo.trim();
 
     final String tarea = detalle.tarea.trim().isEmpty
         ? 'Sin tarea'
@@ -1385,6 +1682,10 @@ class _SeguimientoFormDialogState extends State<_SeguimientoFormDialog> {
 
     return '$codigo | $itemTarea';
   }
+
+  // =============================================================
+  // LIMPIAR ERROR
+  // =============================================================
 
   String _obtenerMensajeError(Object error) {
     String mensaje = error.toString().trim();
