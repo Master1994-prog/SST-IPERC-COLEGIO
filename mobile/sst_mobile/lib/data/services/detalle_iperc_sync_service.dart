@@ -1,12 +1,13 @@
+import '../datasources/local/matriz_iperc_local_datasource.dart';
 import '../mappers/detalle_iperc_sync_mapper.dart';
 import '../models/detalle_iperc_local_model.dart';
 import '../models/detalle_iperc_model.dart';
-import '../models/evaluacion_riesgo_model.dart';
 import '../repositories/detalle_iperc_local_repository.dart';
 import '../repositories/detalle_iperc_repository.dart';
-import '../repositories/evaluacion_riesgo_repository.dart';
 
-/// Resultado general de una sincronización de detalles IPERC.
+/// ===============================================================
+/// RESULTADO DE SINCRONIZACIÓN
+/// ===============================================================
 class DetalleIpercSyncResult {
   const DetalleIpercSyncResult({
     required this.total,
@@ -33,28 +34,42 @@ class DetalleIpercSyncResult {
   }
 }
 
-/// Sincroniza los detalles IPERC almacenados localmente con el backend.
+/// ===============================================================
+/// SERVICIO DE SINCRONIZACIÓN - DETALLE IPERC
+/// ===============================================================
 ///
-/// El proceso se ejecuta en este orden:
+/// Sincroniza los detalles almacenados en SQLite con el backend.
 ///
-/// 1. Obtener registros pendientes.
-/// 2. Resolver creación, actualización o eliminación.
-/// 3. Crear las evaluaciones que todavía no existen.
-/// 4. Enviar el detalle al backend.
-/// 5. Marcar el registro local como sincronizado.
+/// IMPORTANTE:
+///
+/// El backend actual es responsable de crear y recalcular:
+///
+/// - Evaluación inicial.
+/// - Evaluación residual.
+///
+/// Flutter únicamente envía:
+///
+/// - probabilidadInicialId.
+/// - severidadInicialId.
+/// - probabilidadResidualId.
+/// - severidadResidualId.
+///
+/// Por lo tanto este servicio YA NO crea EvaluacionRiesgo
+/// de manera independiente.
+/// ===============================================================
 class DetalleIpercSyncService {
   DetalleIpercSyncService({
     DetalleIpercLocalRepository? localRepository,
     DetalleIpercRepository? remoteRepository,
-    EvaluacionRiesgoRepository? evaluacionRepository,
   }) : _localRepository = localRepository ?? DetalleIpercLocalRepository(),
-       _remoteRepository = remoteRepository ?? DetalleIpercRepository(),
-       _evaluacionRepository =
-           evaluacionRepository ?? EvaluacionRiesgoRepository();
+       _remoteRepository = remoteRepository ?? DetalleIpercRepository();
+
+  final MatrizIpercLocalDatasource _matrizLocalDatasource =
+      MatrizIpercLocalDatasource();
 
   final DetalleIpercLocalRepository _localRepository;
+
   final DetalleIpercRepository _remoteRepository;
-  final EvaluacionRiesgoRepository _evaluacionRepository;
 
   bool _sincronizando = false;
 
@@ -62,10 +77,10 @@ class DetalleIpercSyncService {
     return _sincronizando;
   }
 
-  /// Sincroniza un único detalle utilizando su identificador local.
-  ///
-  /// Este método se utiliza desde el sincronizador general de la aplicación
-  /// cuando procesa una operación DETALLE_IPERC de la cola.
+  // =============================================================
+  // SINCRONIZAR POR ID LOCAL
+  // =============================================================
+
   Future<void> sincronizarPorIdLocal(String idLocal) async {
     final String id = idLocal.trim();
 
@@ -76,10 +91,7 @@ class DetalleIpercSyncService {
     final DetalleIpercLocalModel? detalle = await _localRepository
         .obtenerPorIdLocal(id);
 
-    /*
-   * El registro puede no existir cuando una eliminación ya fue
-   * confirmada anteriormente. En ese caso no se vuelve a procesar.
-   */
+    // El registro puede haber sido eliminado previamente.
     if (detalle == null) {
       return;
     }
@@ -87,7 +99,10 @@ class DetalleIpercSyncService {
     await _sincronizarDetalle(detalle);
   }
 
-  /// Sincroniza todos los detalles pendientes.
+  // =============================================================
+  // SINCRONIZAR TODOS LOS PENDIENTES
+  // =============================================================
+
   Future<DetalleIpercSyncResult> sincronizarPendientes() async {
     if (_sincronizando) {
       return const DetalleIpercSyncResult(
@@ -114,11 +129,15 @@ class DetalleIpercSyncService {
       for (final DetalleIpercLocalModel detalle in pendientes) {
         try {
           await _sincronizarDetalle(detalle);
+
           sincronizados++;
         } catch (error) {
           fallidos++;
 
-          errores.add('Detalle ${detalle.idLocal}: ${_limpiarError(error)}');
+          errores.add(
+            'Detalle ${detalle.idLocal}: '
+            '${_limpiarError(error)}',
+          );
         }
       }
 
@@ -133,16 +152,30 @@ class DetalleIpercSyncService {
     }
   }
 
-  /// Sincroniza un único detalle.
+  // =============================================================
+  // SINCRONIZAR UN DETALLE
+  // =============================================================
+
   Future<void> _sincronizarDetalle(DetalleIpercLocalModel detalle) async {
+    // =============================================================
+    // ELIMINACIÓN
+    // =============================================================
+
     if (detalle.eliminado) {
       await _sincronizarEliminacion(detalle);
       return;
     }
 
-    final DetalleIpercLocalModel detallePreparado = await _prepararEvaluaciones(
-      detalle,
-    );
+    // =============================================================
+    // RESOLVER MATRIZ DEL SERVIDOR
+    // =============================================================
+
+    final DetalleIpercLocalModel detallePreparado =
+        await _resolverMatrizServidor(detalle);
+
+    // =============================================================
+    // CREAR O ACTUALIZAR
+    // =============================================================
 
     final bool requiereCreacion = DetalleIpercSyncMapper.requiereCreacion(
       detallePreparado,
@@ -150,79 +183,81 @@ class DetalleIpercSyncService {
 
     if (requiereCreacion) {
       await _sincronizarCreacion(detallePreparado);
+
       return;
     }
 
     await _sincronizarActualizacion(detallePreparado);
   }
 
-  /// Crea las evaluaciones inicial y residual cuando todavía no existen.
-  Future<DetalleIpercLocalModel> _prepararEvaluaciones(
+  // ===============================================================
+  // RESOLVER MATRIZ DEL SERVIDOR
+  // ===============================================================
+
+  /// Garantiza que el detalle conozca el identificador real de su
+  /// matriz en el backend antes de intentar sincronizarse.
+  ///
+  /// Cuando el detalle fue creado totalmente offline puede tener:
+  ///
+  /// matrizIdLocal = UUID
+  /// matrizIdServidor = null
+  ///
+  /// En ese caso se consulta matrices_iperc_local.
+  ///
+  /// Si la matriz todavía no fue sincronizada, se detiene el envío
+  /// del detalle. La información NO se pierde y continuará pendiente.
+  Future<DetalleIpercLocalModel> _resolverMatrizServidor(
     DetalleIpercLocalModel detalle,
   ) async {
-    int? evaluacionInicialId = detalle.evaluacionInicialId;
+    // -------------------------------------------------------------
+    // YA TIENE ID DEL SERVIDOR
+    // -------------------------------------------------------------
 
-    int? evaluacionResidualId = detalle.evaluacionResidualId;
+    final int? idActual = detalle.matrizIdServidor;
 
-    if (evaluacionInicialId == null || evaluacionInicialId <= 0) {
-      final EvaluacionRiesgoModel evaluacionInicial = await _crearEvaluacion(
-        frecuencia: detalle.frecuenciaInicial,
-        severidad: detalle.severidadInicial,
-        observaciones: 'Evaluación inicial sincronizada desde el dispositivo.',
-      );
-
-      evaluacionInicialId = evaluacionInicial.id;
+    if (idActual != null && idActual > 0) {
+      return detalle;
     }
 
-    final bool tieneEvaluacionResidual =
-        detalle.severidadResidual != null &&
-        detalle.frecuenciaResidual != null &&
-        detalle.valorRiesgoResidual != null;
+    // -------------------------------------------------------------
+    // BUSCAR MATRIZ LOCAL
+    // -------------------------------------------------------------
 
-    if (tieneEvaluacionResidual &&
-        (evaluacionResidualId == null || evaluacionResidualId <= 0)) {
-      final EvaluacionRiesgoModel evaluacionResidual = await _crearEvaluacion(
-        frecuencia: detalle.frecuenciaResidual!,
-        severidad: detalle.severidadResidual!,
-        observaciones: 'Evaluación residual sincronizada desde el dispositivo.',
+    final String matrizIdLocal = detalle.matrizIdLocal.trim();
+
+    if (matrizIdLocal.isEmpty) {
+      throw StateError(
+        'El detalle ${detalle.idLocal} no tiene '
+        'identificador local de matriz.',
       );
-
-      evaluacionResidualId = evaluacionResidual.id;
     }
 
-    return detalle.copyWith(
-      evaluacionInicialId: evaluacionInicialId,
-      evaluacionResidualId: evaluacionResidualId,
+    final int? matrizIdServidor = await _matrizLocalDatasource.getServerId(
+      matrizIdLocal,
     );
+
+    // -------------------------------------------------------------
+    // MATRIZ TODAVÍA NO SINCRONIZADA
+    // -------------------------------------------------------------
+
+    if (matrizIdServidor == null || matrizIdServidor <= 0) {
+      throw StateError(
+        'La matriz asociada todavía no ha sido sincronizada. '
+        'Primero debe sincronizarse la matriz y luego sus peligros.',
+      );
+    }
+
+    // -------------------------------------------------------------
+    // PREPARAR DETALLE
+    // -------------------------------------------------------------
+
+    return detalle.copyWith(matrizIdServidor: matrizIdServidor);
   }
 
-  /// Registra una evaluación de riesgo en el backend.
-  Future<EvaluacionRiesgoModel> _crearEvaluacion({
-    required int frecuencia,
-    required int severidad,
-    required String observaciones,
-  }) async {
-    final ProbabilidadIpercOption probabilidad = _obtenerProbabilidad(
-      frecuencia,
-    );
+  // =============================================================
+  // CREAR EN BACKEND
+  // =============================================================
 
-    final SeveridadIpercOption severidadOption = _obtenerSeveridad(severidad);
-
-    final int valor = probabilidad.valor * severidadOption.valor;
-
-    final NivelRiesgoIpercOption nivel = obtenerNivelRiesgoIperc(valor);
-
-    final CrearEvaluacionRiesgoRequest request = CrearEvaluacionRiesgoRequest(
-      probabilidadId: probabilidad.id,
-      severidadId: severidadOption.id,
-      nivelRiesgoId: nivel.id,
-      observaciones: observaciones,
-    );
-
-    return _evaluacionRepository.crear(request);
-  }
-
-  /// Crea un detalle que todavía no existe en el backend.
   Future<void> _sincronizarCreacion(DetalleIpercLocalModel detalle) async {
     final CrearDetalleIpercRequest request =
         DetalleIpercSyncMapper.toCrearRequest(detalle);
@@ -241,7 +276,10 @@ class DetalleIpercSyncService {
     );
   }
 
-  /// Actualiza un detalle que ya existe en el backend.
+  // =============================================================
+  // ACTUALIZAR EN BACKEND
+  // =============================================================
+
   Future<void> _sincronizarActualizacion(DetalleIpercLocalModel detalle) async {
     final int idServidor = DetalleIpercSyncMapper.obtenerIdServidor(detalle);
 
@@ -260,60 +298,52 @@ class DetalleIpercSyncService {
     );
   }
 
-  /// Elimina un registro del backend o confirma su eliminación local.
+  // =============================================================
+  // ELIMINAR
+  // =============================================================
+
   Future<void> _sincronizarEliminacion(DetalleIpercLocalModel detalle) async {
     final String idServidorTexto = detalle.idServidor?.trim() ?? '';
 
     final int? idServidor = int.tryParse(idServidorTexto);
 
-    /*
-     * Cuando nunca llegó al servidor no es necesario ejecutar DELETE.
-     * Se elimina directamente de SQLite.
-     */
+    // -----------------------------------------------------------
+    // NUNCA EXISTIÓ EN BACKEND
+    // -----------------------------------------------------------
+
     if (idServidor == null || idServidor <= 0) {
       await _localRepository.confirmarEliminacionSincronizada(detalle.idLocal);
 
       return;
     }
 
+    // -----------------------------------------------------------
+    // ELIMINAR / CERRAR EN BACKEND
+    // -----------------------------------------------------------
+
     await _remoteRepository.eliminar(idServidor);
 
     await _localRepository.confirmarEliminacionSincronizada(detalle.idLocal);
   }
 
-  /// Busca la opción de probabilidad correspondiente al valor local.
-  ProbabilidadIpercOption _obtenerProbabilidad(int valor) {
-    if (valor < 1 || valor > 5) {
-      throw FormatException(
-        'La frecuencia o probabilidad debe encontrarse entre 1 y 5.',
-      );
-    }
-
-    return probabilidadesIperc.firstWhere(
-      (ProbabilidadIpercOption opcion) => opcion.valor == valor,
-    );
-  }
-
-  /// Busca la opción de severidad correspondiente al valor local.
-  SeveridadIpercOption _obtenerSeveridad(int valor) {
-    if (valor < 1 || valor > 5) {
-      throw FormatException('La severidad debe encontrarse entre 1 y 5.');
-    }
-
-    return severidadesIperc.firstWhere(
-      (SeveridadIpercOption opcion) => opcion.valor == valor,
-    );
-  }
+  // =============================================================
+  // LIMPIAR MENSAJES
+  // =============================================================
 
   String _limpiarError(Object error) {
-    final String texto = error.toString().trim();
+    String texto = error.toString().trim();
 
-    if (texto.startsWith('Exception: ')) {
-      return texto.substring('Exception: '.length);
-    }
+    const List<String> prefijos = <String>[
+      'Exception: ',
+      'FormatException: ',
+      'StateError: ',
+      'Bad state: ',
+    ];
 
-    if (texto.startsWith('FormatException: ')) {
-      return texto.substring('FormatException: '.length);
+    for (final String prefijo in prefijos) {
+      if (texto.startsWith(prefijo)) {
+        texto = texto.substring(prefijo.length);
+      }
     }
 
     return texto.isEmpty ? 'Error desconocido.' : texto;

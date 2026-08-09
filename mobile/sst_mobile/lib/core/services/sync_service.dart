@@ -261,17 +261,65 @@ class SyncService {
   /// por el endpoint de matrices IPERC.
   Map<String, dynamic> _transformMatrixForApi(Map<String, dynamic> localData) {
     return <String, dynamic>{
-      'institucionId': localData['institucion_id'],
-      'sedeId': localData['sede_id'],
-      'areaId': localData['area_id'],
-      'procesoId': localData['proceso_id'],
-      'puestoTrabajoId': localData['puesto_trabajo_id'],
-      'codigo': localData['codigo'],
-      'nombre': localData['nombre'],
-      'descripcion': localData['descripcion'],
-      'fechaEvaluacion': localData['fecha_evaluacion'],
-      'estadoMatriz': localData['estado_matriz'],
-      'idLocal': localData['id_local'],
+      // ===========================================================
+      // RELACIONES
+      // ===========================================================
+      'institucionId': _intFromLocal(
+        localData['institucion_id'],
+        nombre: 'institución',
+        obligatorio: true,
+      ),
+
+      'sedeId': _intFromLocal(
+        localData['sede_id'],
+        nombre: 'sede',
+        obligatorio: true,
+      ),
+
+      'areaId': _intFromLocal(
+        localData['area_id'],
+        nombre: 'área',
+        obligatorio: true,
+      ),
+
+      'puestoTrabajoId': _intFromLocal(
+        localData['puesto_trabajo_id'],
+        nombre: 'puesto de trabajo',
+        obligatorio: true,
+      ),
+
+      'procesoId': _intFromLocal(
+        localData['proceso_id'],
+        nombre: 'proceso',
+        obligatorio: true,
+      ),
+
+      // ===========================================================
+      // ACTIVIDAD
+      // ===========================================================
+      'actividadId': _intFromLocal(
+        localData['actividad_id'],
+        nombre: 'actividad',
+        obligatorio: true,
+      ),
+
+      // ===========================================================
+      // DATOS DE MATRIZ
+      // ===========================================================
+      'codigo': _textoOpcional(localData['codigo']),
+
+      'nombre': localData['nombre']?.toString().trim(),
+
+      // El modelo local usa "descripcion".
+      // El backend de matrices trabaja actualmente con objetivo.
+      'objetivo': _textoOpcional(localData['descripcion']),
+
+      // ===========================================================
+      // AUDITORÍA
+      // ===========================================================
+
+      // Mantiene compatibilidad con el flujo actual del backend.
+      'usuarioRegistroId': 1,
     };
   }
 
@@ -330,6 +378,49 @@ class SyncService {
     }
 
     return Map<String, dynamic>.from(decoded);
+  }
+
+  // =============================================================
+  // CONVERTIR ID LOCAL A ENTERO
+  // =============================================================
+
+  int? _intFromLocal(
+    dynamic value, {
+    required String nombre,
+    required bool obligatorio,
+  }) {
+    final String texto = value?.toString().trim() ?? '';
+
+    if (texto.isEmpty) {
+      if (obligatorio) {
+        throw FormatException(
+          'La matriz offline no tiene un identificador '
+          'válido de $nombre.',
+        );
+      }
+
+      return null;
+    }
+
+    final int? id = int.tryParse(texto);
+
+    if (id == null || id <= 0) {
+      throw FormatException(
+        'El identificador de $nombre no es válido: $texto.',
+      );
+    }
+
+    return id;
+  }
+
+  // =============================================================
+  // TEXTO OPCIONAL
+  // =============================================================
+
+  String? _textoOpcional(dynamic value) {
+    final String texto = value?.toString().trim() ?? '';
+
+    return texto.isEmpty ? null : texto;
   }
 
   /// Convierte excepciones técnicas en mensajes almacenables

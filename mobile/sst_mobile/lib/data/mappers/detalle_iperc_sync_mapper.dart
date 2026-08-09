@@ -1,71 +1,122 @@
 import '../models/detalle_iperc_local_model.dart';
 import '../models/detalle_iperc_model.dart';
 
-/// Convierte un detalle IPERC almacenado en SQLite
-/// en solicitudes compatibles con el backend.
+/// ===============================================================
+/// MAPPER DE SINCRONIZACIÓN - DETALLE IPERC
+/// ===============================================================
 ///
-/// El backend actual crea automáticamente las evaluaciones
-/// inicial y residual.
+/// Convierte un detalle almacenado en SQLite en solicitudes
+/// compatibles con el backend.
 ///
-/// Por eso ya NO enviamos:
-/// - evaluacionInicialId
-/// - evaluacionResidualId
+/// IMPORTANTE:
 ///
-/// Ahora enviamos:
-/// - probabilidadInicialId
-/// - severidadInicialId
-/// - probabilidadResidualId
-/// - severidadResidualId
+/// Ya NO usamos:
+///
+/// frecuenciaInicial
+/// severidadInicial
+/// frecuenciaResidual
+/// severidadResidual
+///
+/// como si fueran IDs del catálogo.
+///
+/// Ahora usamos:
+///
+/// probabilidadInicialId
+/// severidadInicialId
+/// probabilidadResidualId
+/// severidadResidualId
+///
+/// Los valores 1..5 siguen utilizándose únicamente para:
+///
+/// - cálculo local;
+/// - visualización;
+/// - validación de la matriz 5x5.
+///
+/// El backend es quien crea/recalcula EvaluacionRiesgo.
+/// ===============================================================
 abstract final class DetalleIpercSyncMapper {
-  /// Convierte un registro local en una solicitud de creación.
+  // =============================================================
+  // CREAR
+  // =============================================================
+
+  /// Convierte un detalle offline en una solicitud de creación.
   static CrearDetalleIpercRequest toCrearRequest(
     DetalleIpercLocalModel detalle,
   ) {
     _validarDetalleParaSincronizar(detalle);
 
     return CrearDetalleIpercRequest(
+      // ---------------------------------------------------------
+      // MATRIZ
+      // ---------------------------------------------------------
       matrizIpercId: detalle.matrizIdServidor!,
+
       item: detalle.item,
+
       tarea: detalle.tarea.trim(),
-      peligroId: _requerirId(detalle.peligroId, 'peligro'),
-      consecuenciaId: _requerirId(detalle.consecuenciaId, 'consecuencia'),
+
+      // ---------------------------------------------------------
+      // PELIGRO / CONSECUENCIA
+      // ---------------------------------------------------------
+      peligroId: _requerirIdTexto(detalle.peligroId, 'peligro'),
+
+      consecuenciaId: _requerirIdTexto(detalle.consecuenciaId, 'consecuencia'),
+
       descripcionPeligro: _textoOpcional(detalle.peligroDescripcion),
 
-      // En el modelo local existente, frecuencia
-      // representa la probabilidad de la matriz 5x5.
-      probabilidadInicialId: _validarEscala(
-        detalle.frecuenciaInicial,
+      // ---------------------------------------------------------
+      // EVALUACIÓN INICIAL
+      // ---------------------------------------------------------
+
+      /// Ahora utilizamos el ID real almacenado en SQLite.
+      probabilidadInicialId: _requerirIdCatalogo(
+        detalle.probabilidadInicialId,
         'probabilidad inicial',
       ),
 
-      severidadInicialId: _validarEscala(
-        detalle.severidadInicial,
+      severidadInicialId: _requerirIdCatalogo(
+        detalle.severidadInicialId,
         'severidad inicial',
       ),
 
       observacionesEvaluacionInicial: _textoOpcional(detalle.observaciones),
 
-      probabilidadResidualId: detalle.frecuenciaResidual == null
-          ? null
-          : _validarEscala(
-              detalle.frecuenciaResidual!,
+      // ---------------------------------------------------------
+      // EVALUACIÓN RESIDUAL
+      // ---------------------------------------------------------
+      probabilidadResidualId: detalle.tieneEvaluacionResidual
+          ? _requerirIdCatalogo(
+              detalle.probabilidadResidualId,
               'probabilidad residual',
-            ),
+            )
+          : null,
 
-      severidadResidualId: detalle.severidadResidual == null
-          ? null
-          : _validarEscala(detalle.severidadResidual!, 'severidad residual'),
+      severidadResidualId: detalle.tieneEvaluacionResidual
+          ? _requerirIdCatalogo(
+              detalle.severidadResidualId,
+              'severidad residual',
+            )
+          : null,
 
       observacionesEvaluacionResidual: null,
 
+      // ---------------------------------------------------------
+      // CONTROLES
+      // ---------------------------------------------------------
       controlIds: _convertirListaIds(detalle.controlIds, nombre: 'control'),
 
+      // ---------------------------------------------------------
+      // EPP
+      // ---------------------------------------------------------
       equipoProteccionIds: _convertirListaIds(
         detalle.equipoProteccionIds,
         nombre: 'equipo de protección',
       ),
 
-      responsableImplementacionId: _idOpcional(
+      // ---------------------------------------------------------
+      // IMPLEMENTACIÓN
+      // ---------------------------------------------------------
+      responsableImplementacionId: _idOpcionalTexto(
         detalle.responsableImplementacionId,
         nombre: 'responsable de implementación',
       ),
@@ -78,62 +129,91 @@ abstract final class DetalleIpercSyncMapper {
     );
   }
 
-  /// Convierte un registro local en una solicitud
-  /// para actualizarlo.
+  // =============================================================
+  // ACTUALIZAR
+  // =============================================================
+
+  /// Convierte un detalle offline en una solicitud de actualización.
   static ActualizarDetalleIpercRequest toActualizarRequest(
     DetalleIpercLocalModel detalle,
   ) {
     _validarDetalleParaSincronizar(detalle);
 
     return ActualizarDetalleIpercRequest(
-      // Para actualizar, el ID remoto es obligatorio.
+      // ---------------------------------------------------------
+      // ID DEL DETALLE EN EL BACKEND
+      // ---------------------------------------------------------
       id: obtenerIdServidor(detalle),
 
+      // ---------------------------------------------------------
+      // MATRIZ
+      // ---------------------------------------------------------
       matrizIpercId: detalle.matrizIdServidor!,
 
       item: detalle.item,
 
       tarea: detalle.tarea.trim(),
 
-      peligroId: _requerirId(detalle.peligroId, 'peligro'),
+      // ---------------------------------------------------------
+      // PELIGRO
+      // ---------------------------------------------------------
+      peligroId: _requerirIdTexto(detalle.peligroId, 'peligro'),
 
-      consecuenciaId: _requerirId(detalle.consecuenciaId, 'consecuencia'),
+      consecuenciaId: _requerirIdTexto(detalle.consecuenciaId, 'consecuencia'),
 
       descripcionPeligro: _textoOpcional(detalle.peligroDescripcion),
 
-      probabilidadInicialId: _validarEscala(
-        detalle.frecuenciaInicial,
+      // ---------------------------------------------------------
+      // EVALUACIÓN INICIAL
+      // ---------------------------------------------------------
+      probabilidadInicialId: _requerirIdCatalogo(
+        detalle.probabilidadInicialId,
         'probabilidad inicial',
       ),
 
-      severidadInicialId: _validarEscala(
-        detalle.severidadInicial,
+      severidadInicialId: _requerirIdCatalogo(
+        detalle.severidadInicialId,
         'severidad inicial',
       ),
 
       observacionesEvaluacionInicial: _textoOpcional(detalle.observaciones),
 
-      probabilidadResidualId: detalle.frecuenciaResidual == null
-          ? null
-          : _validarEscala(
-              detalle.frecuenciaResidual!,
+      // ---------------------------------------------------------
+      // EVALUACIÓN RESIDUAL
+      // ---------------------------------------------------------
+      probabilidadResidualId: detalle.tieneEvaluacionResidual
+          ? _requerirIdCatalogo(
+              detalle.probabilidadResidualId,
               'probabilidad residual',
-            ),
+            )
+          : null,
 
-      severidadResidualId: detalle.severidadResidual == null
-          ? null
-          : _validarEscala(detalle.severidadResidual!, 'severidad residual'),
+      severidadResidualId: detalle.tieneEvaluacionResidual
+          ? _requerirIdCatalogo(
+              detalle.severidadResidualId,
+              'severidad residual',
+            )
+          : null,
 
       observacionesEvaluacionResidual: null,
 
+      // ---------------------------------------------------------
+      // CONTROLES
+      // ---------------------------------------------------------
       controlIds: _convertirListaIds(detalle.controlIds, nombre: 'control'),
 
+      // ---------------------------------------------------------
+      // EPP
+      // ---------------------------------------------------------
       equipoProteccionIds: _convertirListaIds(
         detalle.equipoProteccionIds,
         nombre: 'equipo de protección',
       ),
 
-      responsableImplementacionId: _idOpcional(
+      // ---------------------------------------------------------
+      // IMPLEMENTACIÓN
+      // ---------------------------------------------------------
+      responsableImplementacionId: _idOpcionalTexto(
         detalle.responsableImplementacionId,
         nombre: 'responsable de implementación',
       ),
@@ -146,30 +226,50 @@ abstract final class DetalleIpercSyncMapper {
     );
   }
 
-  /// Obtiene el ID que el backend asignó al detalle.
+  // =============================================================
+  // OBTENER ID SERVIDOR
+  // =============================================================
+
   static int obtenerIdServidor(DetalleIpercLocalModel detalle) {
-    return _requerirId(detalle.idServidor, 'detalle IPERC del servidor');
+    return _requerirIdTexto(detalle.idServidor, 'detalle IPERC del servidor');
   }
 
-  /// Indica si aún no existe en el backend.
+  // =============================================================
+  // ¿REQUIERE CREACIÓN?
+  // =============================================================
+
   static bool requiereCreacion(DetalleIpercLocalModel detalle) {
-    final String id = detalle.idServidor?.trim() ?? '';
+    final String texto = detalle.idServidor?.trim() ?? '';
 
-    final int? valor = int.tryParse(id);
+    final int? id = int.tryParse(texto);
 
-    return id.isEmpty || valor == null || valor <= 0;
+    return texto.isEmpty || id == null || id <= 0;
   }
 
-  /// Indica si debe cerrarse/eliminarse lógicamente.
+  // =============================================================
+  // ¿REQUIERE ELIMINACIÓN?
+  // =============================================================
+
   static bool requiereEliminacion(DetalleIpercLocalModel detalle) {
     return detalle.eliminado;
   }
 
-  /// Valida los datos mínimos para sincronizar.
+  // =============================================================
+  // VALIDACIÓN GENERAL
+  // =============================================================
+
   static void _validarDetalleParaSincronizar(DetalleIpercLocalModel detalle) {
+    // -----------------------------------------------------------
+    // ID LOCAL
+    // -----------------------------------------------------------
+
     if (detalle.idLocal.trim().isEmpty) {
       throw const FormatException('El detalle no tiene identificador local.');
     }
+
+    // -----------------------------------------------------------
+    // MATRIZ
+    // -----------------------------------------------------------
 
     final int? matrizId = detalle.matrizIdServidor;
 
@@ -179,21 +279,69 @@ abstract final class DetalleIpercSyncMapper {
       );
     }
 
+    // -----------------------------------------------------------
+    // ITEM
+    // -----------------------------------------------------------
+
     if (detalle.item <= 0) {
       throw const FormatException('El número de ítem debe ser mayor que cero.');
     }
+
+    // -----------------------------------------------------------
+    // TAREA
+    // -----------------------------------------------------------
 
     if (detalle.tarea.trim().isEmpty) {
       throw const FormatException('La tarea es obligatoria para sincronizar.');
     }
 
-    _requerirId(detalle.peligroId, 'peligro');
+    // -----------------------------------------------------------
+    // PELIGRO / CONSECUENCIA
+    // -----------------------------------------------------------
 
-    _requerirId(detalle.consecuenciaId, 'consecuencia');
+    _requerirIdTexto(detalle.peligroId, 'peligro');
+
+    _requerirIdTexto(detalle.consecuenciaId, 'consecuencia');
+
+    // -----------------------------------------------------------
+    // VALIDAR VALORES 1..5
+    // -----------------------------------------------------------
+    //
+    // Aunque ya no los enviamos como IDs,
+    // seguimos validando los valores de la matriz local.
 
     _validarEscala(detalle.frecuenciaInicial, 'probabilidad inicial');
 
     _validarEscala(detalle.severidadInicial, 'severidad inicial');
+
+    // -----------------------------------------------------------
+    // VALIDAR IDs REALES INICIALES
+    // -----------------------------------------------------------
+
+    _requerirIdCatalogo(detalle.probabilidadInicialId, 'probabilidad inicial');
+
+    _requerirIdCatalogo(detalle.severidadInicialId, 'severidad inicial');
+
+    // -----------------------------------------------------------
+    // VALIDAR CÁLCULO INICIAL
+    // -----------------------------------------------------------
+
+    final int calculadoInicial =
+        detalle.frecuenciaInicial * detalle.severidadInicial;
+
+    if (detalle.valorRiesgoInicial != calculadoInicial) {
+      throw FormatException(
+        'El riesgo inicial almacenado no coincide con '
+        'el cálculo esperado: '
+        '${detalle.frecuenciaInicial} x '
+        '${detalle.severidadInicial} = '
+        '$calculadoInicial.',
+      );
+    }
+
+    // -----------------------------------------------------------
+    // EVALUACIÓN RESIDUAL
+    // -----------------------------------------------------------
 
     final bool tieneProbabilidadResidual = detalle.frecuenciaResidual != null;
 
@@ -205,16 +353,51 @@ abstract final class DetalleIpercSyncMapper {
       );
     }
 
-    if (detalle.frecuenciaResidual != null) {
-      _validarEscala(detalle.frecuenciaResidual!, 'probabilidad residual');
-    }
+    if (detalle.tieneEvaluacionResidual) {
+      // ---------------------------------------------------------
+      // VALIDAR VALORES RESIDUALES 1..5
+      // ---------------------------------------------------------
 
-    if (detalle.severidadResidual != null) {
+      _validarEscala(detalle.frecuenciaResidual!, 'probabilidad residual');
+
       _validarEscala(detalle.severidadResidual!, 'severidad residual');
+
+      // ---------------------------------------------------------
+      // VALIDAR IDs REALES RESIDUALES
+      // ---------------------------------------------------------
+
+      _requerirIdCatalogo(
+        detalle.probabilidadResidualId,
+        'probabilidad residual',
+      );
+
+      _requerirIdCatalogo(detalle.severidadResidualId, 'severidad residual');
+
+      // ---------------------------------------------------------
+      // VALIDAR CÁLCULO RESIDUAL
+      // ---------------------------------------------------------
+
+      final int calculadoResidual =
+          detalle.frecuenciaResidual! * detalle.severidadResidual!;
+
+      final int? guardadoResidual = detalle.valorRiesgoResidual;
+
+      if (guardadoResidual != null && guardadoResidual != calculadoResidual) {
+        throw FormatException(
+          'El riesgo residual almacenado no coincide con '
+          'el cálculo esperado: '
+          '${detalle.frecuenciaResidual} x '
+          '${detalle.severidadResidual} = '
+          '$calculadoResidual.',
+        );
+      }
     }
   }
 
-  /// Valida valores de la escala IPERC 5x5.
+  // =============================================================
+  // VALIDAR ESCALA 1..5
+  // =============================================================
+
   static int _validarEscala(int valor, String nombre) {
     if (valor < 1 || valor > 5) {
       throw FormatException('La $nombre debe estar entre 1 y 5.');
@@ -223,7 +406,28 @@ abstract final class DetalleIpercSyncMapper {
     return valor;
   }
 
-  static int _requerirId(String? value, String nombre) {
+  // =============================================================
+  // ID DE CATÁLOGO
+  // =============================================================
+
+  /// Valida un ID numérico real de catálogo.
+  ///
+  /// A diferencia del valor 1..5, un ID puede ser:
+  ///
+  /// 1, 5, 17, 28, etc.
+  static int _requerirIdCatalogo(int? id, String nombre) {
+    if (id == null || id <= 0) {
+      throw FormatException('El identificador real de $nombre es obligatorio.');
+    }
+
+    return id;
+  }
+
+  // =============================================================
+  // ID TEXTO OBLIGATORIO
+  // =============================================================
+
+  static int _requerirIdTexto(String? value, String nombre) {
     final String texto = value?.trim() ?? '';
 
     if (texto.isEmpty) {
@@ -241,7 +445,11 @@ abstract final class DetalleIpercSyncMapper {
     return id;
   }
 
-  static int? _idOpcional(String? value, {required String nombre}) {
+  // =============================================================
+  // ID TEXTO OPCIONAL
+  // =============================================================
+
+  static int? _idOpcionalTexto(String? value, {required String nombre}) {
     final String texto = value?.trim() ?? '';
 
     if (texto.isEmpty) {
@@ -258,6 +466,10 @@ abstract final class DetalleIpercSyncMapper {
 
     return id;
   }
+
+  // =============================================================
+  // LISTA DE IDS
+  // =============================================================
 
   static List<int> _convertirListaIds(
     List<String> values, {
@@ -286,8 +498,10 @@ abstract final class DetalleIpercSyncMapper {
     return ids.toList(growable: false);
   }
 
-  /// Convierte el texto guardado en SQLite
-  /// al entero esperado por el backend.
+  // =============================================================
+  // ESTADO IMPLEMENTACIÓN
+  // =============================================================
+
   static int _convertirEstado(String? estado) {
     final String valor = estado?.trim().toUpperCase() ?? 'PENDIENTE';
 
@@ -303,6 +517,10 @@ abstract final class DetalleIpercSyncMapper {
       _ => EstadoImplementacionIperc.pendiente,
     };
   }
+
+  // =============================================================
+  // TEXTO OPCIONAL
+  // =============================================================
 
   static String? _textoOpcional(String? value) {
     final String texto = value?.trim() ?? '';

@@ -1,11 +1,34 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../core/network/network_info.dart';
+import '../../../data/datasources/local/catalogos_organizacion_local_datasource.dart';
 import '../../../data/datasources/remote/catalogos_remote_datasource.dart';
 import '../../../data/datasources/remote/matriz_iperc_remote_datasource.dart';
 import '../../../data/models/catalogo_item_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
+import '../../../data/repositories/matriz_iperc_offline_repository.dart';
+import '../../providers/sync_provider.dart';
 
+/// ===============================================================
+/// NUEVA MATRIZ IPERC
+/// ===============================================================
+///
+/// La pantalla trabaja de dos maneras:
+///
+/// ONLINE:
+/// - Obtiene catálogos desde el backend.
+/// - Guarda una copia de los catálogos en SQLite.
+/// - Intenta registrar la matriz directamente en el backend.
+///
+/// OFFLINE:
+/// - Obtiene los catálogos almacenados en SQLite.
+/// - Guarda la matriz en SQLite.
+/// - Agrega la matriz a la cola de sincronización.
+/// - Cuando vuelva internet, SyncProvider/SyncService la enviará
+///   al backend.
+/// ===============================================================
 class NuevaMatrizIpercScreen extends StatefulWidget {
   const NuevaMatrizIpercScreen({
     super.key,
@@ -19,6 +42,10 @@ class NuevaMatrizIpercScreen extends StatefulWidget {
 }
 
 class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
+  // =============================================================
+  // FORMULARIO
+  // =============================================================
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   final TextEditingController _codigoController = TextEditingController();
@@ -27,11 +54,27 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
   final TextEditingController _objetivoController = TextEditingController();
 
-  final CatalogosRemoteDatasource _catalogosDatasource =
+  // =============================================================
+  // DATASOURCES / REPOSITORIES
+  // =============================================================
+
+  final CatalogosRemoteDatasource _catalogosRemote =
       CatalogosRemoteDatasource();
 
-  final MatrizIpercRemoteDatasource _matrizDatasource =
+  final CatalogosOrganizacionLocalDatasource _catalogosLocal =
+      CatalogosOrganizacionLocalDatasource();
+
+  final MatrizIpercRemoteDatasource _matrizRemote =
       MatrizIpercRemoteDatasource();
+
+  final MatrizIpercOfflineRepository _matrizOfflineRepository =
+      MatrizIpercOfflineRepository();
+
+  final NetworkInfo _networkInfo = NetworkInfo.instance;
+
+  // =============================================================
+  // CATÁLOGOS
+  // =============================================================
 
   List<CatalogoItemModel> _instituciones = <CatalogoItemModel>[];
 
@@ -45,6 +88,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
   List<CatalogoItemModel> _puestosTrabajo = <CatalogoItemModel>[];
 
+  // =============================================================
+  // SELECCIONES
+  // =============================================================
+
   CatalogoItemModel? _institucionSeleccionada;
   CatalogoItemModel? _sedeSeleccionada;
   CatalogoItemModel? _areaSeleccionada;
@@ -52,33 +99,57 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   CatalogoItemModel? _actividadSeleccionada;
   CatalogoItemModel? _puestoTrabajoSeleccionado;
 
+  // =============================================================
+  // ESTADOS
+  // =============================================================
+
   bool _cargandoInstituciones = true;
   bool _cargandoSedes = false;
   bool _cargandoAreas = false;
   bool _cargandoProcesos = false;
   bool _cargandoActividades = false;
   bool _cargandoPuestosTrabajo = false;
+
   bool _guardando = false;
 
+  /// Indica que la pantalla está utilizando la copia SQLite.
+  bool _usandoCatalogosLocales = false;
+
   String? _mensajeErrorCarga;
+
+  // =============================================================
+  // INIT
+  // =============================================================
 
   @override
   void initState() {
     super.initState();
+
     _codigoController.text = _generarCodigoMatriz();
+
     _cargarInstituciones();
   }
+
+  // =============================================================
+  // DISPOSE
+  // =============================================================
 
   @override
   void dispose() {
     _codigoController.dispose();
     _nombreController.dispose();
     _objetivoController.dispose();
+
     super.dispose();
   }
 
+  // =============================================================
+  // GENERAR CÓDIGO
+  // =============================================================
+
   String _generarCodigoMatriz() {
     final int anio = DateTime.now().year;
+
     int mayorCorrelativo = 0;
 
     for (final MatrizIpercModel matriz in widget.matricesRegistradas) {
@@ -97,46 +168,94 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
     final int siguiente = mayorCorrelativo + 1;
 
-    return 'IPERC-$anio-${siguiente.toString().padLeft(4, '0')}';
+    return 'IPERC-$anio-'
+        '${siguiente.toString().padLeft(4, '0')}';
   }
 
+  // =============================================================
+  // CARGAR INSTITUCIONES
+  // =============================================================
+
   Future<void> _cargarInstituciones() async {
-    setState(() {
-      _cargandoInstituciones = true;
-      _mensajeErrorCarga = null;
+    if (mounted) {
+      setState(() {
+        _cargandoInstituciones = true;
+        _mensajeErrorCarga = null;
 
-      _instituciones = <CatalogoItemModel>[];
-      _areas = <CatalogoItemModel>[];
-      _procesos = <CatalogoItemModel>[];
-      _actividades = <CatalogoItemModel>[];
+        _instituciones = <CatalogoItemModel>[];
+        _sedes = <CatalogoItemModel>[];
+        _areas = <CatalogoItemModel>[];
+        _puestosTrabajo = <CatalogoItemModel>[];
+        _procesos = <CatalogoItemModel>[];
+        _actividades = <CatalogoItemModel>[];
 
-      _institucionSeleccionada = null;
-      _areaSeleccionada = null;
-      _procesoSeleccionado = null;
-      _actividadSeleccionada = null;
-    });
+        _institucionSeleccionada = null;
+        _sedeSeleccionada = null;
+        _areaSeleccionada = null;
+        _puestoTrabajoSeleccionado = null;
+        _procesoSeleccionado = null;
+        _actividadSeleccionada = null;
+      });
+    }
 
     try {
-      final List<CatalogoItemModel> instituciones = await _catalogosDatasource
+      final bool conectado = await _networkInfo.isConnected;
+
+      // ---------------------------------------------------------
+      // ONLINE
+      // ---------------------------------------------------------
+
+      if (conectado) {
+        try {
+          final List<CatalogoItemModel> remotas = await _catalogosRemote
+              .obtenerInstituciones();
+
+          // Guardamos copia para uso offline.
+          await _catalogosLocal.guardarInstituciones(remotas);
+
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _instituciones = remotas;
+            _usandoCatalogosLocales = false;
+          });
+
+          return;
+        } on DioException {
+          // Si la API no responde, intentaremos SQLite.
+        } catch (_) {
+          // También intentamos SQLite.
+        }
+      }
+
+      // ---------------------------------------------------------
+      // OFFLINE / FALLBACK
+      // ---------------------------------------------------------
+
+      final List<CatalogoItemModel> locales = await _catalogosLocal
           .obtenerInstituciones();
 
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _instituciones = instituciones;
-      });
-    } on DioException catch (error) {
-      if (!mounted) {
+      if (locales.isEmpty) {
+        setState(() {
+          _mensajeErrorCarga =
+              'No hay conexión con el servidor y todavía no existen '
+              'instituciones almacenadas en el dispositivo.\n\n'
+              'Conéctese una vez a internet para descargar los '
+              'catálogos necesarios.';
+        });
+
         return;
       }
 
       setState(() {
-        _mensajeErrorCarga = _obtenerMensajeDio(
-          error,
-          mensajePredeterminado: 'No se pudieron cargar las instituciones.',
-        );
+        _instituciones = locales;
+        _usandoCatalogosLocales = true;
       });
     } catch (error) {
       if (!mounted) {
@@ -144,7 +263,8 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       }
 
       setState(() {
-        _mensajeErrorCarga = 'Error al cargar instituciones: $error';
+        _mensajeErrorCarga =
+            'No se pudieron cargar las instituciones locales: $error';
       });
     } finally {
       if (mounted) {
@@ -155,9 +275,14 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     }
   }
 
+  // =============================================================
+  // SELECCIONAR INSTITUCIÓN
+  // =============================================================
+
   Future<void> _seleccionarInstitucion(CatalogoItemModel? institucion) async {
     setState(() {
       _institucionSeleccionada = institucion;
+
       _sedeSeleccionada = null;
       _areaSeleccionada = null;
       _puestoTrabajoSeleccionado = null;
@@ -181,10 +306,50 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     });
 
     try {
-      final List<List<CatalogoItemModel>> resultados =
+      final bool conectado = await _networkInfo.isConnected;
+
+      if (conectado) {
+        try {
+          final List<List<CatalogoItemModel>> resultados =
+              await Future.wait(<Future<List<CatalogoItemModel>>>[
+                _catalogosRemote.obtenerSedes(institucionId: institucion.id),
+                _catalogosRemote.obtenerAreas(institucionId: institucion.id),
+              ]);
+
+          final List<CatalogoItemModel> sedes = resultados[0];
+          final List<CatalogoItemModel> areas = resultados[1];
+
+          await Future.wait<void>(<Future<void>>[
+            _catalogosLocal.guardarSedes(sedes, institucionId: institucion.id),
+            _catalogosLocal.guardarAreas(areas, institucionId: institucion.id),
+          ]);
+
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _sedes = sedes;
+            _areas = areas;
+            _usandoCatalogosLocales = false;
+          });
+
+          return;
+        } on DioException {
+          // Pasar a SQLite.
+        } catch (_) {
+          // Pasar a SQLite.
+        }
+      }
+
+      // ---------------------------------------------------------
+      // SQLITE
+      // ---------------------------------------------------------
+
+      final List<List<CatalogoItemModel>> locales =
           await Future.wait(<Future<List<CatalogoItemModel>>>[
-            _catalogosDatasource.obtenerSedes(institucionId: institucion.id),
-            _catalogosDatasource.obtenerAreas(institucionId: institucion.id),
+            _catalogosLocal.obtenerSedes(institucionId: institucion.id),
+            _catalogosLocal.obtenerAreas(institucionId: institucion.id),
           ]);
 
       if (!mounted) {
@@ -192,35 +357,24 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       }
 
       setState(() {
-        _sedes = resultados[0];
-        _areas = resultados[1];
+        _sedes = locales[0];
+        _areas = locales[1];
+        _usandoCatalogosLocales = true;
       });
 
       if (_sedes.isEmpty) {
         _mostrarMensaje(
-          'La institución no tiene sedes registradas.',
+          'No existen sedes almacenadas para esta institución.',
           esError: true,
         );
       }
 
       if (_areas.isEmpty) {
         _mostrarMensaje(
-          'La institución no tiene áreas registradas.',
+          'No existen áreas almacenadas para esta institución.',
           esError: true,
         );
       }
-    } on DioException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _mostrarMensaje(
-        _obtenerMensajeDio(
-          error,
-          mensajePredeterminado: 'No se pudieron cargar sedes y áreas.',
-        ),
-        esError: true,
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -231,9 +385,14 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     }
   }
 
+  // =============================================================
+  // SELECCIONAR ÁREA
+  // =============================================================
+
   Future<void> _seleccionarArea(CatalogoItemModel? area) async {
     setState(() {
       _areaSeleccionada = area;
+
       _puestoTrabajoSeleccionado = null;
       _procesoSeleccionado = null;
       _actividadSeleccionada = null;
@@ -253,10 +412,46 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     });
 
     try {
-      final List<List<CatalogoItemModel>> resultados =
+      final bool conectado = await _networkInfo.isConnected;
+
+      if (conectado) {
+        try {
+          final List<List<CatalogoItemModel>> resultados =
+              await Future.wait(<Future<List<CatalogoItemModel>>>[
+                _catalogosRemote.obtenerPuestosTrabajo(areaId: area.id),
+                _catalogosRemote.obtenerProcesos(areaId: area.id),
+              ]);
+
+          final List<CatalogoItemModel> puestos = resultados[0];
+          final List<CatalogoItemModel> procesos = resultados[1];
+
+          await Future.wait<void>(<Future<void>>[
+            _catalogosLocal.guardarPuestosTrabajo(puestos, areaId: area.id),
+            _catalogosLocal.guardarProcesos(procesos, areaId: area.id),
+          ]);
+
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _puestosTrabajo = puestos;
+            _procesos = procesos;
+            _usandoCatalogosLocales = false;
+          });
+
+          return;
+        } on DioException {
+          // Pasamos a SQLite.
+        } catch (_) {
+          // Pasamos a SQLite.
+        }
+      }
+
+      final List<List<CatalogoItemModel>> locales =
           await Future.wait(<Future<List<CatalogoItemModel>>>[
-            _catalogosDatasource.obtenerPuestosTrabajo(areaId: area.id),
-            _catalogosDatasource.obtenerProcesos(areaId: area.id),
+            _catalogosLocal.obtenerPuestosTrabajo(areaId: area.id),
+            _catalogosLocal.obtenerProcesos(areaId: area.id),
           ]);
 
       if (!mounted) {
@@ -264,32 +459,24 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       }
 
       setState(() {
-        _puestosTrabajo = resultados[0];
-        _procesos = resultados[1];
+        _puestosTrabajo = locales[0];
+        _procesos = locales[1];
+        _usandoCatalogosLocales = true;
       });
 
       if (_puestosTrabajo.isEmpty) {
         _mostrarMensaje(
-          'No existen puestos de trabajo para el área.',
+          'No existen puestos de trabajo almacenados para esta área.',
           esError: true,
         );
       }
 
       if (_procesos.isEmpty) {
-        _mostrarMensaje('No existen procesos para el área.', esError: true);
+        _mostrarMensaje(
+          'No existen procesos almacenados para esta área.',
+          esError: true,
+        );
       }
-    } on DioException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _mostrarMensaje(
-        _obtenerMensajeDio(
-          error,
-          mensajePredeterminado: 'No se pudieron cargar los datos del área.',
-        ),
-        esError: true,
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -300,10 +487,16 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     }
   }
 
+  // =============================================================
+  // SELECCIONAR PROCESO
+  // =============================================================
+
   Future<void> _seleccionarProceso(CatalogoItemModel? proceso) async {
     setState(() {
       _procesoSeleccionado = proceso;
+
       _actividadSeleccionada = null;
+
       _actividades = <CatalogoItemModel>[];
     });
 
@@ -316,38 +509,53 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     });
 
     try {
-      final List<CatalogoItemModel> actividades = await _catalogosDatasource
-          .obtenerActividades();
+      final bool conectado = await _networkInfo.isConnected;
+
+      if (conectado) {
+        try {
+          final List<CatalogoItemModel> actividades = await _catalogosRemote
+              .obtenerActividades();
+
+          await _catalogosLocal.guardarActividades(
+            actividades,
+            procesoId: proceso.id,
+          );
+
+          if (!mounted) {
+            return;
+          }
+
+          setState(() {
+            _actividades = actividades;
+            _usandoCatalogosLocales = false;
+          });
+
+          return;
+        } on DioException {
+          // Usar SQLite.
+        } catch (_) {
+          // Usar SQLite.
+        }
+      }
+
+      final List<CatalogoItemModel> locales = await _catalogosLocal
+          .obtenerActividades(procesoId: proceso.id);
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _actividades = actividades;
+        _actividades = locales;
+        _usandoCatalogosLocales = true;
       });
 
-      if (actividades.isEmpty) {
-        _mostrarMensaje('No existen actividades registradas.', esError: true);
+      if (_actividades.isEmpty) {
+        _mostrarMensaje(
+          'No existen actividades almacenadas para este proceso.',
+          esError: true,
+        );
       }
-    } on DioException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _mostrarMensaje(
-        _obtenerMensajeDio(
-          error,
-          mensajePredeterminado: 'No se pudieron cargar las actividades.',
-        ),
-        esError: true,
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _mostrarMensaje('Error al cargar actividades: $error', esError: true);
     } finally {
       if (mounted) {
         setState(() {
@@ -356,6 +564,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       }
     }
   }
+
+  // =============================================================
+  // GUARDAR
+  // =============================================================
 
   Future<void> _guardar() async {
     FocusScope.of(context).unfocus();
@@ -371,33 +583,40 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     });
 
     try {
-      final Map<String, dynamic> datos = <String, dynamic>{
-        'codigo': _codigoController.text.trim(),
-        'nombre': _nombreController.text.trim(),
-        'objetivo': _objetivoController.text.trim(),
-        'institucionId': _institucionSeleccionada!.id,
-        'sedeId': _sedeSeleccionada!.id,
-        'areaId': _areaSeleccionada!.id,
-        'puestoTrabajoId': _puestoTrabajoSeleccionado!.id,
-        'procesoId': _procesoSeleccionado!.id,
-        'actividadId': _actividadSeleccionada!.id,
-        'usuarioRegistroId': 1,
-      };
+      final bool conectado = await _networkInfo.isConnected;
 
-      debugPrint('DATOS MATRIZ IPERC: $datos');
+      // =========================================================
+      // INTENTAR ONLINE
+      // =========================================================
 
-      final String idServidor = await _matrizDatasource.create(datos);
+      if (conectado) {
+        try {
+          await _guardarOnline();
 
-      if (!mounted) {
-        return;
+          return;
+        } on DioException catch (error) {
+          // -----------------------------------------------------
+          // Si es un error real de conexión, se guarda offline.
+          // Si el backend respondió 400/404/500, no debemos
+          // esconder el error almacenando silenciosamente.
+          // -----------------------------------------------------
+
+          if (!_esErrorConexion(error)) {
+            rethrow;
+          }
+
+          debugPrint(
+            'Servidor no disponible. '
+            'Se guardará la matriz en SQLite.',
+          );
+        }
       }
 
-      _mostrarMensaje(
-        'Matriz registrada correctamente. '
-        'ID: $idServidor',
-      );
+      // =========================================================
+      // OFFLINE
+      // =========================================================
 
-      Navigator.of(context).pop(true);
+      await _guardarOffline();
     } on DioException catch (error) {
       if (!mounted) {
         return;
@@ -415,11 +634,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         return;
       }
 
-      _mostrarMensaje(
-        'La respuesta del servidor no es válida: '
-        '${error.message}',
-        esError: true,
-      );
+      _mostrarMensaje(error.message, esError: true);
     } on ArgumentError catch (error) {
       if (!mounted) {
         return;
@@ -434,7 +649,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         return;
       }
 
-      _mostrarMensaje('Error inesperado: $error', esError: true);
+      _mostrarMensaje(
+        'No se pudo guardar la matriz IPERC: $error',
+        esError: true,
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -444,14 +662,119 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     }
   }
 
+  // =============================================================
+  // GUARDAR ONLINE
+  // =============================================================
+
+  Future<void> _guardarOnline() async {
+    final Map<String, dynamic> datos = <String, dynamic>{
+      'codigo': _codigoController.text.trim(),
+      'nombre': _nombreController.text.trim(),
+      'objetivo': _objetivoController.text.trim(),
+      'institucionId': _institucionSeleccionada!.id,
+      'sedeId': _sedeSeleccionada!.id,
+      'areaId': _areaSeleccionada!.id,
+      'puestoTrabajoId': _puestoTrabajoSeleccionado!.id,
+      'procesoId': _procesoSeleccionado!.id,
+      'actividadId': _actividadSeleccionada!.id,
+      'usuarioRegistroId': 1,
+    };
+
+    debugPrint('DATOS MATRIZ IPERC ONLINE: $datos');
+
+    final String idServidor = await _matrizRemote.create(datos);
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje('Matriz registrada correctamente. ID: $idServidor');
+
+    Navigator.of(context).pop(true);
+  }
+
+  // =============================================================
+  // GUARDAR OFFLINE
+  // =============================================================
+
+  Future<void> _guardarOffline() async {
+    final CatalogoItemModel institucion = _institucionSeleccionada!;
+
+    final CatalogoItemModel sede = _sedeSeleccionada!;
+
+    final CatalogoItemModel area = _areaSeleccionada!;
+
+    final CatalogoItemModel puesto = _puestoTrabajoSeleccionado!;
+
+    final CatalogoItemModel proceso = _procesoSeleccionado!;
+
+    final CatalogoItemModel actividad = _actividadSeleccionada!;
+
+    final matriz = await _matrizOfflineRepository.createOffline(
+      institucionId: institucion.id.toString(),
+      sedeId: sede.id.toString(),
+      areaId: area.id.toString(),
+      puestoTrabajoId: puesto.id.toString(),
+      procesoId: proceso.id.toString(),
+      actividadId: actividad.id.toString(),
+      codigo: _codigoController.text.trim(),
+      nombre: _nombreController.text.trim(),
+
+      // En el modelo local se mantiene como descripción.
+      // SyncService lo transforma posteriormente a "objetivo".
+      descripcion: _objetivoController.text.trim(),
+
+      fechaEvaluacion: DateTime.now().toUtc(),
+    );
+
+    debugPrint('MATRIZ IPERC OFFLINE: ${matriz.idLocal}');
+
+    // -----------------------------------------------------------
+    // ACTUALIZAR CONTADOR GLOBAL DE PENDIENTES
+    // -----------------------------------------------------------
+
+    if (mounted) {
+      try {
+        await context.read<SyncProvider>().notifyLocalChange();
+      } catch (_) {
+        // La matriz ya fue guardada correctamente.
+        // Si SyncProvider no estuviera disponible en este contexto,
+        // no se debe cancelar el guardado local.
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje(
+      'Matriz guardada en el dispositivo. '
+      'Se sincronizará automáticamente cuando vuelva la conexión.',
+    );
+
+    Navigator.of(context).pop(true);
+  }
+
+  // =============================================================
+  // IDENTIFICAR ERROR DE CONEXIÓN
+  // =============================================================
+
+  bool _esErrorConexion(DioException error) {
+    return error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout;
+  }
+
+  // =============================================================
+  // MENSAJE DIO
+  // =============================================================
+
   String _obtenerMensajeDio(
     DioException error, {
     required String mensajePredeterminado,
   }) {
-    if (error.type == DioExceptionType.connectionError ||
-        error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.sendTimeout) {
+    if (_esErrorConexion(error)) {
       return 'No se pudo conectar con el servidor.';
     }
 
@@ -505,6 +828,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     return mensaje;
   }
 
+  // =============================================================
+  // MENSAJES
+  // =============================================================
+
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
     if (!mounted) {
       return;
@@ -521,6 +848,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       );
   }
 
+  // =============================================================
+  // BUILD
+  // =============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -528,6 +859,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       body: _construirContenido(),
     );
   }
+
+  // =============================================================
+  // CONTENIDO
+  // =============================================================
 
   Widget _construirContenido() {
     if (_cargandoInstituciones) {
@@ -566,19 +901,33 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
           children: <Widget>[
+            // ===================================================
+            // INDICADOR OFFLINE
+            // ===================================================
+            if (_usandoCatalogosLocales) ...<Widget>[
+              _construirAvisoOffline(),
+              const SizedBox(height: 20),
+            ],
+
             Text(
               'Información general',
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
+
             const SizedBox(height: 12),
+
             const Text(
               'Registre los datos principales. '
               'El código se generará automáticamente.',
             ),
+
             const SizedBox(height: 26),
 
+            // ===================================================
+            // CÓDIGO
+            // ===================================================
             TextFormField(
               controller: _codigoController,
               readOnly: true,
@@ -603,6 +952,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // NOMBRE
+            // ===================================================
             TextFormField(
               controller: _nombreController,
               enabled: !_guardando,
@@ -627,6 +979,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // OBJETIVO
+            // ===================================================
             TextFormField(
               controller: _objetivoController,
               enabled: !_guardando,
@@ -658,6 +1013,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // INSTITUCIÓN
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Institución',
               icono: Icons.apartment_outlined,
@@ -670,6 +1028,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // SEDE
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Sede',
               icono: Icons.location_city_outlined,
@@ -686,6 +1047,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // ÁREA
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Área',
               icono: Icons.domain_outlined,
@@ -698,6 +1062,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // PUESTO
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Puesto de trabajo',
               icono: Icons.badge_outlined,
@@ -714,6 +1081,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // PROCESO
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Proceso',
               icono: Icons.account_tree_outlined,
@@ -726,6 +1096,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 18),
 
+            // ===================================================
+            // ACTIVIDAD
+            // ===================================================
             _construirDropdown(
               etiqueta: 'Actividad',
               icono: Icons.task_alt_outlined,
@@ -742,6 +1115,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
             const SizedBox(height: 34),
 
+            // ===================================================
+            // GUARDAR
+            // ===================================================
             SizedBox(
               height: 56,
               child: FilledButton.icon(
@@ -768,6 +1144,39 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     );
   }
 
+  // =============================================================
+  // AVISO OFFLINE
+  // =============================================================
+
+  Widget _construirAvisoOffline() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(Icons.offline_bolt_outlined, color: Colors.orange.shade800),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Modo offline: se están utilizando los '
+              'catálogos almacenados en el dispositivo. '
+              'La matriz quedará pendiente de sincronización.',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =============================================================
+  // DROPDOWN GENÉRICO
+  // =============================================================
+
   Widget _construirDropdown({
     required String etiqueta,
     required IconData icono,
@@ -777,8 +1186,14 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     required ValueChanged<CatalogoItemModel?> onChanged,
     required String mensajeValidacion,
   }) {
+    final CatalogoItemModel? valorValido =
+        valor != null &&
+            elementos.any((CatalogoItemModel item) => item.id == valor.id)
+        ? elementos.firstWhere((CatalogoItemModel item) => item.id == valor.id)
+        : null;
+
     return DropdownButtonFormField<CatalogoItemModel>(
-      initialValue: valor,
+      initialValue: valorValido,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: etiqueta,
