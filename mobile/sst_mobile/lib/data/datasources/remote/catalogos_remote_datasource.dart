@@ -46,8 +46,13 @@ class CatalogosRemoteDatasource {
     );
   }
 
-  Future<List<CatalogoItemModel>> obtenerActividades() {
-    return _obtenerCatalogo(ApiConfig.actividadesEndpoint);
+  Future<List<CatalogoItemModel>> obtenerActividades({int? procesoId}) {
+    return _obtenerCatalogo(
+      ApiConfig.actividadesEndpoint,
+      queryParameters: procesoId == null
+          ? null
+          : <String, dynamic>{'procesoId': procesoId},
+    );
   }
 
   Future<List<CatalogoItemModel>> _obtenerCatalogo(

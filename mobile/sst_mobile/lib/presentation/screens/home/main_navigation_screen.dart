@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/security/role_permissions.dart';
 import '../../providers/dashboard_provider.dart';
 import '../actividades/actividades_screen.dart';
 import '../areas/areas_screen.dart';
@@ -10,10 +11,11 @@ import '../consecuencias/consecuencias_screen.dart';
 import '../controles/controles_screen.dart';
 import '../equipos_proteccion/equipos_proteccion_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
-import '../matriz_riesgo/matriz_riesgo_screen.dart';
 import '../mapas_riesgo/mapas_riesgo_screen.dart';
 import '../mapas_riesgo/zonas_identificadas_screen.dart';
+import '../matriz_riesgo/matriz_riesgo_screen.dart';
 import '../peligros/peligros_screen.dart';
+import '../perfil/perfil_screen.dart';
 import '../procesos/procesos_screen.dart';
 import '../puestos_trabajo/puestos_trabajo_screen.dart';
 import '../reportes/reportes_screen.dart';
@@ -31,10 +33,7 @@ class MainNavigationScreen extends StatefulWidget {
     super.key,
   });
 
-  /// Nombre visible del usuario autenticado.
   final String nombreUsuario;
-
-  /// Rol del usuario autenticado.
   final String rol;
 
   @override
@@ -44,17 +43,13 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  /// Índice seleccionado en la barra inferior.
   int _indiceActual = 0;
 
-  /// Pantallas principales de la navegación.
   late final List<Widget> _pantallas = <Widget>[
     ChangeNotifierProvider<DashboardProvider>(
       create: (_) {
         final DashboardProvider provider = DashboardProvider();
-
         Future<void>.microtask(provider.cargarResumen);
-
         return provider;
       },
       child: InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
@@ -62,10 +57,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     const IpercView(),
     const SstView(),
     const MapasView(),
-    const MasView(),
+    MasView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
   ];
 
-  /// Títulos del AppBar según la sección seleccionada.
   final List<String> _titulos = <String>[
     'Inicio',
     'Gestión IPERC',
@@ -121,7 +115,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-/// Vista inicial de la aplicación.
+/// Vista inicial.
 class InicioView extends StatelessWidget {
   const InicioView({required this.nombreUsuario, required this.rol, super.key});
 
@@ -167,14 +161,11 @@ class InicioView extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
-
               if (provider.cargando) ...<Widget>[
                 const LinearProgressIndicator(),
                 const SizedBox(height: 16),
               ],
-
               if (provider.tieneError) ...<Widget>[
                 _DashboardError(
                   mensaje: provider.error!,
@@ -182,7 +173,6 @@ class InicioView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
               ],
-
               ResumenCard(
                 icono: Icons.assignment,
                 titulo: 'Matrices IPERC',
@@ -192,7 +182,6 @@ class InicioView extends StatelessWidget {
                     '${provider.cantidadMatrices} '
                     '${provider.cantidadMatrices == 1 ? 'matriz registrada' : 'matrices registradas'}',
               ),
-
               ResumenCard(
                 icono: Icons.warning_amber,
                 titulo: 'Riesgos críticos',
@@ -202,7 +191,6 @@ class InicioView extends StatelessWidget {
                     '${provider.cantidadRiesgosCriticos} '
                     '${provider.cantidadRiesgosCriticos == 1 ? 'riesgo crítico' : 'riesgos críticos'}',
               ),
-
               ResumenCard(
                 icono: Icons.fact_check,
                 titulo: 'Seguimientos',
@@ -212,7 +200,6 @@ class InicioView extends StatelessWidget {
                     '${provider.cantidadSeguimientosPendientes} '
                     '${provider.cantidadSeguimientosPendientes == 1 ? 'seguimiento pendiente' : 'seguimientos pendientes'}',
               ),
-
               ResumenCard(
                 icono: Icons.verified_outlined,
                 titulo: 'Seguimientos verificados',
@@ -222,7 +209,6 @@ class InicioView extends StatelessWidget {
                     '${provider.cantidadSeguimientosVerificados} '
                     '${provider.cantidadSeguimientosVerificados == 1 ? 'seguimiento verificado' : 'seguimientos verificados'}',
               ),
-
               const ResumenCard(
                 icono: Icons.sync,
                 titulo: 'Sincronización',
@@ -238,7 +224,6 @@ class InicioView extends StatelessWidget {
   }
 }
 
-/// Mensaje mostrado cuando no se puede cargar el resumen.
 class _DashboardError extends StatelessWidget {
   const _DashboardError({required this.mensaje, required this.onReintentar});
 
@@ -290,9 +275,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) {
-                  return const MatricesIpercScreen();
-                },
+                builder: (_) => const MatricesIpercScreen(),
               ),
             );
           },
@@ -306,9 +289,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) {
-                  return const MatrizRiesgoScreen();
-                },
+                builder: (_) => const MatrizRiesgoScreen(),
               ),
             );
           },
@@ -322,9 +303,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) {
-                  return const SeguimientosScreen();
-                },
+                builder: (_) => const SeguimientosScreen(),
               ),
             );
           },
@@ -334,7 +313,6 @@ class IpercView extends StatelessWidget {
   }
 }
 
-/// Tarjeta utilizada dentro del módulo IPERC.
 class _IpercModuloCard extends StatelessWidget {
   const _IpercModuloCard({
     required this.icono,
@@ -369,7 +347,7 @@ class _IpercModuloCard extends StatelessWidget {
   }
 }
 
-/// Vista que contiene los catálogos SST.
+/// Catálogos SST.
 class SstView extends StatelessWidget {
   const SstView({super.key});
 
@@ -382,127 +360,89 @@ class SstView extends StatelessWidget {
           titulo: 'Categorías de peligro',
           descripcion:
               'Administrar las categorías principales utilizadas para organizar los tipos de peligro.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const CategoriasPeligroScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const CategoriasPeligroScreen(),
+            ),
+          ),
         ),
         ModuloItem(
           icono: Icons.account_tree_outlined,
           titulo: 'Tipos de peligro',
           descripcion:
               'Administrar los tipos utilizados para clasificar los peligros SST.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const TiposPeligroScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const TiposPeligroScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.warning_amber_outlined,
           titulo: 'Peligros',
           descripcion:
               'Registrar fuentes, actos y situaciones que pueden causar daño.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const PeligrosScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const PeligrosScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.personal_injury_outlined,
           titulo: 'Consecuencias',
           descripcion:
               'Registrar los posibles daños o efectos producidos por cada peligro.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ConsecuenciasScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ConsecuenciasScreen(),
+            ),
+          ),
         ),
         ModuloItem(
           icono: Icons.account_tree_outlined,
           titulo: 'Clasificaciones de control',
           descripcion:
               'Administrar la jerarquía utilizada para organizar los controles SST.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ClasificacionesControlScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ClasificacionesControlScreen(),
+            ),
+          ),
         ),
         ModuloItem(
           icono: Icons.health_and_safety_outlined,
           titulo: 'Controles',
           descripcion:
               'Administrar medidas para eliminar o reducir los riesgos.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ControlesScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ControlesScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.category_outlined,
           titulo: 'Tipos de EPP',
           descripcion:
               'Administrar las categorías utilizadas para clasificar los equipos de protección personal.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const TiposEquipoProteccionScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const TiposEquipoProteccionScreen(),
+            ),
+          ),
         ),
         ModuloItem(
           icono: Icons.engineering_outlined,
           titulo: 'Equipos de protección',
           descripcion:
               'Gestionar los equipos de protección personal requeridos.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const EquiposProteccionScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const EquiposProteccionScreen(),
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-/// Vista principal del módulo de mapas de riesgo.
+/// Mapas de riesgo.
 class MapasView extends StatelessWidget {
   const MapasView({super.key});
 
@@ -515,39 +455,32 @@ class MapasView extends StatelessWidget {
           titulo: 'Mapas de riesgo',
           descripcion:
               'Consultar los peligros y niveles de riesgo registrados por matriz IPERC.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const MapasRiesgoScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const MapasRiesgoScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.location_on_outlined,
           titulo: 'Zonas identificadas',
           descripcion:
               'Consultar las áreas identificadas, su nivel máximo y cantidad de riesgos.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ZonasIdentificadasScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const ZonasIdentificadasScreen(),
+            ),
+          ),
         ),
       ],
     );
   }
 }
 
-/// Vista de módulos adicionales.
+/// Vista de opciones adicionales.
 class MasView extends StatelessWidget {
-  const MasView({super.key});
+  const MasView({required this.nombreUsuario, required this.rol, super.key});
+
+  final String nombreUsuario;
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
@@ -558,110 +491,78 @@ class MasView extends StatelessWidget {
           titulo: 'Áreas',
           descripcion:
               'Consultar las áreas y ambientes activos de la institución.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const AreasScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const AreasScreen())),
         ),
         ModuloItem(
           icono: Icons.account_tree_outlined,
           titulo: 'Procesos',
           descripcion: 'Gestionar los procesos pertenecientes a cada área.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ProcesosScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.task_alt,
           titulo: 'Actividades',
           descripcion: 'Registrar actividades y tareas que serán evaluadas.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ActividadesScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const ActividadesScreen()),
+          ),
         ),
         ModuloItem(
           icono: Icons.badge_outlined,
           titulo: 'Puestos de trabajo',
           descripcion: 'Administrar los puestos pertenecientes a cada área.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const PuestosTrabajoScreen();
-                },
-              ),
-            );
-          },
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const PuestosTrabajoScreen(),
+            ),
+          ),
         ),
+        if (RolePermissions.puedeAdministrarUsuarios(rol))
+          ModuloItem(
+            icono: Icons.manage_accounts_outlined,
+            titulo: 'Usuarios',
+            descripcion: 'Crear, editar, activar, desactivar y asignar roles.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const UsuariosScreen()),
+            ),
+          ),
+        if (RolePermissions.puedeAdministrarRoles(rol))
+          ModuloItem(
+            icono: Icons.admin_panel_settings_outlined,
+            titulo: 'Roles',
+            descripcion: 'Administrar roles y permisos generales del sistema.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const RolesScreen()),
+            ),
+          ),
+        if (RolePermissions.puedeVerReportes(rol))
+          ModuloItem(
+            icono: Icons.bar_chart,
+            titulo: 'Reportes',
+            descripcion:
+                'Consultar reportes de riesgos, controles y seguimientos.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ReportesScreen()),
+            ),
+          ),
 
+        // PERFIL REAL: ahora abre PerfilScreen.
         ModuloItem(
-          icono: Icons.people_alt_outlined,
-          titulo: 'Usuarios',
-          descripcion: 'Administrar usuarios, roles y acceso al sistema.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const UsuariosScreen();
-                },
-              ),
-            );
-          },
-        ),
-
-        ModuloItem(
-          icono: Icons.admin_panel_settings_outlined,
-          titulo: 'Roles',
-          descripcion:
-              'Administrar los roles y permisos generales del sistema.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const RolesScreen();
-                },
-              ),
-            );
-          },
-        ),
-        // Módulo Reportes conectado.
-        ModuloItem(
-          icono: Icons.bar_chart,
-          titulo: 'Reportes',
-          descripcion:
-              'Consultar reportes de riesgos, controles y seguimientos.',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) {
-                  return const ReportesScreen();
-                },
-              ),
-            );
-          },
-        ),
-
-        const ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',
           descripcion: 'Consultar la información de la cuenta y cerrar sesión.',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    PerfilScreen(nombreUsuario: nombreUsuario, rol: rol),
+              ),
+            );
+          },
         ),
       ],
     );
@@ -669,9 +570,6 @@ class MasView extends StatelessWidget {
 }
 
 /// Lista reutilizable de módulos.
-///
-/// Cuando un módulo no tiene [onTap], muestra
-/// un mensaje indicando que está en construcción.
 class ModulosList extends StatelessWidget {
   const ModulosList({required this.modulos, super.key});
 
@@ -722,7 +620,7 @@ class ModulosList extends StatelessWidget {
   }
 }
 
-/// Tarjeta de resumen utilizada en la vista Inicio.
+/// Tarjeta del dashboard.
 class ResumenCard extends StatelessWidget {
   const ResumenCard({
     required this.icono,
@@ -779,7 +677,7 @@ class ResumenCard extends StatelessWidget {
   }
 }
 
-/// Información de un módulo del sistema.
+/// Información visual de un módulo.
 class ModuloItem {
   const ModuloItem({
     required this.icono,
@@ -788,15 +686,8 @@ class ModuloItem {
     this.onTap,
   });
 
-  /// Icono representativo.
   final IconData icono;
-
-  /// Nombre del módulo.
   final String titulo;
-
-  /// Descripción breve.
   final String descripcion;
-
-  /// Acción al seleccionar el módulo.
   final VoidCallback? onTap;
 }

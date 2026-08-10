@@ -261,9 +261,6 @@ class SyncService {
   /// por el endpoint de matrices IPERC.
   Map<String, dynamic> _transformMatrixForApi(Map<String, dynamic> localData) {
     return <String, dynamic>{
-      // ===========================================================
-      // RELACIONES
-      // ===========================================================
       'institucionId': _intFromLocal(
         localData['institucion_id'],
         nombre: 'institución',
@@ -294,31 +291,18 @@ class SyncService {
         obligatorio: true,
       ),
 
-      // ===========================================================
-      // ACTIVIDAD
-      // ===========================================================
       'actividadId': _intFromLocal(
         localData['actividad_id'],
         nombre: 'actividad',
         obligatorio: true,
       ),
 
-      // ===========================================================
-      // DATOS DE MATRIZ
-      // ===========================================================
       'codigo': _textoOpcional(localData['codigo']),
 
       'nombre': localData['nombre']?.toString().trim(),
 
-      // El modelo local usa "descripcion".
-      // El backend de matrices trabaja actualmente con objetivo.
       'objetivo': _textoOpcional(localData['descripcion']),
 
-      // ===========================================================
-      // AUDITORÍA
-      // ===========================================================
-
-      // Mantiene compatibilidad con el flujo actual del backend.
       'usuarioRegistroId': 1,
     };
   }

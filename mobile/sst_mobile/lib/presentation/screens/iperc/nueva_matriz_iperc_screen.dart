@@ -514,7 +514,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       if (conectado) {
         try {
           final List<CatalogoItemModel> actividades = await _catalogosRemote
-              .obtenerActividades();
+              .obtenerActividades(procesoId: proceso.id);
 
           await _catalogosLocal.guardarActividades(
             actividades,

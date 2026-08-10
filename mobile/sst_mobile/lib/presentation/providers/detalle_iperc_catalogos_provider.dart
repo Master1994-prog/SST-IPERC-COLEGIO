@@ -14,10 +14,7 @@ import '../../data/repositories/severidad_repository.dart';
 /// PROVIDER - CATÁLOGOS DETALLE IPERC
 /// ===============================================================
 ///
-/// Administra los catálogos necesarios para registrar un
-/// detalle IPERC tanto online como offline.
-///
-/// Catálogos:
+/// Trabaja con:
 ///
 /// - Peligros.
 /// - Consecuencias.
@@ -26,11 +23,11 @@ import '../../data/repositories/severidad_repository.dart';
 ///
 /// Estrategia:
 ///
-/// 1. Cargar primero desde SQLite.
-/// 2. Mostrar inmediatamente los datos locales.
-/// 3. Intentar actualizar desde el backend.
-/// 4. Guardar la nueva información en SQLite.
-/// 5. Si falla internet, continuar utilizando datos locales.
+/// 1. Leer SQLite.
+/// 2. Mostrar lo disponible.
+/// 3. Consultar cada endpoint por separado.
+/// 4. Guardar inmediatamente cada catálogo exitoso.
+/// 5. Si uno falla, los demás continúan funcionando.
 /// ===============================================================
 class DetalleIpercCatalogosProvider extends ChangeNotifier {
   DetalleIpercCatalogosProvider({
@@ -48,16 +45,9 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
        _localDatasource =
            localDatasource ?? DetalleIpercCatalogosLocalDatasource();
 
-  // =============================================================
-  // REPOSITORIOS
-  // =============================================================
-
   final PeligroRepository _peligroRepository;
-
   final ConsecuenciaRepository _consecuenciaRepository;
-
   final ProbabilidadRepository _probabilidadRepository;
-
   final SeveridadRepository _severidadRepository;
 
   final DetalleIpercCatalogosLocalDatasource _localDatasource;
@@ -79,50 +69,34 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   // =============================================================
 
   bool _cargando = false;
-
   bool _cargandoLocal = false;
-
   bool _actualizandoRemoto = false;
 
   bool _cargado = false;
-
   bool _usandoDatosLocales = false;
 
   String? _error;
-
   String? _advertencia;
 
-  // =============================================================
-  // FECHAS DE ACTUALIZACIÓN
-  // =============================================================
-
   DateTime? _ultimaActualizacionPeligros;
-
   DateTime? _ultimaActualizacionConsecuencias;
-
   DateTime? _ultimaActualizacionProbabilidades;
-
   DateTime? _ultimaActualizacionSeveridades;
 
   // =============================================================
   // GETTERS
   // =============================================================
 
-  List<PeligroModel> get peligros {
-    return List<PeligroModel>.unmodifiable(_peligros);
-  }
+  List<PeligroModel> get peligros => List<PeligroModel>.unmodifiable(_peligros);
 
-  List<ConsecuenciaModel> get consecuencias {
-    return List<ConsecuenciaModel>.unmodifiable(_consecuencias);
-  }
+  List<ConsecuenciaModel> get consecuencias =>
+      List<ConsecuenciaModel>.unmodifiable(_consecuencias);
 
-  List<ProbabilidadModel> get probabilidades {
-    return List<ProbabilidadModel>.unmodifiable(_probabilidades);
-  }
+  List<ProbabilidadModel> get probabilidades =>
+      List<ProbabilidadModel>.unmodifiable(_probabilidades);
 
-  List<SeveridadModel> get severidades {
-    return List<SeveridadModel>.unmodifiable(_severidades);
-  }
+  List<SeveridadModel> get severidades =>
+      List<SeveridadModel>.unmodifiable(_severidades);
 
   bool get cargando => _cargando;
 
@@ -138,33 +112,20 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
   String? get advertencia => _advertencia;
 
-  DateTime? get ultimaActualizacionPeligros {
-    return _ultimaActualizacionPeligros;
-  }
+  DateTime? get ultimaActualizacionPeligros => _ultimaActualizacionPeligros;
 
-  DateTime? get ultimaActualizacionConsecuencias {
-    return _ultimaActualizacionConsecuencias;
-  }
+  DateTime? get ultimaActualizacionConsecuencias =>
+      _ultimaActualizacionConsecuencias;
 
-  DateTime? get ultimaActualizacionProbabilidades {
-    return _ultimaActualizacionProbabilidades;
-  }
+  DateTime? get ultimaActualizacionProbabilidades =>
+      _ultimaActualizacionProbabilidades;
 
-  DateTime? get ultimaActualizacionSeveridades {
-    return _ultimaActualizacionSeveridades;
-  }
+  DateTime? get ultimaActualizacionSeveridades =>
+      _ultimaActualizacionSeveridades;
 
   // =============================================================
-  // ESTADOS DE DISPONIBILIDAD
+  // DISPONIBILIDAD
   // =============================================================
-
-  bool get tieneError {
-    return _error != null && _error!.trim().isNotEmpty;
-  }
-
-  bool get tieneAdvertencia {
-    return _advertencia != null && _advertencia!.trim().isNotEmpty;
-  }
 
   bool get tienePeligros => _peligros.isNotEmpty;
 
@@ -174,14 +135,16 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
   bool get tieneSeveridades => _severidades.isNotEmpty;
 
-  /// Para registrar correctamente un detalle IPERC
-  /// necesitamos los cuatro catálogos.
-  bool get tieneCatalogos {
-    return tienePeligros &&
-        tieneConsecuencias &&
-        tieneProbabilidades &&
-        tieneSeveridades;
-  }
+  bool get tieneCatalogos =>
+      tienePeligros &&
+      tieneConsecuencias &&
+      tieneProbabilidades &&
+      tieneSeveridades;
+
+  bool get tieneError => _error != null && _error!.trim().isNotEmpty;
+
+  bool get tieneAdvertencia =>
+      _advertencia != null && _advertencia!.trim().isNotEmpty;
 
   // =============================================================
   // CARGA PRINCIPAL
@@ -197,6 +160,7 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     }
 
     _cargando = true;
+
     _error = null;
     _advertencia = null;
 
@@ -204,22 +168,20 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     try {
       // ---------------------------------------------------------
-      // PRIMERO: DATOS SQLITE
+      // 1. SQLITE
       // ---------------------------------------------------------
 
       await _cargarDesdeLocal();
 
       // ---------------------------------------------------------
-      // DESPUÉS: ACTUALIZAR DESDE API
+      // 2. BACKEND
       // ---------------------------------------------------------
 
-      await _actualizarDesdeRemoto(conservarLocalesEnError: true);
+      await _actualizarDesdeRemoto();
 
       _cargado = tieneCatalogos;
 
-      if (!tieneCatalogos && _error == null) {
-        _error = 'No existen todos los catálogos necesarios para IPERC.';
-      }
+      _actualizarEstadoFinal();
 
       return tieneCatalogos;
     } finally {
@@ -243,11 +205,19 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    return _actualizarDesdeRemoto(conservarLocalesEnError: true);
+    await _actualizarDesdeRemoto();
+
+    _cargado = tieneCatalogos;
+
+    _actualizarEstadoFinal();
+
+    notifyListeners();
+
+    return tieneCatalogos;
   }
 
   // =============================================================
-  // CARGAR DESDE SQLITE
+  // CARGAR SQLITE
   // =============================================================
 
   Future<void> _cargarDesdeLocal() async {
@@ -256,122 +226,56 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final List<dynamic> resultados =
-          await Future.wait<dynamic>(<Future<dynamic>>[
-            _localDatasource.obtenerPeligros(),
-            _localDatasource.obtenerConsecuencias(),
-            _localDatasource.obtenerProbabilidades(),
-            _localDatasource.obtenerSeveridades(),
+      final List<PeligroModel> peligros = await _localDatasource
+          .obtenerPeligros();
 
-            _localDatasource.obtenerFechaActualizacion('PELIGROS'),
+      final List<ConsecuenciaModel> consecuencias = await _localDatasource
+          .obtenerConsecuencias();
 
-            _localDatasource.obtenerFechaActualizacion('CONSECUENCIAS'),
+      final List<ProbabilidadModel> probabilidades = await _localDatasource
+          .obtenerProbabilidades();
 
-            _localDatasource.obtenerFechaActualizacion('PROBABILIDADES'),
+      final List<SeveridadModel> severidades = await _localDatasource
+          .obtenerSeveridades();
 
-            _localDatasource.obtenerFechaActualizacion('SEVERIDADES'),
-          ]);
-
-      // ---------------------------------------------------------
-      // PELIGROS
-      // ---------------------------------------------------------
-
-      final List<PeligroModel> peligrosLocales =
-          (resultados[0] as List<dynamic>)
-              .whereType<PeligroModel>()
-              .where(
-                (PeligroModel peligro) =>
-                    peligro.id > 0 && peligro.estaDisponible,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // CONSECUENCIAS
-      // ---------------------------------------------------------
-
-      final List<ConsecuenciaModel> consecuenciasLocales =
-          (resultados[1] as List<dynamic>)
-              .whereType<ConsecuenciaModel>()
-              .where(
-                (ConsecuenciaModel consecuencia) =>
-                    consecuencia.id > 0 && consecuencia.estaDisponible,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // PROBABILIDADES
-      // ---------------------------------------------------------
-
-      final List<ProbabilidadModel> probabilidadesLocales =
-          (resultados[2] as List<dynamic>)
-              .whereType<ProbabilidadModel>()
-              .where(
-                (ProbabilidadModel item) =>
-                    item.id > 0 && item.valor >= 1 && item.valor <= 5,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // SEVERIDADES
-      // ---------------------------------------------------------
-
-      final List<SeveridadModel> severidadesLocales =
-          (resultados[3] as List<dynamic>)
-              .whereType<SeveridadModel>()
-              .where(
-                (SeveridadModel item) =>
-                    item.id > 0 && item.valor >= 1 && item.valor <= 5,
-              )
-              .toList();
-
-      _ordenarPeligros(peligrosLocales);
-
-      _ordenarConsecuencias(consecuenciasLocales);
-
-      _ordenarProbabilidades(probabilidadesLocales);
-
-      _ordenarSeveridades(severidadesLocales);
-
-      if (peligrosLocales.isNotEmpty) {
-        _peligros = peligrosLocales;
+      if (peligros.isNotEmpty) {
+        _peligros = peligros;
       }
 
-      if (consecuenciasLocales.isNotEmpty) {
-        _consecuencias = consecuenciasLocales;
+      if (consecuencias.isNotEmpty) {
+        _consecuencias = consecuencias;
       }
 
-      if (probabilidadesLocales.isNotEmpty) {
-        _probabilidades = probabilidadesLocales;
+      if (probabilidades.isNotEmpty) {
+        _probabilidades = probabilidades;
       }
 
-      if (severidadesLocales.isNotEmpty) {
-        _severidades = severidadesLocales;
+      if (severidades.isNotEmpty) {
+        _severidades = severidades;
       }
 
-      // ---------------------------------------------------------
-      // FECHAS
-      // ---------------------------------------------------------
+      _ordenar();
 
-      _ultimaActualizacionPeligros = resultados[4] as DateTime?;
+      _ultimaActualizacionPeligros = await _localDatasource
+          .obtenerFechaActualizacion('PELIGROS');
 
-      _ultimaActualizacionConsecuencias = resultados[5] as DateTime?;
+      _ultimaActualizacionConsecuencias = await _localDatasource
+          .obtenerFechaActualizacion('CONSECUENCIAS');
 
-      _ultimaActualizacionProbabilidades = resultados[6] as DateTime?;
+      _ultimaActualizacionProbabilidades = await _localDatasource
+          .obtenerFechaActualizacion('PROBABILIDADES');
 
-      _ultimaActualizacionSeveridades = resultados[7] as DateTime?;
+      _ultimaActualizacionSeveridades = await _localDatasource
+          .obtenerFechaActualizacion('SEVERIDADES');
 
       _usandoDatosLocales =
-          peligrosLocales.isNotEmpty ||
-          consecuenciasLocales.isNotEmpty ||
-          probabilidadesLocales.isNotEmpty ||
-          severidadesLocales.isNotEmpty;
-
-      if (_usandoDatosLocales) {
-        _advertencia = 'Se muestran catálogos almacenados localmente.';
-      }
+          _peligros.isNotEmpty ||
+          _consecuencias.isNotEmpty ||
+          _probabilidades.isNotEmpty ||
+          _severidades.isNotEmpty;
     } catch (error) {
       _advertencia =
-          'No se pudieron cargar los catálogos locales: '
+          'No se pudieron leer completamente los catálogos locales: '
           '${_limpiarError(error)}';
     } finally {
       _cargandoLocal = false;
@@ -381,227 +285,192 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   }
 
   // =============================================================
-  // ACTUALIZAR DESDE BACKEND
+  // ACTUALIZAR BACKEND
   // =============================================================
 
-  Future<bool> _actualizarDesdeRemoto({
-    required bool conservarLocalesEnError,
-  }) async {
-    if (_actualizandoRemoto) {
-      return tieneCatalogos;
-    }
-
+  Future<void> _actualizarDesdeRemoto() async {
     _actualizandoRemoto = true;
-
-    _error = null;
 
     notifyListeners();
 
+    final List<String> errores = <String>[];
+
+    // ===========================================================
+    // PELIGROS
+    // ===========================================================
+
     try {
-      final List<dynamic> resultados =
-          await Future.wait<dynamic>(<Future<dynamic>>[
-            _peligroRepository.obtenerActivos(),
-            _consecuenciaRepository.obtenerActivos(),
-            _probabilidadRepository.obtenerTodas(),
-            _severidadRepository.obtenerTodas(),
-          ]);
+      final List<PeligroModel> resultado = await _peligroRepository
+          .obtenerActivos();
 
-      // ---------------------------------------------------------
-      // PELIGROS
-      // ---------------------------------------------------------
+      final List<PeligroModel> validos = resultado
+          .where((PeligroModel item) => item.id > 0 && item.estaDisponible)
+          .toList();
 
-      final List<PeligroModel> peligrosRemotos =
-          (resultados[0] as List<dynamic>)
-              .whereType<PeligroModel>()
-              .where(
-                (PeligroModel peligro) =>
-                    peligro.id > 0 && peligro.estaDisponible,
-              )
-              .toList();
+      if (validos.isNotEmpty) {
+        _peligros = validos;
 
-      // ---------------------------------------------------------
-      // CONSECUENCIAS
-      // ---------------------------------------------------------
+        await _localDatasource.guardarPeligros(validos);
 
-      final List<ConsecuenciaModel> consecuenciasRemotas =
-          (resultados[1] as List<dynamic>)
-              .whereType<ConsecuenciaModel>()
-              .where(
-                (ConsecuenciaModel consecuencia) =>
-                    consecuencia.id > 0 && consecuencia.estaDisponible,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // PROBABILIDADES
-      // ---------------------------------------------------------
-
-      final List<ProbabilidadModel> probabilidadesRemotas =
-          (resultados[2] as List<dynamic>)
-              .whereType<ProbabilidadModel>()
-              .where(
-                (ProbabilidadModel item) =>
-                    item.id > 0 && item.valor >= 1 && item.valor <= 5,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // SEVERIDADES
-      // ---------------------------------------------------------
-
-      final List<SeveridadModel> severidadesRemotas =
-          (resultados[3] as List<dynamic>)
-              .whereType<SeveridadModel>()
-              .where(
-                (SeveridadModel item) =>
-                    item.id > 0 && item.valor >= 1 && item.valor <= 5,
-              )
-              .toList();
-
-      // ---------------------------------------------------------
-      // ORDENAR
-      // ---------------------------------------------------------
-
-      _ordenarPeligros(peligrosRemotos);
-
-      _ordenarConsecuencias(consecuenciasRemotas);
-
-      _ordenarProbabilidades(probabilidadesRemotas);
-
-      _ordenarSeveridades(severidadesRemotas);
-
-      // ---------------------------------------------------------
-      // VALIDAR CATÁLOGOS
-      // ---------------------------------------------------------
-
-      if (peligrosRemotos.isEmpty) {
-        throw StateError('El backend no devolvió peligros activos.');
+        _ultimaActualizacionPeligros = DateTime.now().toUtc();
+      } else {
+        errores.add('Peligros: no existen registros activos.');
       }
+    } catch (error) {
+      errores.add('Peligros: ${_limpiarError(error)}');
+    }
 
-      if (consecuenciasRemotas.isEmpty) {
-        throw StateError('El backend no devolvió consecuencias activas.');
+    // ===========================================================
+    // CONSECUENCIAS
+    // ===========================================================
+
+    try {
+      final List<ConsecuenciaModel> resultado = await _consecuenciaRepository
+          .obtenerActivos();
+
+      final List<ConsecuenciaModel> validos = resultado
+          .where((ConsecuenciaModel item) => item.id > 0 && item.estaDisponible)
+          .toList();
+
+      if (validos.isNotEmpty) {
+        _consecuencias = validos;
+
+        await _localDatasource.guardarConsecuencias(validos);
+
+        _ultimaActualizacionConsecuencias = DateTime.now().toUtc();
+      } else {
+        errores.add('Consecuencias: no existen registros activos.');
       }
+    } catch (error) {
+      errores.add('Consecuencias: ${_limpiarError(error)}');
+    }
 
-      if (probabilidadesRemotas.isEmpty) {
-        throw StateError('El backend no devolvió probabilidades válidas.');
+    // ===========================================================
+    // PROBABILIDADES
+    // ===========================================================
+
+    try {
+      final List<ProbabilidadModel> resultado = await _probabilidadRepository
+          .obtenerTodas();
+
+      final List<ProbabilidadModel> validos = resultado
+          .where(
+            (ProbabilidadModel item) =>
+                item.id > 0 && item.valor >= 1 && item.valor <= 5,
+          )
+          .toList();
+
+      if (validos.isNotEmpty) {
+        _probabilidades = validos;
+
+        await _localDatasource.guardarProbabilidades(validos);
+
+        _ultimaActualizacionProbabilidades = DateTime.now().toUtc();
+      } else {
+        errores.add('Probabilidades: no existen valores válidos del 1 al 5.');
       }
+    } catch (error) {
+      errores.add('Probabilidades: ${_limpiarError(error)}');
+    }
 
-      if (severidadesRemotas.isEmpty) {
-        throw StateError('El backend no devolvió severidades válidas.');
+    // ===========================================================
+    // SEVERIDADES
+    // ===========================================================
+
+    try {
+      final List<SeveridadModel> resultado = await _severidadRepository
+          .obtenerTodas();
+
+      final List<SeveridadModel> validos = resultado
+          .where(
+            (SeveridadModel item) =>
+                item.id > 0 && item.valor >= 1 && item.valor <= 5,
+          )
+          .toList();
+
+      if (validos.isNotEmpty) {
+        _severidades = validos;
+
+        await _localDatasource.guardarSeveridades(validos);
+
+        _ultimaActualizacionSeveridades = DateTime.now().toUtc();
+      } else {
+        errores.add('Severidades: no existen valores válidos del 1 al 5.');
       }
+    } catch (error) {
+      errores.add('Severidades: ${_limpiarError(error)}');
+    }
 
-      // ---------------------------------------------------------
-      // Guardar todos los catálogos en la base de datos local.
-      // ---------------------------------------------------------
+    _ordenar();
 
-      await _localDatasource.guardarCatalogos(
-        peligros: peligrosRemotos,
-        consecuencias: consecuenciasRemotas,
-        probabilidades: probabilidadesRemotas,
-        severidades: severidadesRemotas,
-      );
+    _actualizandoRemoto = false;
 
-      // ---------------------------------------------------------
-      // ACTUALIZAR MEMORIA
-      // ---------------------------------------------------------
+    // ===========================================================
+    // RESULTADO
+    // ===========================================================
 
-      _peligros = peligrosRemotos;
-
-      _consecuencias = consecuenciasRemotas;
-
-      _probabilidades = probabilidadesRemotas;
-
-      _severidades = severidadesRemotas;
-
-      final DateTime ahora = DateTime.now().toUtc();
-
-      _ultimaActualizacionPeligros = ahora;
-
-      _ultimaActualizacionConsecuencias = ahora;
-
-      _ultimaActualizacionProbabilidades = ahora;
-
-      _ultimaActualizacionSeveridades = ahora;
+    if (errores.isEmpty) {
+      _error = null;
+      _advertencia = null;
 
       _usandoDatosLocales = false;
 
-      _advertencia = null;
+      notifyListeners();
 
+      return;
+    }
+
+    if (tieneCatalogos) {
       _error = null;
 
-      _cargado = true;
+      _advertencia =
+          'Algunos catálogos no pudieron actualizarse:\n'
+          '${errores.join('\n')}';
 
-      return true;
-    } catch (error) {
-      final String mensaje = _limpiarError(error);
-
-      if (conservarLocalesEnError && tieneCatalogos) {
-        _usandoDatosLocales = true;
-
-        _advertencia =
-            'No se pudo actualizar desde el servidor. '
-            'Se mantienen los catálogos locales. '
-            '$mensaje';
-
-        _error = null;
-
-        return true;
-      }
-
+      _usandoDatosLocales = true;
+    } else {
       _error =
-          'No se pudieron cargar los catálogos IPERC. '
-          '$mensaje';
-
-      return false;
-    } finally {
-      _actualizandoRemoto = false;
-
-      notifyListeners();
+          'No se pudieron cargar todos los catálogos IPERC:\n'
+          '${errores.join('\n')}';
     }
+
+    notifyListeners();
   }
 
   // =============================================================
-  // BUSCAR PELIGRO
+  // BÚSQUEDAS
   // =============================================================
 
   PeligroModel? buscarPeligroPorId(int? id) {
-    if (id == null || id <= 0) {
+    if (id == null) {
       return null;
     }
 
-    for (final PeligroModel peligro in _peligros) {
-      if (peligro.id == id) {
-        return peligro;
+    for (final PeligroModel item in _peligros) {
+      if (item.id == id) {
+        return item;
       }
     }
 
     return null;
   }
-
-  // =============================================================
-  // BUSCAR CONSECUENCIA
-  // =============================================================
 
   ConsecuenciaModel? buscarConsecuenciaPorId(int? id) {
-    if (id == null || id <= 0) {
+    if (id == null) {
       return null;
     }
 
-    for (final ConsecuenciaModel consecuencia in _consecuencias) {
-      if (consecuencia.id == id) {
-        return consecuencia;
+    for (final ConsecuenciaModel item in _consecuencias) {
+      if (item.id == id) {
+        return item;
       }
     }
 
     return null;
   }
 
-  // =============================================================
-  // BUSCAR PROBABILIDAD POR ID
-  // =============================================================
-
   ProbabilidadModel? buscarProbabilidadPorId(int? id) {
-    if (id == null || id <= 0) {
+    if (id == null) {
       return null;
     }
 
@@ -613,28 +482,6 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     return null;
   }
-
-  // =============================================================
-  // BUSCAR SEVERIDAD POR ID
-  // =============================================================
-
-  SeveridadModel? buscarSeveridadPorId(int? id) {
-    if (id == null || id <= 0) {
-      return null;
-    }
-
-    for (final SeveridadModel item in _severidades) {
-      if (item.id == id) {
-        return item;
-      }
-    }
-
-    return null;
-  }
-
-  // =============================================================
-  // BUSCAR PROBABILIDAD POR VALOR
-  // =============================================================
 
   ProbabilidadModel? buscarProbabilidadPorValor(int valor) {
     for (final ProbabilidadModel item in _probabilidades) {
@@ -646,9 +493,19 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     return null;
   }
 
-  // =============================================================
-  // BUSCAR SEVERIDAD POR VALOR
-  // =============================================================
+  SeveridadModel? buscarSeveridadPorId(int? id) {
+    if (id == null) {
+      return null;
+    }
+
+    for (final SeveridadModel item in _severidades) {
+      if (item.id == id) {
+        return item;
+      }
+    }
+
+    return null;
+  }
 
   SeveridadModel? buscarSeveridadPorValor(int valor) {
     for (final SeveridadModel item in _severidades) {
@@ -661,50 +518,76 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   }
 
   // =============================================================
-  // BÚSQUEDA TEXTO
+  // ORDENAR
   // =============================================================
 
-  List<PeligroModel> buscarPeligros(String texto) {
-    final String consulta = texto.trim().toLowerCase();
+  void _ordenar() {
+    _peligros.sort(
+      (PeligroModel a, PeligroModel b) =>
+          a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+    );
 
-    if (consulta.isEmpty) {
-      return peligros;
-    }
+    _consecuencias.sort(
+      (ConsecuenciaModel a, ConsecuenciaModel b) =>
+          a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+    );
 
-    return _peligros.where((PeligroModel peligro) {
-      final String contenido = <String>[
-        peligro.codigo,
-        peligro.nombre,
-        peligro.descripcion ?? '',
-        peligro.tipoPeligroNombre ?? '',
-        peligro.categoriaPeligroNombre ?? '',
-      ].join(' ').toLowerCase();
+    _probabilidades.sort(
+      (ProbabilidadModel a, ProbabilidadModel b) => a.valor.compareTo(b.valor),
+    );
 
-      return contenido.contains(consulta);
-    }).toList();
-  }
-
-  List<ConsecuenciaModel> buscarConsecuencias(String texto) {
-    final String consulta = texto.trim().toLowerCase();
-
-    if (consulta.isEmpty) {
-      return consecuencias;
-    }
-
-    return _consecuencias.where((ConsecuenciaModel consecuencia) {
-      final String contenido = <String>[
-        consecuencia.codigo,
-        consecuencia.nombre,
-        consecuencia.descripcion ?? '',
-        consecuencia.clasificacion ?? '',
-      ].join(' ').toLowerCase();
-
-      return contenido.contains(consulta);
-    }).toList();
+    _severidades.sort(
+      (SeveridadModel a, SeveridadModel b) => a.valor.compareTo(b.valor),
+    );
   }
 
   // =============================================================
-  // LIMPIAR CATÁLOGOS
+  // ESTADO FINAL
+  // =============================================================
+
+  void _actualizarEstadoFinal() {
+    if (tieneCatalogos) {
+      _error = null;
+
+      return;
+    }
+
+    final List<String> faltantes = <String>[];
+
+    if (!tienePeligros) {
+      faltantes.add('Peligros');
+    }
+
+    if (!tieneConsecuencias) {
+      faltantes.add('Consecuencias');
+    }
+
+    if (!tieneProbabilidades) {
+      faltantes.add('Probabilidades');
+    }
+
+    if (!tieneSeveridades) {
+      faltantes.add('Severidades');
+    }
+
+    _error =
+        'Faltan catálogos IPERC: '
+        '${faltantes.join(', ')}.';
+  }
+
+  // =============================================================
+  // LIMPIAR ERROR
+  // =============================================================
+
+  void limpiarError() {
+    _error = null;
+    _advertencia = null;
+
+    notifyListeners();
+  }
+
+  // =============================================================
+  // LIMPIAR SQLITE
   // =============================================================
 
   Future<void> limpiarCatalogosLocales() async {
@@ -719,102 +602,16 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     _severidades = <SeveridadModel>[];
 
     _cargado = false;
-
     _usandoDatosLocales = false;
 
-    _ultimaActualizacionPeligros = null;
-
-    _ultimaActualizacionConsecuencias = null;
-
-    _ultimaActualizacionProbabilidades = null;
-
-    _ultimaActualizacionSeveridades = null;
-
     _error = null;
-
     _advertencia = null;
 
     notifyListeners();
   }
 
   // =============================================================
-  // LIMPIAR ERROR
-  // =============================================================
-
-  void limpiarError() {
-    if (_error == null && _advertencia == null) {
-      return;
-    }
-
-    _error = null;
-
-    _advertencia = null;
-
-    notifyListeners();
-  }
-
-  // =============================================================
-  // ORDENAR PELIGROS
-  // =============================================================
-
-  void _ordenarPeligros(List<PeligroModel> lista) {
-    lista.sort((PeligroModel primero, PeligroModel segundo) {
-      final int comparacionNombre = primero.nombre.toLowerCase().compareTo(
-        segundo.nombre.toLowerCase(),
-      );
-
-      if (comparacionNombre != 0) {
-        return comparacionNombre;
-      }
-
-      return primero.codigo.toLowerCase().compareTo(
-        segundo.codigo.toLowerCase(),
-      );
-    });
-  }
-
-  // =============================================================
-  // ORDENAR CONSECUENCIAS
-  // =============================================================
-
-  void _ordenarConsecuencias(List<ConsecuenciaModel> lista) {
-    lista.sort((ConsecuenciaModel primero, ConsecuenciaModel segundo) {
-      final int comparacionNombre = primero.nombre.toLowerCase().compareTo(
-        segundo.nombre.toLowerCase(),
-      );
-
-      if (comparacionNombre != 0) {
-        return comparacionNombre;
-      }
-
-      return primero.codigo.toLowerCase().compareTo(
-        segundo.codigo.toLowerCase(),
-      );
-    });
-  }
-
-  // =============================================================
-  // ORDENAR PROBABILIDADES
-  // =============================================================
-
-  void _ordenarProbabilidades(List<ProbabilidadModel> lista) {
-    lista.sort((ProbabilidadModel primero, ProbabilidadModel segundo) {
-      return primero.valor.compareTo(segundo.valor);
-    });
-  }
-
-  // =============================================================
-  // ORDENAR SEVERIDADES
-  // =============================================================
-
-  void _ordenarSeveridades(List<SeveridadModel> lista) {
-    lista.sort((SeveridadModel primero, SeveridadModel segundo) {
-      return primero.valor.compareTo(segundo.valor);
-    });
-  }
-
-  // =============================================================
-  // LIMPIAR ERROR
+  // LIMPIAR MENSAJE
   // =============================================================
 
   String _limpiarError(Object error) {
@@ -822,9 +619,9 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     const List<String> prefijos = <String>[
       'Exception: ',
-      'FormatException: ',
       'StateError: ',
       'Bad state: ',
+      'FormatException: ',
     ];
 
     for (final String prefijo in prefijos) {

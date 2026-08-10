@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Domain.Security.Entities;
@@ -12,7 +11,6 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public sealed class RolesController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
@@ -33,7 +31,6 @@ public sealed class RolesController : ControllerBase
     /// GET /api/Roles?esGlobal=false
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN")]
     [ProducesResponseType(
         typeof(List<RolResponseDto>),
         StatusCodes.Status200OK)]
@@ -78,7 +75,6 @@ public sealed class RolesController : ControllerBase
     /// Obtiene un rol mediante su identificador.
     /// </summary>
     [HttpGet("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN")]
     [ProducesResponseType(
         typeof(RolResponseDto),
         StatusCodes.Status200OK)]
@@ -134,7 +130,6 @@ public sealed class RolesController : ControllerBase
     /// Registra un nuevo rol.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         typeof(RolResponseDto),
         StatusCodes.Status201Created)]
@@ -234,7 +229,6 @@ public sealed class RolesController : ControllerBase
     /// Actualiza los datos de un rol existente.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         typeof(RolResponseDto),
         StatusCodes.Status200OK)]
@@ -356,7 +350,6 @@ public sealed class RolesController : ControllerBase
     /// Realiza la eliminación lógica de un rol.
     /// </summary>
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         StatusCodes.Status200OK)]
     [ProducesResponseType(
@@ -433,7 +426,6 @@ public sealed class RolesController : ControllerBase
     /// Activa o desactiva un rol sin eliminarlo.
     /// </summary>
     [HttpPatch("{id:long}/estado")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         typeof(RolResponseDto),
         StatusCodes.Status200OK)]

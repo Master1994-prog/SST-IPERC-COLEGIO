@@ -85,9 +85,16 @@ namespace SST.Api
 
             using (var scope = app.Services.CreateScope())
             {
-                var context = scope.ServiceProvider.GetRequiredService<SSTDbContext>();
+                var context =
+                    scope.ServiceProvider.GetRequiredService<SSTDbContext>();
 
-                SSTSeedData.SeedAsync(context).GetAwaiter().GetResult();
+                SSTSeedData.SeedAsync(context)
+                    .GetAwaiter()
+                    .GetResult();
+
+                SuperAdminBootstrap.EjecutarAsync(context)
+                    .GetAwaiter()
+                    .GetResult();
             }
 
             // Activa Swagger solo en entorno de desarrollo.

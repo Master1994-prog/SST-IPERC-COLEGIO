@@ -4,12 +4,11 @@ import '../controles/controles_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
 import '../mapas_riesgo/mapas_riesgo_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
+import '../seguimientos/seguimientos_screen.dart';
 
 /// Pantalla principal del módulo de reportes.
 ///
 /// Centraliza las consultas disponibles del sistema SST/IPERC.
-/// Por ahora muestra reportes visuales y accesos a los módulos
-/// que contienen la información registrada.
 class ReportesScreen extends StatelessWidget {
   const ReportesScreen({super.key});
 
@@ -21,16 +20,13 @@ class ReportesScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: <Widget>[
           _construirEncabezado(context),
-
           const SizedBox(height: 20),
-
           Text(
             'Reportes disponibles',
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
-
           const SizedBox(height: 12),
 
           _ReporteCard(
@@ -88,6 +84,24 @@ class ReportesScreen extends StatelessWidget {
           const SizedBox(height: 12),
 
           _ReporteCard(
+            icono: Icons.fact_check_outlined,
+            titulo: 'Reporte de seguimientos IPERC',
+            descripcion:
+                'Consultar seguimientos pendientes, verificados, responsables, '
+                'porcentaje de avance y observaciones registradas.',
+            etiqueta: 'Ver seguimientos',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SeguimientosScreen(),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          _ReporteCard(
             icono: Icons.map_outlined,
             titulo: 'Reporte de mapas de riesgo',
             descripcion:
@@ -104,7 +118,6 @@ class ReportesScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 24),
-
           _construirAviso(),
         ],
       ),
@@ -139,7 +152,7 @@ class ReportesScreen extends StatelessWidget {
                   SizedBox(height: 6),
                   Text(
                     'Consulta la información registrada sobre matrices, '
-                    'riesgos, controles y mapas de riesgo.',
+                    'riesgos, controles, seguimientos y mapas de riesgo.',
                   ),
                 ],
               ),
@@ -166,8 +179,7 @@ class ReportesScreen extends StatelessWidget {
           const Expanded(
             child: Text(
               'La exportación de reportes a PDF y Excel se agregará '
-              'después de completar la información de detalles IPERC '
-              'y seguimientos.',
+              'en el siguiente bloque.',
             ),
           ),
         ],
