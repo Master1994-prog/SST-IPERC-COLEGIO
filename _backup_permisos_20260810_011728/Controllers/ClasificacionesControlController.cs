@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -159,7 +159,8 @@ public class ClasificacionesControlController : ControllerBase
     // =========================================================
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(
         StatusCodes.Status400BadRequest)]
@@ -227,7 +228,8 @@ public class ClasificacionesControlController : ControllerBase
     // =========================================================
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(
         StatusCodes.Status400BadRequest)]

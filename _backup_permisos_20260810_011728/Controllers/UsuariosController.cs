@@ -13,7 +13,7 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Roles = "SUPER_ADMIN")]
 public sealed class UsuariosController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
@@ -213,7 +213,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         typeof(UsuarioResponseDto),
         StatusCodes.Status201Created)]
@@ -468,7 +467,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     [ProducesResponseType(
         typeof(UsuarioResponseDto),
         StatusCodes.Status200OK)]
@@ -671,7 +669,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpPut("{id:long}/password")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> CambiarPassword(
         long id,
         [FromBody] CambiarPasswordUsuarioDto solicitud,
@@ -733,7 +730,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpPut("{id:long}/roles")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> ActualizarRoles(
         long id,
         [FromBody] ActualizarRolesUsuarioDto solicitud,
@@ -873,7 +869,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpPatch("{id:long}/estado")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> CambiarEstado(
         long id,
         [FromBody] CambiarEstadoUsuarioDto solicitud,
@@ -932,7 +927,6 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Eliminar(
         long id,
         [FromQuery] long? usuarioId,

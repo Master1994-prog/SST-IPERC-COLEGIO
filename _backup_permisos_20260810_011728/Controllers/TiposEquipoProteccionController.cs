@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -6,82 +6,83 @@ using SST.Application.SST.Interfaces;
 namespace SST.Api.Controllers;
 
 /// <summary>
-/// Controlador para gestionar controles.
-/// Un control es una medida preventiva, correctiva o de protección
-/// aplicada frente a un riesgo.
+/// Controlador para gestionar tipos de Equipos de Protección Personal.
 /// </summary>
 [ApiController]
-[Route("api/controles")]
+[Route("api/tipos-equipo-proteccion")]
 [Authorize]
-public class ControlesController : ControllerBase
+public class TiposEquipoProteccionController : ControllerBase
 {
-    private readonly IControlService _controlService;
+    private readonly ITipoEquipoProteccionService
+        _tipoEquipoProteccionService;
 
-    /// <summary>
-    /// Constructor del controlador.
-    /// </summary>
-    public ControlesController(
-        IControlService controlService)
+    public TiposEquipoProteccionController(
+        ITipoEquipoProteccionService tipoEquipoProteccionService)
     {
-        _controlService = controlService;
+        _tipoEquipoProteccionService =
+            tipoEquipoProteccionService;
     }
 
     /// <summary>
-    /// Obtiene todos los controles activos.
+    /// Obtiene todos los tipos de EPP.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var controles =
-            await _controlService.GetAllAsync();
+        var tipos =
+            await _tipoEquipoProteccionService
+                .GetAllAsync();
 
-        return Ok(controles);
+        return Ok(tipos);
     }
 
     /// <summary>
-    /// Obtiene un control por su Id.
+    /// Obtiene un tipo de EPP por Id.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
-        var control =
-            await _controlService.GetByIdAsync(id);
+        var tipo =
+            await _tipoEquipoProteccionService
+                .GetByIdAsync(id);
 
-        if (control is null)
+        if (tipo is null)
         {
             return NotFound(new
             {
-                mensaje = "Control no encontrado."
+                mensaje =
+                    "Tipo de equipo de protección no encontrado."
             });
         }
 
-        return Ok(control);
+        return Ok(tipo);
     }
 
     /// <summary>
-    /// Registra un nuevo control.
+    /// Registra un nuevo tipo de EPP.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Create(
-        [FromBody] CreateControlDto dto)
+        [FromBody] CreateTipoEquipoProteccionDto dto)
     {
         try
         {
-            var control =
-                await _controlService
+            var tipo =
+                await _tipoEquipoProteccionService
                     .CreateAsync(dto);
 
             return CreatedAtAction(
                 nameof(GetById),
                 new
                 {
-                    id = control.Id
+                    id = tipo.Id
                 },
-                control);
+                tipo);
         }
         catch (InvalidOperationException ex)
         {
@@ -93,35 +94,35 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un control existente.
+    /// Actualiza un tipo de EPP.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Update(
         long id,
-        [FromBody] UpdateControlDto dto)
+        [FromBody] UpdateTipoEquipoProteccionDto dto)
     {
         try
         {
             var actualizado =
-                await _controlService.UpdateAsync(
-                    id,
-                    dto);
+                await _tipoEquipoProteccionService
+                    .UpdateAsync(id, dto);
 
             if (!actualizado)
             {
                 return NotFound(new
                 {
                     mensaje =
-                        "Control no encontrado."
+                        "Tipo de equipo de protección no encontrado."
                 });
             }
 
             return Ok(new
             {
                 mensaje =
-                    "Control actualizado correctamente."
+                    "Tipo de equipo de protección actualizado correctamente."
             });
         }
         catch (InvalidOperationException ex)
@@ -134,29 +135,30 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Desactiva un control.
-    /// Solo SUPER_ADMIN puede hacerlo.
+    /// Desactiva un tipo de EPP.
+    /// Solo SUPER_ADMIN.
     /// </summary>
     [HttpDelete("{id:long}")]
     [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado =
-            await _controlService.DeleteAsync(id);
+            await _tipoEquipoProteccionService
+                .DeleteAsync(id);
 
         if (!eliminado)
         {
             return NotFound(new
             {
                 mensaje =
-                    "Control no encontrado."
+                    "Tipo de equipo de protección no encontrado."
             });
         }
 
         return Ok(new
         {
             mensaje =
-                "Control desactivado correctamente."
+                "Tipo de equipo de protección desactivado correctamente."
         });
     }
 }

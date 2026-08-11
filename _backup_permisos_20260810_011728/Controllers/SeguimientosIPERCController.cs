@@ -1,5 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
 
@@ -10,7 +9,6 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/seguimientos-iperc")]
-[Authorize]
 public class SeguimientosIPERCController : ControllerBase
 {
     private readonly ISeguimientoIPERCService _seguimientoIPERCService;
@@ -48,7 +46,6 @@ public class SeguimientosIPERCController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     public async Task<IActionResult> Create([FromBody] CreateSeguimientoIPERCDto dto)
     {
         try
@@ -64,7 +61,6 @@ public class SeguimientosIPERCController : ControllerBase
     }
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateSeguimientoIPERCDto dto)
     {
         try
@@ -83,7 +79,6 @@ public class SeguimientosIPERCController : ControllerBase
     }
 
     [HttpPatch("{id:long}/verificar")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     public async Task<IActionResult> Verificar(long id)
     {
         var verificado = await _seguimientoIPERCService.VerificarAsync(id);
@@ -95,7 +90,6 @@ public class SeguimientosIPERCController : ControllerBase
     }
 
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado = await _seguimientoIPERCService.DeleteAsync(id);

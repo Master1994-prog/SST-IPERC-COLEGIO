@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Domain.Organization.Entities;
@@ -11,6 +12,7 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public sealed class AreasController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
@@ -104,6 +106,7 @@ public sealed class AreasController : ControllerBase
     /// Registra una nueva área.
     /// </summary>
     [HttpPost]
+    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Crear(
         [FromBody] CrearAreaDto solicitud,
         CancellationToken cancellationToken)
@@ -186,6 +189,7 @@ public sealed class AreasController : ControllerBase
     /// Actualiza un área existente.
     /// </summary>
     [HttpPut("{id:long}")]
+    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Actualizar(
         long id,
         [FromBody] ActualizarAreaDto solicitud,
@@ -281,6 +285,7 @@ public sealed class AreasController : ControllerBase
     /// Realiza la eliminación lógica de un área.
     /// </summary>
     [HttpDelete("{id:long}")]
+    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Eliminar(
         long id,
         [FromQuery] long? usuarioId,

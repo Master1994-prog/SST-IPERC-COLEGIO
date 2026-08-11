@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -6,82 +6,82 @@ using SST.Application.SST.Interfaces;
 namespace SST.Api.Controllers;
 
 /// <summary>
-/// Controlador para gestionar controles.
-/// Un control es una medida preventiva, correctiva o de protección
-/// aplicada frente a un riesgo.
+/// Controlador para gestionar consecuencias.
+/// Una consecuencia representa el daño que puede causar un peligro.
 /// </summary>
 [ApiController]
-[Route("api/controles")]
+[Route("api/consecuencias")]
 [Authorize]
-public class ControlesController : ControllerBase
+public class ConsecuenciasController : ControllerBase
 {
-    private readonly IControlService _controlService;
+    private readonly IConsecuenciaService _consecuenciaService;
 
     /// <summary>
     /// Constructor del controlador.
     /// </summary>
-    public ControlesController(
-        IControlService controlService)
+    public ConsecuenciasController(
+        IConsecuenciaService consecuenciaService)
     {
-        _controlService = controlService;
+        _consecuenciaService = consecuenciaService;
     }
 
     /// <summary>
-    /// Obtiene todos los controles activos.
+    /// Obtiene todas las consecuencias activas.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var controles =
-            await _controlService.GetAllAsync();
+        var consecuencias =
+            await _consecuenciaService.GetAllAsync();
 
-        return Ok(controles);
+        return Ok(consecuencias);
     }
 
     /// <summary>
-    /// Obtiene un control por su Id.
+    /// Obtiene una consecuencia por su Id.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
-        var control =
-            await _controlService.GetByIdAsync(id);
+        var consecuencia =
+            await _consecuenciaService.GetByIdAsync(id);
 
-        if (control is null)
+        if (consecuencia is null)
         {
             return NotFound(new
             {
-                mensaje = "Control no encontrado."
+                mensaje = "Consecuencia no encontrada."
             });
         }
 
-        return Ok(control);
+        return Ok(consecuencia);
     }
 
     /// <summary>
-    /// Registra un nuevo control.
+    /// Registra una nueva consecuencia.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Create(
-        [FromBody] CreateControlDto dto)
+        [FromBody] CreateConsecuenciaDto dto)
     {
         try
         {
-            var control =
-                await _controlService
+            var consecuencia =
+                await _consecuenciaService
                     .CreateAsync(dto);
 
             return CreatedAtAction(
                 nameof(GetById),
                 new
                 {
-                    id = control.Id
+                    id = consecuencia.Id
                 },
-                control);
+                consecuencia);
         }
         catch (InvalidOperationException ex)
         {
@@ -93,35 +93,34 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un control existente.
+    /// Actualiza una consecuencia existente.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Update(
         long id,
-        [FromBody] UpdateControlDto dto)
+        [FromBody] UpdateConsecuenciaDto dto)
     {
         try
         {
             var actualizado =
-                await _controlService.UpdateAsync(
-                    id,
-                    dto);
+                await _consecuenciaService
+                    .UpdateAsync(id, dto);
 
             if (!actualizado)
             {
                 return NotFound(new
                 {
-                    mensaje =
-                        "Control no encontrado."
+                    mensaje = "Consecuencia no encontrada."
                 });
             }
 
             return Ok(new
             {
                 mensaje =
-                    "Control actualizado correctamente."
+                    "Consecuencia actualizada correctamente."
             });
         }
         catch (InvalidOperationException ex)
@@ -134,7 +133,7 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Desactiva un control.
+    /// Desactiva una consecuencia.
     /// Solo SUPER_ADMIN puede hacerlo.
     /// </summary>
     [HttpDelete("{id:long}")]
@@ -142,21 +141,21 @@ public class ControlesController : ControllerBase
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado =
-            await _controlService.DeleteAsync(id);
+            await _consecuenciaService
+                .DeleteAsync(id);
 
         if (!eliminado)
         {
             return NotFound(new
             {
-                mensaje =
-                    "Control no encontrado."
+                mensaje = "Consecuencia no encontrada."
             });
         }
 
         return Ok(new
         {
             mensaje =
-                "Control desactivado correctamente."
+                "Consecuencia desactivada correctamente."
         });
     }
 }

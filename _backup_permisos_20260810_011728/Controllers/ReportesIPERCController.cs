@@ -1,5 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Interfaces;
 
 namespace SST.Api.Controllers;
@@ -9,7 +8,6 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/reportes-iperc")]
-[Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
 public class ReportesIPERCController : ControllerBase
 {
     private readonly IReporteIPERCService _reporteIPERCService;

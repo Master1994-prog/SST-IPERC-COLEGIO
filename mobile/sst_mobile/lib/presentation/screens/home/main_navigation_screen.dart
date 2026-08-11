@@ -55,7 +55,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       child: InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
     ),
     const IpercView(),
-    const SstView(),
+    SstView(rol: widget.rol),
     const MapasView(),
     MasView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
   ];
@@ -348,11 +348,46 @@ class _IpercModuloCard extends StatelessWidget {
 }
 
 /// Catálogos SST.
+///
+/// Solo SUPER_ADMIN, ADMIN y COORDINADOR pueden administrar
+/// los catálogos SST.
 class SstView extends StatelessWidget {
-  const SstView({super.key});
+  const SstView({required this.rol, super.key});
+
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
+    final bool puedeAdministrar = RolePermissions.puedeAdministrarCatalogos(
+      rol,
+    );
+
+    if (!puedeAdministrar) {
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: <Widget>[
+          Icon(
+            Icons.lock_outline,
+            size: 64,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Acceso restringido',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Tu rol no tiene permisos para administrar los catálogos SST.',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+
     return ModulosList(
       modulos: <ModuloItem>[
         ModuloItem(
@@ -486,41 +521,51 @@ class MasView extends StatelessWidget {
   Widget build(BuildContext context) {
     return ModulosList(
       modulos: <ModuloItem>[
-        ModuloItem(
-          icono: Icons.apartment,
-          titulo: 'Áreas',
-          descripcion:
-              'Consultar las áreas y ambientes activos de la institución.',
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute<void>(builder: (_) => const AreasScreen())),
-        ),
-        ModuloItem(
-          icono: Icons.account_tree_outlined,
-          titulo: 'Procesos',
-          descripcion: 'Gestionar los procesos pertenecientes a cada área.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
-          ),
-        ),
-        ModuloItem(
-          icono: Icons.task_alt,
-          titulo: 'Actividades',
-          descripcion: 'Registrar actividades y tareas que serán evaluadas.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ActividadesScreen()),
-          ),
-        ),
-        ModuloItem(
-          icono: Icons.badge_outlined,
-          titulo: 'Puestos de trabajo',
-          descripcion: 'Administrar los puestos pertenecientes a cada área.',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const PuestosTrabajoScreen(),
+        // Módulos organizacionales:
+        // SUPER_ADMIN, ADMIN y COORDINADOR.
+        if (RolePermissions.puedeAdministrarCatalogos(rol))
+          ModuloItem(
+            icono: Icons.apartment,
+            titulo: 'Áreas',
+            descripcion:
+                'Consultar las áreas y ambientes activos de la institución.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AreasScreen()),
             ),
           ),
-        ),
+        if (RolePermissions.puedeAdministrarCatalogos(rol))
+          ModuloItem(
+            icono: Icons.account_tree_outlined,
+            titulo: 'Procesos',
+            descripcion: 'Gestionar los procesos pertenecientes a cada área.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
+            ),
+          ),
+        if (RolePermissions.puedeAdministrarCatalogos(rol))
+          ModuloItem(
+            icono: Icons.task_alt,
+            titulo: 'Actividades',
+            descripcion: 'Registrar actividades y tareas que serán evaluadas.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ActividadesScreen(),
+              ),
+            ),
+          ),
+        if (RolePermissions.puedeAdministrarCatalogos(rol))
+          ModuloItem(
+            icono: Icons.badge_outlined,
+            titulo: 'Puestos de trabajo',
+            descripcion: 'Administrar los puestos pertenecientes a cada área.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PuestosTrabajoScreen(),
+              ),
+            ),
+          ),
+
+        // Solo SUPER_ADMIN según role_permissions.dart actualizado.
         if (RolePermissions.puedeAdministrarUsuarios(rol))
           ModuloItem(
             icono: Icons.manage_accounts_outlined,
@@ -550,7 +595,6 @@ class MasView extends StatelessWidget {
             ),
           ),
 
-        // PERFIL REAL: ahora abre PerfilScreen.
         ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',

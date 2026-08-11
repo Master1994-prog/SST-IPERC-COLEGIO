@@ -1,5 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
 
@@ -10,7 +9,6 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/mapas-riesgo")]
-[Authorize]
 public class MapasRiesgoController : ControllerBase
 {
     private readonly IMapaRiesgoService _mapaRiesgoService;
@@ -48,7 +46,6 @@ public class MapasRiesgoController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     public async Task<IActionResult> Create([FromBody] CreateMapaRiesgoDto dto)
     {
         try
@@ -64,7 +61,6 @@ public class MapasRiesgoController : ControllerBase
     }
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateMapaRiesgoDto dto)
     {
         try
@@ -83,7 +79,6 @@ public class MapasRiesgoController : ControllerBase
     }
 
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado = await _mapaRiesgoService.DeleteAsync(id);

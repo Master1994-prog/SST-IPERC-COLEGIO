@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -60,7 +60,8 @@ public class CategoriasPeligroController : ControllerBase
     /// Solo roles administrativos pueden registrar.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Create(
         [FromBody] CreateCategoriaPeligroDto dto)
     {
@@ -88,7 +89,8 @@ public class CategoriasPeligroController : ControllerBase
     /// Solo roles administrativos pueden actualizar.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Update(
         long id,
         [FromBody] UpdateCategoriaPeligroDto dto)

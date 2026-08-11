@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Domain.IPERC.Entities;
@@ -340,7 +340,9 @@ public sealed class MatricesIPERCController : ControllerBase
     // ============================================================
 
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
+    [Authorize(
+    Roles =
+        "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     [ProducesResponseType(
         typeof(MatrizIPERCResponse),
         StatusCodes.Status201Created)]
@@ -671,7 +673,9 @@ public sealed class MatricesIPERCController : ControllerBase
     // ============================================================
 
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
+    [Authorize(
+    Roles =
+        "SUPER_ADMIN,ADMIN,COORDINADOR,SUP_TITULAR,SUP_SUPLENTE")]
     [ProducesResponseType(
         typeof(MatrizIPERCResponse),
         StatusCodes.Status200OK)]
@@ -1005,7 +1009,8 @@ public sealed class MatricesIPERCController : ControllerBase
     /// Activa o desactiva una matriz IPERC.
     /// </summary>
     [HttpPatch("{id:long}/estado")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+    Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     [ProducesResponseType(
     StatusCodes.Status200OK)]
     [ProducesResponseType(

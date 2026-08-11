@@ -1,5 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Infrastructure.Persistence;
 
@@ -7,7 +6,6 @@ namespace SST.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public sealed class SedesController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;

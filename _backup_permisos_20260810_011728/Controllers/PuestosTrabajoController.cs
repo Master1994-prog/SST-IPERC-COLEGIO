@@ -1,5 +1,4 @@
-using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
+﻿using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Domain.Organization.Entities;
@@ -12,7 +11,6 @@ namespace SST.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public sealed class PuestosTrabajoController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
@@ -112,7 +110,6 @@ public sealed class PuestosTrabajoController : ControllerBase
     /// Registra un nuevo puesto de trabajo.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Crear(
         [FromBody] CrearPuestoTrabajoDto solicitud,
         CancellationToken cancellationToken)
@@ -204,7 +201,6 @@ public sealed class PuestosTrabajoController : ControllerBase
     /// Actualiza un puesto de trabajo existente.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Actualizar(
         long id,
         [FromBody] ActualizarPuestoTrabajoDto solicitud,
@@ -312,7 +308,6 @@ public sealed class PuestosTrabajoController : ControllerBase
     /// Realiza la eliminación lógica de un puesto de trabajo.
     /// </summary>
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Eliminar(
         long id,
         [FromQuery] long? usuarioId,

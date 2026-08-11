@@ -1,5 +1,4 @@
-using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Authorization;
+﻿using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Domain.Organization.Entities;
@@ -8,59 +7,58 @@ using SST.Infrastructure.Persistence;
 namespace SST.Api.Controllers;
 
 /// <summary>
-/// Gestiona los procesos pertenecientes a las áreas.
+/// Gestiona las áreas pertenecientes a las instituciones.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
-public sealed class ProcesosController : ControllerBase
+public sealed class AreasController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
 
-    public ProcesosController(SSTDbContext dbContext)
+    public AreasController(SSTDbContext dbContext)
     {
         _dbContext = dbContext;
     }
 
     /// <summary>
-    /// Obtiene los procesos activos.
-    /// Permite filtrar por área.
+    /// Obtiene las áreas activas.
+    /// Puede filtrarse por institución.
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> ObtenerTodos(
-        [FromQuery] long? areaId,
+    public async Task<IActionResult> ObtenerTodas(
+        [FromQuery] long? institucionId,
         CancellationToken cancellationToken)
     {
-        IQueryable<Proceso> consulta = _dbContext.Procesos
+        IQueryable<Area> consulta = _dbContext.Areas
             .AsNoTracking()
             .Where(x => x.Estado && x.Activo);
 
-        if (areaId.HasValue && areaId.Value > 0)
+        if (institucionId.HasValue && institucionId.Value > 0)
         {
             consulta = consulta.Where(
-                x => x.AreaId == areaId.Value);
+                x => x.InstitucionId == institucionId.Value);
         }
 
-        List<ProcesoResponseDto> procesos = await consulta
+        var areas = await consulta
             .OrderBy(x => x.Nombre)
-            .Select(x => new ProcesoResponseDto
+            .Select(x => new AreaResponseDto
             {
                 Id = x.Id,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
                 Activo = x.Activo,
-                AreaId = x.AreaId,
-                AreaNombre = x.Area.Nombre,
+                InstitucionId = x.InstitucionId,
+                InstitucionNombre = x.Institucion.Nombre,
                 FechaRegistro = x.FechaRegistro,
                 FechaActualizacion = x.FechaActualizacion
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(procesos);
+        return Ok(areas);
     }
 
     /// <summary>
-    /// Obtiene un proceso mediante su identificador.
+    /// Obtiene un área mediante su identificador.
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> ObtenerPorId(
@@ -71,70 +69,68 @@ public sealed class ProcesosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje = "El identificador del proceso no es válido."
+                mensaje = "El identificador del área no es válido."
             });
         }
 
-        ProcesoResponseDto? proceso = await _dbContext.Procesos
+        AreaResponseDto? area = await _dbContext.Areas
             .AsNoTracking()
             .Where(x => x.Id == id && x.Estado)
-            .Select(x => new ProcesoResponseDto
+            .Select(x => new AreaResponseDto
             {
                 Id = x.Id,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
                 Activo = x.Activo,
-                AreaId = x.AreaId,
-                AreaNombre = x.Area.Nombre,
+                InstitucionId = x.InstitucionId,
+                InstitucionNombre = x.Institucion.Nombre,
                 FechaRegistro = x.FechaRegistro,
                 FechaActualizacion = x.FechaActualizacion
             })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (proceso is null)
+        if (area is null)
         {
             return NotFound(new
             {
-                mensaje = "No se encontró el proceso solicitado."
+                mensaje = "No se encontró el área solicitada."
             });
         }
 
-        return Ok(proceso);
+        return Ok(area);
     }
 
     /// <summary>
-    /// Registra un nuevo proceso.
+    /// Registra una nueva área.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Crear(
-        [FromBody] CrearProcesoDto solicitud,
+        [FromBody] CrearAreaDto solicitud,
         CancellationToken cancellationToken)
     {
         string nombre = solicitud.Nombre.Trim();
         string? descripcion = LimpiarTextoOpcional(
             solicitud.Descripcion);
 
-        bool areaExiste = await _dbContext.Areas
+        bool institucionExiste = await _dbContext.Instituciones
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == solicitud.AreaId &&
-                     x.Estado &&
-                     x.Activo,
+                x => x.Id == solicitud.InstitucionId &&
+                     x.Estado,
                 cancellationToken);
 
-        if (!areaExiste)
+        if (!institucionExiste)
         {
             return BadRequest(new
             {
-                mensaje = "El área seleccionada no existe o está inactiva."
+                mensaje = "La institución seleccionada no existe o está inactiva."
             });
         }
 
-        bool nombreDuplicado = await _dbContext.Procesos
+        bool nombreDuplicado = await _dbContext.Areas
             .AsNoTracking()
             .AnyAsync(
-                x => x.AreaId == solicitud.AreaId &&
+                x => x.InstitucionId == solicitud.InstitucionId &&
                      x.Estado &&
                      x.Nombre.ToLower() == nombre.ToLower(),
                 cancellationToken);
@@ -143,15 +139,15 @@ public sealed class ProcesosController : ControllerBase
         {
             return Conflict(new
             {
-                mensaje = "Ya existe un proceso con ese nombre en el área."
+                mensaje = "Ya existe un área con ese nombre en la institución."
             });
         }
 
-        var proceso = new Proceso
+        var area = new Area
         {
             Nombre = nombre,
             Descripcion = descripcion,
-            AreaId = solicitud.AreaId,
+            InstitucionId = solicitud.InstitucionId,
             Activo = true,
             Estado = true,
             FechaRegistro = DateTime.UtcNow,
@@ -161,20 +157,20 @@ public sealed class ProcesosController : ControllerBase
             ColegioId = solicitud.ColegioId
         };
 
-        _dbContext.Procesos.Add(proceso);
+        _dbContext.Areas.Add(area);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        ProcesoResponseDto? resultado = await _dbContext.Procesos
+        AreaResponseDto? resultado = await _dbContext.Areas
             .AsNoTracking()
-            .Where(x => x.Id == proceso.Id)
-            .Select(x => new ProcesoResponseDto
+            .Where(x => x.Id == area.Id)
+            .Select(x => new AreaResponseDto
             {
                 Id = x.Id,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
                 Activo = x.Activo,
-                AreaId = x.AreaId,
-                AreaNombre = x.Area.Nombre,
+                InstitucionId = x.InstitucionId,
+                InstitucionNombre = x.Institucion.Nombre,
                 FechaRegistro = x.FechaRegistro,
                 FechaActualizacion = x.FechaActualizacion
             })
@@ -182,38 +178,37 @@ public sealed class ProcesosController : ControllerBase
 
         return CreatedAtAction(
             nameof(ObtenerPorId),
-            new { id = proceso.Id },
+            new { id = area.Id },
             resultado);
     }
 
     /// <summary>
-    /// Actualiza un proceso existente.
+    /// Actualiza un área existente.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Actualizar(
         long id,
-        [FromBody] ActualizarProcesoDto solicitud,
+        [FromBody] ActualizarAreaDto solicitud,
         CancellationToken cancellationToken)
     {
         if (id <= 0)
         {
             return BadRequest(new
             {
-                mensaje = "El identificador del proceso no es válido."
+                mensaje = "El identificador del área no es válido."
             });
         }
 
-        Proceso? proceso = await _dbContext.Procesos
+        Area? area = await _dbContext.Areas
             .FirstOrDefaultAsync(
                 x => x.Id == id && x.Estado,
                 cancellationToken);
 
-        if (proceso is null)
+        if (area is null)
         {
             return NotFound(new
             {
-                mensaje = "No se encontró el proceso que se desea actualizar."
+                mensaje = "No se encontró el área que se desea actualizar."
             });
         }
 
@@ -221,27 +216,26 @@ public sealed class ProcesosController : ControllerBase
         string? descripcion = LimpiarTextoOpcional(
             solicitud.Descripcion);
 
-        bool areaExiste = await _dbContext.Areas
+        bool institucionExiste = await _dbContext.Instituciones
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == solicitud.AreaId &&
-                     x.Estado &&
-                     x.Activo,
+                x => x.Id == solicitud.InstitucionId &&
+                     x.Estado,
                 cancellationToken);
 
-        if (!areaExiste)
+        if (!institucionExiste)
         {
             return BadRequest(new
             {
-                mensaje = "El área seleccionada no existe o está inactiva."
+                mensaje = "La institución seleccionada no existe o está inactiva."
             });
         }
 
-        bool nombreDuplicado = await _dbContext.Procesos
+        bool nombreDuplicado = await _dbContext.Areas
             .AsNoTracking()
             .AnyAsync(
                 x => x.Id != id &&
-                     x.AreaId == solicitud.AreaId &&
+                     x.InstitucionId == solicitud.InstitucionId &&
                      x.Estado &&
                      x.Nombre.ToLower() == nombre.ToLower(),
                 cancellationToken);
@@ -250,31 +244,31 @@ public sealed class ProcesosController : ControllerBase
         {
             return Conflict(new
             {
-                mensaje = "Ya existe otro proceso con ese nombre en el área."
+                mensaje = "Ya existe otra área con ese nombre en la institución."
             });
         }
 
-        proceso.Nombre = nombre;
-        proceso.Descripcion = descripcion;
-        proceso.AreaId = solicitud.AreaId;
-        proceso.Activo = solicitud.Activo;
-        proceso.FechaActualizacion = DateTime.UtcNow;
-        proceso.UsuarioActualizacionId = ObtenerUsuarioId(
+        area.Nombre = nombre;
+        area.Descripcion = descripcion;
+        area.InstitucionId = solicitud.InstitucionId;
+        area.Activo = solicitud.Activo;
+        area.FechaActualizacion = DateTime.UtcNow;
+        area.UsuarioActualizacionId = ObtenerUsuarioId(
             solicitud.UsuarioActualizacionId);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        ProcesoResponseDto? resultado = await _dbContext.Procesos
+        AreaResponseDto? resultado = await _dbContext.Areas
             .AsNoTracking()
-            .Where(x => x.Id == proceso.Id)
-            .Select(x => new ProcesoResponseDto
+            .Where(x => x.Id == area.Id)
+            .Select(x => new AreaResponseDto
             {
                 Id = x.Id,
                 Nombre = x.Nombre,
                 Descripcion = x.Descripcion,
                 Activo = x.Activo,
-                AreaId = x.AreaId,
-                AreaNombre = x.Area.Nombre,
+                InstitucionId = x.InstitucionId,
+                InstitucionNombre = x.Institucion.Nombre,
                 FechaRegistro = x.FechaRegistro,
                 FechaActualizacion = x.FechaActualizacion
             })
@@ -284,10 +278,9 @@ public sealed class ProcesosController : ControllerBase
     }
 
     /// <summary>
-    /// Realiza la eliminación lógica de un proceso.
+    /// Realiza la eliminación lógica de un área.
     /// </summary>
     [HttpDelete("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Eliminar(
         long id,
         [FromQuery] long? usuarioId,
@@ -297,56 +290,61 @@ public sealed class ProcesosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje = "El identificador del proceso no es válido."
+                mensaje = "El identificador del área no es válido."
             });
         }
 
-        Proceso? proceso = await _dbContext.Procesos
+        Area? area = await _dbContext.Areas
             .FirstOrDefaultAsync(
                 x => x.Id == id && x.Estado,
                 cancellationToken);
 
-        if (proceso is null)
+        if (area is null)
         {
             return NotFound(new
             {
-                mensaje = "No se encontró el proceso que se desea eliminar."
+                mensaje = "No se encontró el área que se desea eliminar."
             });
         }
 
-        bool tieneActividades = await _dbContext.Actividades
+        bool tieneProcesos = await _dbContext.Procesos
             .AsNoTracking()
             .AnyAsync(
-                x => x.ProcesoId == id && x.Estado,
+                x => x.AreaId == id && x.Estado,
                 cancellationToken);
 
-        if (tieneActividades)
+        bool tienePuestos = await _dbContext.PuestosTrabajo
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.AreaId == id && x.Estado,
+                cancellationToken);
+
+        if (tieneProcesos || tienePuestos)
         {
             return Conflict(new
             {
                 mensaje =
-                    "No se puede eliminar el proceso porque tiene " +
-                    "actividades relacionadas."
+                    "No se puede eliminar el área porque tiene procesos " +
+                    "o puestos de trabajo relacionados."
             });
         }
 
-        proceso.Activo = false;
-        proceso.Estado = false;
-        proceso.FechaActualizacion = DateTime.UtcNow;
-        proceso.UsuarioActualizacionId = ObtenerUsuarioId(
-            usuarioId);
+        area.Activo = false;
+        area.Estado = false;
+        area.FechaActualizacion = DateTime.UtcNow;
+        area.UsuarioActualizacionId = ObtenerUsuarioId(usuarioId);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            mensaje = "Proceso eliminado correctamente."
+            mensaje = "Área eliminada correctamente."
         });
     }
 
     private static long ObtenerUsuarioId(long? usuarioId)
     {
-        // Valor temporal hasta obtener el usuario desde el token JWT.
+        // Valor provisional hasta obtener el usuario desde el token JWT.
         return usuarioId.HasValue && usuarioId.Value > 0
             ? usuarioId.Value
             : 1;
@@ -354,18 +352,21 @@ public sealed class ProcesosController : ControllerBase
 
     private static string? LimpiarTextoOpcional(string? texto)
     {
-        return string.IsNullOrWhiteSpace(texto)
-            ? null
-            : texto.Trim();
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            return null;
+        }
+
+        return texto.Trim();
     }
 }
 
 /// <summary>
-/// Datos necesarios para registrar un proceso.
+/// Datos para registrar una nueva área.
 /// </summary>
-public sealed class CrearProcesoDto
+public sealed class CrearAreaDto
 {
-    [Required(ErrorMessage = "El nombre del proceso es obligatorio.")]
+    [Required(ErrorMessage = "El nombre del área es obligatorio.")]
     [StringLength(
         150,
         MinimumLength = 2,
@@ -380,8 +381,8 @@ public sealed class CrearProcesoDto
     [Range(
         1,
         long.MaxValue,
-        ErrorMessage = "Debe seleccionar un área válida.")]
-    public long AreaId { get; set; }
+        ErrorMessage = "Debe seleccionar una institución válida.")]
+    public long InstitucionId { get; set; }
 
     public long? UsuarioRegistroId { get; set; }
 
@@ -389,11 +390,11 @@ public sealed class CrearProcesoDto
 }
 
 /// <summary>
-/// Datos necesarios para actualizar un proceso.
+/// Datos para modificar un área.
 /// </summary>
-public sealed class ActualizarProcesoDto
+public sealed class ActualizarAreaDto
 {
-    [Required(ErrorMessage = "El nombre del proceso es obligatorio.")]
+    [Required(ErrorMessage = "El nombre del área es obligatorio.")]
     [StringLength(
         150,
         MinimumLength = 2,
@@ -408,8 +409,8 @@ public sealed class ActualizarProcesoDto
     [Range(
         1,
         long.MaxValue,
-        ErrorMessage = "Debe seleccionar un área válida.")]
-    public long AreaId { get; set; }
+        ErrorMessage = "Debe seleccionar una institución válida.")]
+    public long InstitucionId { get; set; }
 
     public bool Activo { get; set; } = true;
 
@@ -417,9 +418,9 @@ public sealed class ActualizarProcesoDto
 }
 
 /// <summary>
-/// Información de un proceso enviada al cliente móvil.
+/// Información de un área enviada al cliente.
 /// </summary>
-public sealed class ProcesoResponseDto
+public sealed class AreaResponseDto
 {
     public long Id { get; set; }
 
@@ -429,9 +430,9 @@ public sealed class ProcesoResponseDto
 
     public bool Activo { get; set; }
 
-    public long AreaId { get; set; }
+    public long InstitucionId { get; set; }
 
-    public string AreaNombre { get; set; } = string.Empty;
+    public string InstitucionNombre { get; set; } = string.Empty;
 
     public DateTime FechaRegistro { get; set; }
 

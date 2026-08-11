@@ -54,7 +54,7 @@ class RolePermissions {
   }
 
   static bool puedeAdministrarUsuarios(String rol) {
-    return esAdministrador(rol);
+    return esSuperAdmin(rol);
   }
 
   static bool puedeAdministrarRoles(String rol) {
@@ -94,7 +94,6 @@ class RolePermissions {
   }
 
   static bool puedeEliminarRegistros(String rol) {
-    final String value = normalizar(rol);
-    return value == superAdmin || value == admin;
+    return esSuperAdmin(rol);
   }
 }

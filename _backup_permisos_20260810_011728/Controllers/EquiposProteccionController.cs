@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -6,82 +6,86 @@ using SST.Application.SST.Interfaces;
 namespace SST.Api.Controllers;
 
 /// <summary>
-/// Controlador para gestionar controles.
-/// Un control es una medida preventiva, correctiva o de protección
-/// aplicada frente a un riesgo.
+/// Controlador para gestionar Equipos de Protección Personal.
 /// </summary>
 [ApiController]
-[Route("api/controles")]
+[Route("api/equipos-proteccion")]
 [Authorize]
-public class ControlesController : ControllerBase
+public class EquiposProteccionController : ControllerBase
 {
-    private readonly IControlService _controlService;
+    private readonly IEquipoProteccionService
+        _equipoProteccionService;
 
     /// <summary>
     /// Constructor del controlador.
     /// </summary>
-    public ControlesController(
-        IControlService controlService)
+    public EquiposProteccionController(
+        IEquipoProteccionService equipoProteccionService)
     {
-        _controlService = controlService;
+        _equipoProteccionService =
+            equipoProteccionService;
     }
 
     /// <summary>
-    /// Obtiene todos los controles activos.
+    /// Obtiene todos los equipos de protección activos.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var controles =
-            await _controlService.GetAllAsync();
+        var equipos =
+            await _equipoProteccionService
+                .GetAllAsync();
 
-        return Ok(controles);
+        return Ok(equipos);
     }
 
     /// <summary>
-    /// Obtiene un control por su Id.
+    /// Obtiene un equipo de protección por su Id.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
-        var control =
-            await _controlService.GetByIdAsync(id);
+        var equipo =
+            await _equipoProteccionService
+                .GetByIdAsync(id);
 
-        if (control is null)
+        if (equipo is null)
         {
             return NotFound(new
             {
-                mensaje = "Control no encontrado."
+                mensaje =
+                    "Equipo de protección no encontrado."
             });
         }
 
-        return Ok(control);
+        return Ok(equipo);
     }
 
     /// <summary>
-    /// Registra un nuevo control.
+    /// Registra un nuevo equipo de protección.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Create(
-        [FromBody] CreateControlDto dto)
+        [FromBody] CreateEquipoProteccionDto dto)
     {
         try
         {
-            var control =
-                await _controlService
+            var equipo =
+                await _equipoProteccionService
                     .CreateAsync(dto);
 
             return CreatedAtAction(
                 nameof(GetById),
                 new
                 {
-                    id = control.Id
+                    id = equipo.Id
                 },
-                control);
+                equipo);
         }
         catch (InvalidOperationException ex)
         {
@@ -93,35 +97,35 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un control existente.
+    /// Actualiza un equipo de protección.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Update(
         long id,
-        [FromBody] UpdateControlDto dto)
+        [FromBody] UpdateEquipoProteccionDto dto)
     {
         try
         {
             var actualizado =
-                await _controlService.UpdateAsync(
-                    id,
-                    dto);
+                await _equipoProteccionService
+                    .UpdateAsync(id, dto);
 
             if (!actualizado)
             {
                 return NotFound(new
                 {
                     mensaje =
-                        "Control no encontrado."
+                        "Equipo de protección no encontrado."
                 });
             }
 
             return Ok(new
             {
                 mensaje =
-                    "Control actualizado correctamente."
+                    "Equipo de protección actualizado correctamente."
             });
         }
         catch (InvalidOperationException ex)
@@ -134,29 +138,30 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Desactiva un control.
-    /// Solo SUPER_ADMIN puede hacerlo.
+    /// Desactiva un equipo de protección.
+    /// Solo SUPER_ADMIN.
     /// </summary>
     [HttpDelete("{id:long}")]
     [Authorize(Roles = "SUPER_ADMIN")]
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado =
-            await _controlService.DeleteAsync(id);
+            await _equipoProteccionService
+                .DeleteAsync(id);
 
         if (!eliminado)
         {
             return NotFound(new
             {
                 mensaje =
-                    "Control no encontrado."
+                    "Equipo de protección no encontrado."
             });
         }
 
         return Ok(new
         {
             mensaje =
-                "Control desactivado correctamente."
+                "Equipo de protección desactivado correctamente."
         });
     }
 }

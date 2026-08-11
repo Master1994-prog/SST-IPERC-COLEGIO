@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SST.Application.SST.Dtos;
 using SST.Application.SST.Interfaces;
@@ -6,82 +6,83 @@ using SST.Application.SST.Interfaces;
 namespace SST.Api.Controllers;
 
 /// <summary>
-/// Controlador para gestionar controles.
-/// Un control es una medida preventiva, correctiva o de protección
-/// aplicada frente a un riesgo.
+/// Controlador para gestionar los tipos de peligro.
+/// Los tipos de peligro pertenecen a una categoría de peligro.
 /// </summary>
 [ApiController]
-[Route("api/controles")]
+[Route("api/tipos-peligro")]
 [Authorize]
-public class ControlesController : ControllerBase
+public class TiposPeligroController : ControllerBase
 {
-    private readonly IControlService _controlService;
+    private readonly ITipoPeligroService _tipoPeligroService;
 
     /// <summary>
     /// Constructor del controlador.
     /// </summary>
-    public ControlesController(
-        IControlService controlService)
+    public TiposPeligroController(
+        ITipoPeligroService tipoPeligroService)
     {
-        _controlService = controlService;
+        _tipoPeligroService = tipoPeligroService;
     }
 
     /// <summary>
-    /// Obtiene todos los controles activos.
+    /// Obtiene todos los tipos de peligro activos.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var controles =
-            await _controlService.GetAllAsync();
+        var tipos =
+            await _tipoPeligroService.GetAllAsync();
 
-        return Ok(controles);
+        return Ok(tipos);
     }
 
     /// <summary>
-    /// Obtiene un control por su Id.
+    /// Obtiene un tipo de peligro por su Id.
     /// Disponible para cualquier usuario autenticado.
     /// </summary>
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {
-        var control =
-            await _controlService.GetByIdAsync(id);
+        var tipo =
+            await _tipoPeligroService.GetByIdAsync(id);
 
-        if (control is null)
+        if (tipo is null)
         {
             return NotFound(new
             {
-                mensaje = "Control no encontrado."
+                mensaje =
+                    "Tipo de peligro no encontrado."
             });
         }
 
-        return Ok(control);
+        return Ok(tipo);
     }
 
     /// <summary>
-    /// Registra un nuevo control.
+    /// Registra un nuevo tipo de peligro.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Create(
-        [FromBody] CreateControlDto dto)
+        [FromBody] CreateTipoPeligroDto dto)
     {
         try
         {
-            var control =
-                await _controlService
+            var tipo =
+                await _tipoPeligroService
                     .CreateAsync(dto);
 
             return CreatedAtAction(
                 nameof(GetById),
                 new
                 {
-                    id = control.Id
+                    id = tipo.Id
                 },
-                control);
+                tipo);
         }
         catch (InvalidOperationException ex)
         {
@@ -93,35 +94,35 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Actualiza un control existente.
+    /// Actualiza un tipo de peligro.
     /// Solo SUPER_ADMIN, ADMIN y COORDINADOR.
     /// </summary>
     [HttpPut("{id:long}")]
-    [Authorize(Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
+    [Authorize(
+        Roles = "SUPER_ADMIN,ADMIN,COORDINADOR")]
     public async Task<IActionResult> Update(
         long id,
-        [FromBody] UpdateControlDto dto)
+        [FromBody] UpdateTipoPeligroDto dto)
     {
         try
         {
             var actualizado =
-                await _controlService.UpdateAsync(
-                    id,
-                    dto);
+                await _tipoPeligroService
+                    .UpdateAsync(id, dto);
 
             if (!actualizado)
             {
                 return NotFound(new
                 {
                     mensaje =
-                        "Control no encontrado."
+                        "Tipo de peligro no encontrado."
                 });
             }
 
             return Ok(new
             {
                 mensaje =
-                    "Control actualizado correctamente."
+                    "Tipo de peligro actualizado correctamente."
             });
         }
         catch (InvalidOperationException ex)
@@ -134,7 +135,7 @@ public class ControlesController : ControllerBase
     }
 
     /// <summary>
-    /// Desactiva un control.
+    /// Desactiva un tipo de peligro.
     /// Solo SUPER_ADMIN puede hacerlo.
     /// </summary>
     [HttpDelete("{id:long}")]
@@ -142,21 +143,22 @@ public class ControlesController : ControllerBase
     public async Task<IActionResult> Delete(long id)
     {
         var eliminado =
-            await _controlService.DeleteAsync(id);
+            await _tipoPeligroService
+                .DeleteAsync(id);
 
         if (!eliminado)
         {
             return NotFound(new
             {
                 mensaje =
-                    "Control no encontrado."
+                    "Tipo de peligro no encontrado."
             });
         }
 
         return Ok(new
         {
             mensaje =
-                "Control desactivado correctamente."
+                "Tipo de peligro desactivado correctamente."
         });
     }
 }
