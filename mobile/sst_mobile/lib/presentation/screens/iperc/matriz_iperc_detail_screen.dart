@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/security/role_permissions.dart';
+
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../controles/controles_screen.dart';
@@ -8,9 +10,14 @@ import 'detalles_iperc_screen.dart';
 
 /// Pantalla que muestra la información completa de una matriz IPERC.
 class MatrizIpercDetailScreen extends StatefulWidget {
-  const MatrizIpercDetailScreen({required this.matriz, super.key});
+  const MatrizIpercDetailScreen({
+    required this.matriz,
+    required this.rol,
+    super.key,
+  });
 
   final MatrizIpercModel matriz;
+  final String rol;
 
   @override
   State<MatrizIpercDetailScreen> createState() {
@@ -19,6 +26,9 @@ class MatrizIpercDetailScreen extends StatefulWidget {
 }
 
 class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
+  bool get _puedeGestionarMatrices =>
+      RolePermissions.puedeGestionarMatrices(widget.rol);
+
   final MatrizIpercRepository _repository = MatrizIpercRepository();
 
   late MatrizIpercModel matriz;
@@ -76,7 +86,10 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) {
-          return DetallesIpercScreen(matriz: matriz);
+          return DetallesIpercScreen(
+            matriz: matriz,
+            rol: widget.rol,
+          );
         },
       ),
     );
@@ -93,21 +106,22 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
             onPressed: _cargandoDetalle ? null : _cargarDetalleActualizado,
             icon: const Icon(Icons.refresh),
           ),
-          IconButton(
-            tooltip: 'Editar matriz',
-            onPressed: () {
-              ScaffoldMessenger.of(context)
-                ..hideCurrentSnackBar()
-                ..showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'La edición de la matriz se implementará en el siguiente paso.',
+          if (_puedeGestionarMatrices)
+            IconButton(
+              tooltip: 'Editar matriz',
+              onPressed: () {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'La edición de la matriz se implementará en el siguiente paso.',
+                      ),
                     ),
-                  ),
-                );
-            },
-            icon: const Icon(Icons.edit_outlined),
-          ),
+                  );
+              },
+              icon: const Icon(Icons.edit_outlined),
+            ),
         ],
       ),
       body: RefreshIndicator(

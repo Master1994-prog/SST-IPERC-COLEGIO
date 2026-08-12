@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/security/role_permissions.dart';
 import '../../../data/models/detalle_iperc_model.dart';
 import '../../../data/models/seguimiento_iperc_model.dart';
 import '../../../data/models/usuario_model.dart';
@@ -22,10 +23,11 @@ import '../../../data/repositories/usuario_repository.dart';
 /// - Eliminar.
 /// ===============================================================
 class SeguimientosScreen extends StatefulWidget {
-  const SeguimientosScreen({this.detalleIpercId, super.key});
+  const SeguimientosScreen({required this.rol, this.detalleIpercId, super.key});
 
   /// Si se proporciona un detalle IPERC,
   /// solamente se muestran sus seguimientos.
+  final String rol;
   final int? detalleIpercId;
 
   @override
@@ -35,6 +37,10 @@ class SeguimientosScreen extends StatefulWidget {
 }
 
 class _SeguimientosScreenState extends State<SeguimientosScreen> {
+  bool get _puedeGestionarSeguimientos =>
+      RolePermissions.puedeGestionarSeguimientos(widget.rol);
+
+  bool get _puedeEliminar => RolePermissions.puedeEliminarRegistros(widget.rol);
   final SeguimientoIpercRepository _repository = SeguimientoIpercRepository();
 
   final TextEditingController _buscarController = TextEditingController();
@@ -319,15 +325,17 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
         ],
       ),
 
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _cargando
-            ? null
-            : () {
-                _abrirFormulario();
-              },
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo'),
-      ),
+      floatingActionButton: _puedeGestionarSeguimientos
+          ? FloatingActionButton.extended(
+              onPressed: _cargando
+                  ? null
+                  : () {
+                      _abrirFormulario();
+                    },
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo'),
+            )
+          : null,
 
       body: RefreshIndicator(
         onRefresh: _cargarSeguimientos,
@@ -370,11 +378,13 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
                       ? 'Registra el primer seguimiento para controlar el avance de las medidas.'
                       : 'Modifica la búsqueda o los filtros seleccionados.',
 
-                  textoBoton: _seguimientos.isEmpty
+                  textoBoton:
+                      _seguimientos.isEmpty && _puedeGestionarSeguimientos
                       ? 'Registrar seguimiento'
                       : null,
 
-                  onPressed: _seguimientos.isEmpty
+                  onPressed:
+                      _seguimientos.isEmpty && _puedeGestionarSeguimientos
                       ? () {
                           _abrirFormulario();
                         }
@@ -397,6 +407,8 @@ class _SeguimientosScreenState extends State<SeguimientosScreen> {
 
                     return _SeguimientoCard(
                       seguimiento: seguimiento,
+                      puedeGestionar: _puedeGestionarSeguimientos,
+                      puedeEliminar: _puedeEliminar,
 
                       onEditar: () {
                         _abrirFormulario(seguimiento: seguimiento);
@@ -610,6 +622,8 @@ class _SeguimientoCard extends StatelessWidget {
     required this.onEditar,
     required this.onVerificar,
     required this.onEliminar,
+    required this.puedeGestionar,
+    required this.puedeEliminar,
   });
 
   final SeguimientoIpercModel seguimiento;
@@ -619,6 +633,10 @@ class _SeguimientoCard extends StatelessWidget {
   final VoidCallback onVerificar;
 
   final VoidCallback onEliminar;
+
+  final bool puedeGestionar;
+
+  final bool puedeEliminar;
 
   @override
   Widget build(BuildContext context) {
@@ -679,55 +697,58 @@ class _SeguimientoCard extends StatelessWidget {
                   ),
                 ),
 
-                PopupMenuButton<String>(
-                  onSelected: (String opcion) {
-                    switch (opcion) {
-                      case 'editar':
-                        onEditar();
-                        break;
+                if (puedeGestionar || puedeEliminar)
+                  PopupMenuButton<String>(
+                    onSelected: (String opcion) {
+                      switch (opcion) {
+                        case 'editar':
+                          onEditar();
+                          break;
 
-                      case 'verificar':
-                        onVerificar();
-                        break;
+                        case 'verificar':
+                          onVerificar();
+                          break;
 
-                      case 'eliminar':
-                        onEliminar();
-                        break;
-                    }
-                  },
+                        case 'eliminar':
+                          onEliminar();
+                          break;
+                      }
+                    },
 
-                  itemBuilder: (BuildContext context) {
-                    return <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'editar',
-                        child: ListTile(
-                          leading: Icon(Icons.edit),
-                          title: Text('Editar'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-
-                      if (!seguimiento.verificado)
-                        const PopupMenuItem<String>(
-                          value: 'verificar',
-                          child: ListTile(
-                            leading: Icon(Icons.verified),
-                            title: Text('Verificar'),
-                            contentPadding: EdgeInsets.zero,
+                    itemBuilder: (BuildContext context) {
+                      return <PopupMenuEntry<String>>[
+                        if (puedeGestionar)
+                          const PopupMenuItem<String>(
+                            value: 'editar',
+                            child: ListTile(
+                              leading: Icon(Icons.edit),
+                              title: Text('Editar'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
                           ),
-                        ),
 
-                      const PopupMenuItem<String>(
-                        value: 'eliminar',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline),
-                          title: Text('Eliminar'),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ];
-                  },
-                ),
+                        if (puedeGestionar && !seguimiento.verificado)
+                          const PopupMenuItem<String>(
+                            value: 'verificar',
+                            child: ListTile(
+                              leading: Icon(Icons.verified),
+                              title: Text('Verificar'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+
+                        if (puedeEliminar)
+                          const PopupMenuItem<String>(
+                            value: 'eliminar',
+                            child: ListTile(
+                              leading: Icon(Icons.delete_outline),
+                              title: Text('Eliminar'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                      ];
+                    },
+                  ),
               ],
             ),
 

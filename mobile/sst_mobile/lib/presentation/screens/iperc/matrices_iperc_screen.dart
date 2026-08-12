@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/security/role_permissions.dart';
 import '../../../data/models/matriz_iperc_local_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_offline_repository.dart';
@@ -26,13 +27,17 @@ import 'nueva_matriz_iperc_screen.dart';
 /// Las matrices provenientes del backend utilizan su idServidor.
 /// ===============================================================
 class MatricesIpercScreen extends StatefulWidget {
-  const MatricesIpercScreen({super.key});
+  const MatricesIpercScreen({required this.rol, super.key});
+
+  final String rol;
 
   @override
   State<MatricesIpercScreen> createState() => _MatricesIpercScreenState();
 }
 
 class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
+  bool get _puedeGestionarMatrices =>
+      RolePermissions.puedeGestionarMatrices(widget.rol);
   // =============================================================
   // REPOSITORIES
   // =============================================================
@@ -198,7 +203,7 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) {
-          return MatrizIpercDetailScreen(matriz: matriz);
+          return MatrizIpercDetailScreen(matriz: matriz, rol: widget.rol);
         },
       ),
     );
@@ -325,11 +330,13 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         ],
       ),
 
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _cargando ? null : _abrirNuevaMatriz,
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva matriz'),
-      ),
+      floatingActionButton: _puedeGestionarMatrices
+          ? FloatingActionButton.extended(
+              onPressed: _cargando ? null : _abrirNuevaMatriz,
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva matriz'),
+            )
+          : null,
 
       body: RefreshIndicator(
         onRefresh: _cargarMatrices,

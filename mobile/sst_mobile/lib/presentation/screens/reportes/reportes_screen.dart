@@ -10,7 +10,9 @@ import '../seguimientos/seguimientos_screen.dart';
 ///
 /// Centraliza las consultas disponibles del sistema SST/IPERC.
 class ReportesScreen extends StatelessWidget {
-  const ReportesScreen({super.key});
+  const ReportesScreen({required this.rol, super.key});
+
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +41,7 @@ class ReportesScreen extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const MatricesIpercScreen(),
+                  builder: (_) => MatricesIpercScreen(rol: rol),
                 ),
               );
             },
@@ -93,7 +95,7 @@ class ReportesScreen extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const SeguimientosScreen(),
+                  builder: (_) => SeguimientosScreen(rol: rol),
                 ),
               );
             },

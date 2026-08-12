@@ -54,7 +54,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       },
       child: InicioView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
     ),
-    const IpercView(),
+    IpercView(rol: widget.rol),
     SstView(rol: widget.rol),
     const MapasView(),
     MasView(nombreUsuario: widget.nombreUsuario, rol: widget.rol),
@@ -260,7 +260,9 @@ class _DashboardError extends StatelessWidget {
 
 /// Vista principal del módulo IPERC.
 class IpercView extends StatelessWidget {
-  const IpercView({super.key});
+  const IpercView({required this.rol, super.key});
+
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +277,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const MatricesIpercScreen(),
+                builder: (_) => MatricesIpercScreen(rol: rol),
               ),
             );
           },
@@ -303,7 +305,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const SeguimientosScreen(),
+                builder: (_) => SeguimientosScreen(rol: rol),
               ),
             );
           },
@@ -381,7 +383,7 @@ class SstView extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Tu rol no tiene permisos para administrar los catálogos SST.',
+            'Tu usuario no tiene permisos para administrar los catálogos SST.',
             textAlign: TextAlign.center,
           ),
         ],
@@ -591,7 +593,7 @@ class MasView extends StatelessWidget {
             descripcion:
                 'Consultar reportes de riesgos, controles y seguimientos.',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ReportesScreen()),
+              MaterialPageRoute<void>(builder: (_) => ReportesScreen(rol: rol)),
             ),
           ),
 

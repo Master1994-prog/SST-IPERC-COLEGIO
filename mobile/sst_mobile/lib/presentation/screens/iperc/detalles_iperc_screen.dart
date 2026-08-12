@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/security/role_permissions.dart';
+
 import '../../../data/models/detalle_iperc_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/models/usuario_model.dart';
@@ -12,9 +14,14 @@ import 'nuevo_detalle_iperc_screen.dart';
 
 /// Lista los peligros y riesgos registrados en una matriz IPERC.
 class DetallesIpercScreen extends StatelessWidget {
-  const DetallesIpercScreen({required this.matriz, super.key});
+  const DetallesIpercScreen({
+    required this.matriz,
+    required this.rol,
+    super.key,
+  });
 
   final MatrizIpercModel matriz;
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
@@ -35,15 +42,16 @@ class DetallesIpercScreen extends StatelessWidget {
           },
         ),
       ],
-      child: _DetallesIpercView(matriz: matriz),
+      child: _DetallesIpercView(matriz: matriz, rol: rol),
     );
   }
 }
 
 class _DetallesIpercView extends StatefulWidget {
-  const _DetallesIpercView({required this.matriz});
+  const _DetallesIpercView({required this.matriz, required this.rol});
 
   final MatrizIpercModel matriz;
+  final String rol;
 
   @override
   State<_DetallesIpercView> createState() {
@@ -52,6 +60,8 @@ class _DetallesIpercView extends StatefulWidget {
 }
 
 class _DetallesIpercViewState extends State<_DetallesIpercView> {
+  bool get _puedeGestionarDetalles =>
+      RolePermissions.puedeGestionarMatrices(widget.rol);
   final TextEditingController _busquedaController = TextEditingController();
 
   @override
@@ -121,7 +131,10 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) {
-          return SeguimientosScreen(detalleIpercId: detalle.id);
+          return SeguimientosScreen(
+            detalleIpercId: detalle.id,
+            rol: widget.rol,
+          );
         },
       ),
     );
@@ -284,31 +297,32 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(bottomSheetContext).pop();
-                          _abrirEditarDetalle(detalle);
-                        },
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Editar'),
+                if (_puedeGestionarDetalles)
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(bottomSheetContext).pop();
+                            _abrirEditarDetalle(detalle);
+                          },
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Editar'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.of(bottomSheetContext).pop();
-                          _confirmarEliminar(detalle);
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Eliminar'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.of(bottomSheetContext).pop();
+                            _confirmarEliminar(detalle);
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Eliminar'),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -347,11 +361,13 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _abrirNuevoDetalle,
-        icon: const Icon(Icons.add),
-        label: const Text('Agregar peligro'),
-      ),
+      floatingActionButton: _puedeGestionarDetalles
+          ? FloatingActionButton.extended(
+              onPressed: _abrirNuevoDetalle,
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar peligro'),
+            )
+          : null,
       body: Consumer<DetalleIpercProvider>(
         builder:
             (
@@ -448,11 +464,13 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
                 icon: const Icon(Icons.close),
                 label: const Text('Limpiar búsqueda'),
               )
-            : FilledButton.icon(
+            : _puedeGestionarDetalles
+            ? FilledButton.icon(
                 onPressed: _abrirNuevoDetalle,
                 icon: const Icon(Icons.add),
                 label: const Text('Agregar peligro'),
-              ),
+              )
+            : const SizedBox.shrink(),
       );
     }
 
@@ -473,8 +491,17 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
           procesando: provider.procesando,
           onTap: () => _mostrarDetalle(detalle),
           onSeguimientos: () => _abrirSeguimientos(detalle),
-          onEditar: () => _abrirEditarDetalle(detalle),
-          onEliminar: () => _confirmarEliminar(detalle),
+          onEditar: () {
+            if (_puedeGestionarDetalles) {
+              _abrirEditarDetalle(detalle);
+            }
+          },
+
+          onEliminar: () {
+            if (_puedeGestionarDetalles) {
+              _confirmarEliminar(detalle);
+            }
+          },
         );
       },
     );
