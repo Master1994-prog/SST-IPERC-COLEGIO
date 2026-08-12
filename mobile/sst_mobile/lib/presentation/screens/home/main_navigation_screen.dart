@@ -449,7 +449,7 @@ class SstView extends StatelessWidget {
           descripcion:
               'Administrar medidas para eliminar o reducir los riesgos.',
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ControlesScreen()),
+            MaterialPageRoute<void>(builder: (_) => ControlesScreen(rol: rol)),
           ),
         ),
         ModuloItem(

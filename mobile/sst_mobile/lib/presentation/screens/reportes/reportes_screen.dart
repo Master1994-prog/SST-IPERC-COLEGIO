@@ -77,7 +77,7 @@ class ReportesScreen extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const ControlesScreen(),
+                  builder: (_) => ControlesScreen(rol: rol, soloLectura: true),
                 ),
               );
             },

@@ -86,10 +86,7 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) {
-          return DetallesIpercScreen(
-            matriz: matriz,
-            rol: widget.rol,
-          );
+          return DetallesIpercScreen(matriz: matriz, rol: widget.rol);
         },
       ),
     );
@@ -217,7 +214,7 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) {
-                          return const ControlesScreen();
+                          return ControlesScreen(rol: widget.rol, soloLectura: true);
                         },
                       ),
                     );

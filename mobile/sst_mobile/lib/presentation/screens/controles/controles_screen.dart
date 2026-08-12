@@ -6,6 +6,7 @@ import '../../providers/control_provider.dart';
 import 'nuevo_control_screen.dart';
 import 'editar_control_screen.dart';
 import '../../providers/clasificacion_control_provider.dart';
+import '../../../core/security/role_permissions.dart';
 
 /// Pantalla principal del módulo de medidas de control.
 ///
@@ -18,7 +19,14 @@ import '../../providers/clasificacion_control_provider.dart';
 /// - Eliminar controles.
 /// - Acceder a las pantallas de registro y edición.
 class ControlesScreen extends StatelessWidget {
-  const ControlesScreen({super.key});
+  const ControlesScreen({
+    required this.rol,
+    this.soloLectura = false,
+    super.key,
+  });
+
+  final String rol;
+  final bool soloLectura;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +40,7 @@ class ControlesScreen extends StatelessWidget {
 
         return provider;
       },
-      child: const _ControlesView(),
+      child: _ControlesView(rol: rol, soloLectura: soloLectura),
     );
   }
 }
@@ -40,7 +48,10 @@ class ControlesScreen extends StatelessWidget {
 /// Vista interna que administra los elementos visuales
 /// y el controlador del campo de búsqueda.
 class _ControlesView extends StatefulWidget {
-  const _ControlesView();
+  const _ControlesView({required this.rol, required this.soloLectura});
+
+  final String rol;
+  final bool soloLectura;
 
   @override
   State<_ControlesView> createState() {
@@ -49,6 +60,8 @@ class _ControlesView extends StatefulWidget {
 }
 
 class _ControlesViewState extends State<_ControlesView> {
+  bool get _puedeEliminar => RolePermissions.puedeEliminarRegistros(widget.rol);
+
   /// Controlador del buscador.
   final TextEditingController _busquedaController = TextEditingController();
 
@@ -285,33 +298,35 @@ class _ControlesViewState extends State<_ControlesView> {
 
                   const SizedBox(height: 24),
 
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(bottomSheetContext).pop();
-
-                            _abrirEditarControl(control);
-                          },
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Editar'),
+                  if (!widget.soloLectura)
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.of(bottomSheetContext).pop();
+                              _abrirEditarControl(control);
+                            },
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Editar'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(bottomSheetContext).pop();
 
-                            _confirmarEliminar(control);
-                          },
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Eliminar'),
-                        ),
-                      ),
-                    ],
-                  ),
+                        if (_puedeEliminar) ...<Widget>[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(bottomSheetContext).pop();
+                                _confirmarEliminar(control);
+                              },
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Eliminar'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -343,11 +358,13 @@ class _ControlesViewState extends State<_ControlesView> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _abrirNuevoControl,
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo control'),
-      ),
+      floatingActionButton: widget.soloLectura
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _abrirNuevoControl,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo control'),
+            ),
       body: Consumer<ControlProvider>(
         builder:
             (BuildContext context, ControlProvider provider, Widget? child) {
@@ -496,13 +513,13 @@ class _ControlesViewState extends State<_ControlesView> {
           ),
           const SizedBox(height: 22),
 
-          if (provider.textoBusqueda.isEmpty)
+          if (provider.textoBusqueda.isEmpty && !widget.soloLectura)
             FilledButton.icon(
               onPressed: _abrirNuevoControl,
               icon: const Icon(Icons.add),
               label: const Text('Registrar control'),
             )
-          else
+          else if (provider.textoBusqueda.isNotEmpty)
             OutlinedButton.icon(
               onPressed: () {
                 _busquedaController.clear();
@@ -528,6 +545,8 @@ class _ControlesViewState extends State<_ControlesView> {
         return _ControlCard(
           control: control,
           eliminando: provider.eliminando,
+          soloLectura: widget.soloLectura,
+          puedeEliminar: _puedeEliminar,
           onTap: () {
             _mostrarDetalle(control);
           },
@@ -549,6 +568,8 @@ class _ControlCard extends StatelessWidget {
   const _ControlCard({
     required this.control,
     required this.eliminando,
+    required this.puedeEliminar,
+    required this.soloLectura,
     required this.onTap,
     required this.onEditar,
     required this.onEliminar,
@@ -556,6 +577,8 @@ class _ControlCard extends StatelessWidget {
 
   final ControlModel control;
   final bool eliminando;
+  final bool puedeEliminar;
+  final bool soloLectura;
   final VoidCallback onTap;
   final VoidCallback onEditar;
   final VoidCallback onEliminar;
@@ -640,37 +663,39 @@ class _ControlCard extends StatelessWidget {
                 ),
               ),
 
-              PopupMenuButton<String>(
-                enabled: !eliminando,
-                tooltip: 'Opciones',
-                onSelected: (String opcion) {
-                  if (opcion == 'editar') {
-                    onEditar();
-                  } else if (opcion == 'eliminar') {
-                    onEliminar();
-                  }
-                },
-                itemBuilder: (BuildContext context) {
-                  return const <PopupMenuEntry<String>>[
-                    PopupMenuItem<String>(
-                      value: 'editar',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Editar'),
+              if (!soloLectura)
+                PopupMenuButton<String>(
+                  enabled: !eliminando,
+                  tooltip: 'Opciones',
+                  onSelected: (String opcion) {
+                    if (opcion == 'editar') {
+                      onEditar();
+                    } else if (opcion == 'eliminar') {
+                      onEliminar();
+                    }
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return <PopupMenuEntry<String>>[
+                      PopupMenuItem<String>(
+                        value: 'editar',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Editar'),
+                        ),
                       ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'eliminar',
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Eliminar'),
-                      ),
-                    ),
-                  ];
-                },
-              ),
+                      if (puedeEliminar)
+                        const PopupMenuItem<String>(
+                          value: 'eliminar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Eliminar'),
+                          ),
+                        ),
+                    ];
+                  },
+                ),
             ],
           ),
         ),
