@@ -11,7 +11,31 @@ class EvaluacionRiesgoRemoteDatasource {
 
   final ApiClient _apiClient;
 
-  /// Obtiene una evaluación mediante su identificador.
+  // =============================================================
+  // OBTENER TODAS
+  // =============================================================
+
+  Future<List<EvaluacionRiesgoModel>> obtenerTodos() async {
+    try {
+      final Response<dynamic> response = await _apiClient.get(
+        ApiConfig.evaluacionesRiesgoEndpoint,
+      );
+
+      return _extraerLista(response.data);
+    } on DioException catch (error) {
+      throw Exception(
+        _obtenerMensaje(
+          error,
+          predeterminado: 'No se pudieron obtener las evaluaciones de riesgo.',
+        ),
+      );
+    }
+  }
+
+  // =============================================================
+  // OBTENER POR ID
+  // =============================================================
+
   Future<EvaluacionRiesgoModel> obtenerPorId(int id) async {
     try {
       final Response<dynamic> response = await _apiClient.get(
@@ -35,7 +59,10 @@ class EvaluacionRiesgoRemoteDatasource {
     }
   }
 
-  /// Registra una evaluación en el backend.
+  // =============================================================
+  // CREAR
+  // =============================================================
+
   Future<EvaluacionRiesgoModel> crear(
     CrearEvaluacionRiesgoRequest request,
   ) async {
@@ -49,8 +76,8 @@ class EvaluacionRiesgoRemoteDatasource {
 
       if (json.isEmpty) {
         throw Exception(
-          'La evaluación fue registrada, pero el servidor '
-          'no devolvió datos.',
+          'La evaluación fue registrada, '
+          'pero el servidor no devolvió datos.',
         );
       }
 
@@ -65,7 +92,10 @@ class EvaluacionRiesgoRemoteDatasource {
     }
   }
 
-  /// Actualiza una evaluación existente.
+  // =============================================================
+  // ACTUALIZAR
+  // =============================================================
+
   Future<void> actualizar(
     int id,
     ActualizarEvaluacionRiesgoRequest request,
@@ -85,8 +115,46 @@ class EvaluacionRiesgoRemoteDatasource {
     }
   }
 
-  /// Extrae un objeto JSON aunque la API lo envíe
-  /// dentro de data, result, value o evaluacion.
+  // =============================================================
+  // EXTRAER LISTA
+  // =============================================================
+
+  List<EvaluacionRiesgoModel> _extraerLista(dynamic data) {
+    List<dynamic> lista = <dynamic>[];
+
+    if (data is List) {
+      lista = data;
+    } else if (data is Map) {
+      final Map<String, dynamic> mapa = Map<String, dynamic>.from(data);
+
+      final dynamic contenido =
+          mapa['data'] ??
+          mapa['items'] ??
+          mapa['result'] ??
+          mapa['results'] ??
+          mapa['value'] ??
+          mapa['evaluaciones'] ??
+          mapa['evaluacionesRiesgo'];
+
+      if (contenido is List) {
+        lista = contenido;
+      }
+    }
+
+    return lista
+        .whereType<Map>()
+        .map(
+          (Map item) =>
+              EvaluacionRiesgoModel.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .where((EvaluacionRiesgoModel evaluacion) => evaluacion.id > 0)
+        .toList();
+  }
+
+  // =============================================================
+  // EXTRAER OBJETO
+  // =============================================================
+
   Map<String, dynamic> _extraerObjeto(dynamic data) {
     if (data is! Map) {
       return <String, dynamic>{};
@@ -104,7 +172,10 @@ class EvaluacionRiesgoRemoteDatasource {
     return mapa;
   }
 
-  /// Convierte los errores de Dio en mensajes comprensibles.
+  // =============================================================
+  // ERRORES
+  // =============================================================
+
   String _obtenerMensaje(DioException error, {required String predeterminado}) {
     final dynamic data = error.response?.data;
 

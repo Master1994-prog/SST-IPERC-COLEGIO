@@ -1,5 +1,5 @@
 name: sst_mobile
-description: "Aplicación móvil SST/IPERC."
+description: "Aplicación móvil SST/IPERC"
 publish_to: 'none'
 version: 2.0.0+2
 
@@ -24,6 +24,9 @@ dependencies:
   json_annotation: ^4.12.0
   pdf: ^3.13.0
   printing: ^5.15.0
+  excel_community: ^2.2.0
+  path_provider: ^2.1.5
+  share_plus: ^11.1.0
 
 dev_dependencies:
   flutter_test:

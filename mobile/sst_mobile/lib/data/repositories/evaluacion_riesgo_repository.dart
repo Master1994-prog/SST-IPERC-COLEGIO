@@ -10,13 +10,33 @@ class EvaluacionRiesgoRepository {
 
   final EvaluacionRiesgoRemoteDatasource _remoteDatasource;
 
+  // =============================================================
+  // OBTENER TODAS
+  // =============================================================
+
+  Future<List<EvaluacionRiesgoModel>> obtenerTodos() {
+    return _remoteDatasource.obtenerTodos();
+  }
+
+  // =============================================================
+  // OBTENER POR ID
+  // =============================================================
+
   Future<EvaluacionRiesgoModel> obtenerPorId(int id) {
     return _remoteDatasource.obtenerPorId(id);
   }
 
+  // =============================================================
+  // CREAR
+  // =============================================================
+
   Future<EvaluacionRiesgoModel> crear(CrearEvaluacionRiesgoRequest request) {
     return _remoteDatasource.crear(request);
   }
+
+  // =============================================================
+  // ACTUALIZAR
+  // =============================================================
 
   Future<void> actualizar(int id, ActualizarEvaluacionRiesgoRequest request) {
     return _remoteDatasource.actualizar(id, request);
