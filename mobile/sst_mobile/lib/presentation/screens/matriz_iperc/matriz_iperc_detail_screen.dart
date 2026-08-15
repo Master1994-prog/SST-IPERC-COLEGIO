@@ -8,7 +8,11 @@ import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import 'detalles_iperc_offline_screen.dart';
 
 class MatrizIpercDetailScreen extends StatefulWidget {
-  const MatrizIpercDetailScreen({required this.matriz, required this.rol, super.key});
+  const MatrizIpercDetailScreen({
+    required this.matriz,
+    required this.rol,
+    super.key,
+  });
 
   final MatrizIpercModel matriz;
   final String rol;
@@ -224,9 +228,9 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
                       MaterialPageRoute<void>(
                         builder: (BuildContext context) {
                           return ControlesScreen(
-  rol: widget.rol,
-  soloLectura: true,
-);
+                            rol: widget.rol,
+                            soloLectura: true,
+                          );
                         },
                       ),
                     );

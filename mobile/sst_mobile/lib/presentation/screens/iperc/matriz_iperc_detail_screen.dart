@@ -214,7 +214,10 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) {
-                          return ControlesScreen(rol: widget.rol, soloLectura: true);
+                          return ControlesScreen(
+                            rol: widget.rol,
+                            soloLectura: true,
+                          );
                         },
                       ),
                     );

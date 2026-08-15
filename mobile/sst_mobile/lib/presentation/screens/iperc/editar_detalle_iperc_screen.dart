@@ -9,11 +9,17 @@ import '../../../data/models/equipo_proteccion_model.dart';
 import '../../../data/models/evaluacion_riesgo_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/models/peligro_model.dart';
+import '../../../data/models/probabilidad_model.dart';
+import '../../../data/models/severidad_model.dart';
 import '../../../data/models/usuario_model.dart';
+
 import '../../../data/repositories/consecuencia_repository.dart';
 import '../../../data/repositories/control_repository.dart';
 import '../../../data/repositories/equipo_proteccion_repository.dart';
 import '../../../data/repositories/peligro_repository.dart';
+import '../../../data/repositories/probabilidad_repository.dart';
+import '../../../data/repositories/severidad_repository.dart';
+
 import '../../providers/detalle_iperc_provider.dart';
 import '../../providers/usuario_provider.dart';
 
@@ -88,6 +94,11 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   final EquipoProteccionRepository _equipoProteccionRepository =
       EquipoProteccionRepository();
 
+  final ProbabilidadRepository _probabilidadRepository =
+      ProbabilidadRepository();
+
+  final SeveridadRepository _severidadRepository = SeveridadRepository();
+
   // =============================================================
   // CATÁLOGOS
   // =============================================================
@@ -99,6 +110,10 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   List<ControlModel> _controles = <ControlModel>[];
 
   List<EquipoProteccionModel> _equiposProteccion = <EquipoProteccionModel>[];
+
+  List<ProbabilidadModel> _probabilidades = <ProbabilidadModel>[];
+
+  List<SeveridadModel> _severidades = <SeveridadModel>[];
 
   // =============================================================
   // PELIGRO / CONSECUENCIA
@@ -112,17 +127,17 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   // EVALUACIÓN INICIAL
   // =============================================================
 
-  ProbabilidadIpercOption? _probabilidadSeleccionada;
+  ProbabilidadModel? _probabilidadSeleccionada;
 
-  SeveridadIpercOption? _severidadSeleccionada;
+  SeveridadModel? _severidadSeleccionada;
 
   // =============================================================
   // EVALUACIÓN RESIDUAL
   // =============================================================
 
-  ProbabilidadIpercOption? _probabilidadResidualSeleccionada;
+  ProbabilidadModel? _probabilidadResidualSeleccionada;
 
-  SeveridadIpercOption? _severidadResidualSeleccionada;
+  SeveridadModel? _severidadResidualSeleccionada;
 
   bool _registrarEvaluacionResidual = false;
 
@@ -224,13 +239,18 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
     });
 
     try {
-      final List<dynamic> resultados =
-          await Future.wait<dynamic>(<Future<dynamic>>[
-            _peligroRepository.obtenerActivos(),
-            _consecuenciaRepository.obtenerActivos(),
-            _controlRepository.obtenerActivos(),
-            _equipoProteccionRepository.obtenerActivos(),
-          ]);
+      final List<dynamic> resultados = await Future.wait<dynamic>(
+        <Future<dynamic>>[
+          _peligroRepository.obtenerActivos(),
+          _consecuenciaRepository.obtenerActivos(),
+          _controlRepository.obtenerActivos(),
+          _equipoProteccionRepository.obtenerActivos(),
+
+          // Catálogos reales de la base de datos.
+          _probabilidadRepository.obtenerTodas(),
+          _severidadRepository.obtenerTodas(),
+        ],
+      );
 
       if (!mounted) {
         return;
@@ -254,6 +274,15 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
               .whereType<EquipoProteccionModel>()
               .toList();
 
+      final List<ProbabilidadModel> probabilidades =
+          (resultados[4] as List<dynamic>)
+              .whereType<ProbabilidadModel>()
+              .toList();
+
+      final List<SeveridadModel> severidades = (resultados[5] as List<dynamic>)
+          .whereType<SeveridadModel>()
+          .toList();
+
       setState(() {
         _peligros = peligros;
 
@@ -263,38 +292,58 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
 
         _equiposProteccion = equipos;
 
+        _probabilidades = probabilidades;
+
+        _severidades = severidades;
+
         _peligroSeleccionado = _buscarPeligro(widget.detalle.peligroId);
 
         _consecuenciaSeleccionada = _buscarConsecuencia(
           widget.detalle.consecuenciaId,
         );
 
-        // -------------------------------------------------------
-        // EVALUACIÓN INICIAL EXISTENTE
-        // -------------------------------------------------------
+        // =========================================================
+        // EVALUACIÓN INICIAL
+        // =========================================================
+        //
+        // Primero buscamos por ID REAL.
+        //
+        // Si por alguna razón el registro fue creado cuando
+        // Flutter todavía utilizaba IDs locales 1..5,
+        // utilizamos también el valor recibido del backend
+        // como mecanismo de compatibilidad.
 
         _probabilidadSeleccionada = _buscarProbabilidad(
           widget.detalle.evaluacionInicial.probabilidadId,
+          valor: widget.detalle.evaluacionInicial.valorProbabilidad,
         );
 
         _severidadSeleccionada = _buscarSeveridad(
           widget.detalle.evaluacionInicial.severidadId,
+          valor: widget.detalle.evaluacionInicial.valorSeveridad,
         );
 
-        // -------------------------------------------------------
-        // EVALUACIÓN RESIDUAL EXISTENTE
-        // -------------------------------------------------------
+        // =========================================================
+        // EVALUACIÓN RESIDUAL
+        // =========================================================
 
         final EvaluacionDetalleIpercModel? residual =
             widget.detalle.evaluacionResidual;
 
-        _probabilidadResidualSeleccionada = residual == null
-            ? null
-            : _buscarProbabilidad(residual.probabilidadId);
+        if (residual == null) {
+          _probabilidadResidualSeleccionada = null;
+          _severidadResidualSeleccionada = null;
+        } else {
+          _probabilidadResidualSeleccionada = _buscarProbabilidad(
+            residual.probabilidadId,
+            valor: residual.valorProbabilidad,
+          );
 
-        _severidadResidualSeleccionada = residual == null
-            ? null
-            : _buscarSeveridad(residual.severidadId);
+          _severidadResidualSeleccionada = _buscarSeveridad(
+            residual.severidadId,
+            valor: residual.valorSeveridad,
+          );
+        }
       });
     } catch (error) {
       if (!mounted) {
@@ -715,7 +764,7 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
 
           const SizedBox(height: 12),
 
-          DropdownButtonFormField<ProbabilidadIpercOption>(
+          DropdownButtonFormField<ProbabilidadModel>(
             initialValue: _probabilidadSeleccionada,
 
             isExpanded: true,
@@ -726,29 +775,33 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
               border: OutlineInputBorder(),
             ),
 
-            items: probabilidadesIperc.map((ProbabilidadIpercOption opcion) {
-              return DropdownMenuItem<ProbabilidadIpercOption>(
+            items: _probabilidades.map((ProbabilidadModel opcion) {
+              return DropdownMenuItem<ProbabilidadModel>(
                 value: opcion,
-                child: Text(opcion.etiqueta),
+                child: Text(opcion.textoSeleccion),
               );
             }).toList(),
 
             onChanged: bloqueado
                 ? null
-                : (ProbabilidadIpercOption? value) {
+                : (ProbabilidadModel? value) {
                     setState(() {
                       _probabilidadSeleccionada = value;
                     });
                   },
 
-            validator: (ProbabilidadIpercOption? value) {
-              return value == null ? 'Selecciona la probabilidad.' : null;
+            validator: (ProbabilidadModel? value) {
+              if (value == null) {
+                return 'Selecciona la probabilidad.';
+              }
+
+              return null;
             },
           ),
 
           const SizedBox(height: 12),
 
-          DropdownButtonFormField<SeveridadIpercOption>(
+          DropdownButtonFormField<SeveridadModel>(
             initialValue: _severidadSeleccionada,
 
             isExpanded: true,
@@ -759,23 +812,27 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
               border: OutlineInputBorder(),
             ),
 
-            items: severidadesIperc.map((SeveridadIpercOption opcion) {
-              return DropdownMenuItem<SeveridadIpercOption>(
+            items: _severidades.map((SeveridadModel opcion) {
+              return DropdownMenuItem<SeveridadModel>(
                 value: opcion,
-                child: Text(opcion.etiqueta),
+                child: Text(opcion.textoSeleccion),
               );
             }).toList(),
 
             onChanged: bloqueado
                 ? null
-                : (SeveridadIpercOption? value) {
+                : (SeveridadModel? value) {
                     setState(() {
                       _severidadSeleccionada = value;
                     });
                   },
 
-            validator: (SeveridadIpercOption? value) {
-              return value == null ? 'Selecciona la severidad.' : null;
+            validator: (SeveridadModel? value) {
+              if (value == null) {
+                return 'Selecciona la severidad.';
+              }
+
+              return null;
             },
           ),
 
@@ -826,6 +883,10 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
 
             bloqueada: bloqueado,
 
+            probabilidades: _probabilidades,
+
+            severidades: _severidades,
+
             probabilidad: _probabilidadResidualSeleccionada,
 
             severidad: _severidadResidualSeleccionada,
@@ -846,13 +907,13 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
               });
             },
 
-            onProbabilidadChanged: (ProbabilidadIpercOption? value) {
+            onProbabilidadChanged: (ProbabilidadModel? value) {
               setState(() {
                 _probabilidadResidualSeleccionada = value;
               });
             },
 
-            onSeveridadChanged: (SeveridadIpercOption? value) {
+            onSeveridadChanged: (SeveridadModel? value) {
               setState(() {
                 _severidadResidualSeleccionada = value;
               });
@@ -1126,11 +1187,17 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   // BUSCAR PROBABILIDAD
   // =============================================================
 
-  ProbabilidadIpercOption? _buscarProbabilidad(int id) {
-    for (final ProbabilidadIpercOption opcion in probabilidadesIperc) {
+  ProbabilidadModel? _buscarProbabilidad(int id, {int? valor}) {
+    // Primero busca por ID real de MySQL.
+    for (final ProbabilidadModel opcion in _probabilidades) {
       if (opcion.id == id) {
         return opcion;
       }
+    }
+
+    // Compatibilidad con registros antiguos.
+    if (valor != null && valor > 0) {
+      return _probabilidadRepository.obtenerPorValor(_probabilidades, valor);
     }
 
     return null;
@@ -1140,11 +1207,17 @@ class _EditarDetalleIpercScreenState extends State<EditarDetalleIpercScreen> {
   // BUSCAR SEVERIDAD
   // =============================================================
 
-  SeveridadIpercOption? _buscarSeveridad(int id) {
-    for (final SeveridadIpercOption opcion in severidadesIperc) {
+  SeveridadModel? _buscarSeveridad(int id, {int? valor}) {
+    // Primero busca por ID real de MySQL.
+    for (final SeveridadModel opcion in _severidades) {
       if (opcion.id == id) {
         return opcion;
       }
+    }
+
+    // Compatibilidad con registros antiguos.
+    if (valor != null && valor > 0) {
+      return _severidadRepository.obtenerPorValor(_severidades, valor);
     }
 
     return null;
@@ -1459,15 +1532,36 @@ class _ResumenEvaluacionRiesgo extends StatelessWidget {
     required this.severidad,
   });
 
-  final ProbabilidadIpercOption probabilidad;
+  final ProbabilidadModel probabilidad;
 
-  final SeveridadIpercOption severidad;
+  final SeveridadModel severidad;
 
   @override
   Widget build(BuildContext context) {
-    // -----------------------------------------------------------
-    // CÁLCULO AUTOMÁTICO
-    // -----------------------------------------------------------
+    // ===========================================================
+    // CÁLCULO DEL RIESGO
+    // ===========================================================
+    //
+    // IMPORTANTE:
+    //
+    // Para calcular utilizamos VALOR.
+    //
+    // Ejemplo:
+    //
+    // Probabilidad:
+    // id real = 24
+    // valor = 4
+    //
+    // Severidad:
+    // id real = 35
+    // valor = 5
+    //
+    // Cálculo:
+    //
+    // 4 × 5 = 20
+    //
+    // Al guardar, en cambio, Flutter enviará
+    // los IDs reales 24 y 35.
 
     final int valor = probabilidad.valor * severidad.valor;
 
@@ -1546,12 +1640,12 @@ class _ResumenEvaluacionRiesgo extends StatelessWidget {
 
           Text(
             'Probabilidad: '
-            '${probabilidad.etiqueta}',
+            '${probabilidad.textoSeleccion}',
           ),
 
           Text(
             'Severidad: '
-            '${severidad.etiqueta}',
+            '${severidad.textoSeleccion}',
           ),
         ],
       ),
@@ -1586,6 +1680,8 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
   const _SeccionEvaluacionResidual({
     required this.activa,
     required this.bloqueada,
+    required this.probabilidades,
+    required this.severidades,
     required this.probabilidad,
     required this.severidad,
     required this.mostrarErrores,
@@ -1598,17 +1694,21 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
 
   final bool bloqueada;
 
-  final ProbabilidadIpercOption? probabilidad;
+  final List<ProbabilidadModel> probabilidades;
 
-  final SeveridadIpercOption? severidad;
+  final List<SeveridadModel> severidades;
+
+  final ProbabilidadModel? probabilidad;
+
+  final SeveridadModel? severidad;
 
   final bool mostrarErrores;
 
   final ValueChanged<bool> onActivar;
 
-  final ValueChanged<ProbabilidadIpercOption?> onProbabilidadChanged;
+  final ValueChanged<ProbabilidadModel?> onProbabilidadChanged;
 
-  final ValueChanged<SeveridadIpercOption?> onSeveridadChanged;
+  final ValueChanged<SeveridadModel?> onSeveridadChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1652,10 +1752,10 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
           if (activa) ...<Widget>[
             const SizedBox(height: 12),
 
-            // ---------------------------------------------------
+            // ================================================
             // PROBABILIDAD RESIDUAL
-            // ---------------------------------------------------
-            DropdownButtonFormField<ProbabilidadIpercOption>(
+            // ================================================
+            DropdownButtonFormField<ProbabilidadModel>(
               initialValue: probabilidad,
 
               isExpanded: true,
@@ -1672,10 +1772,11 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
                     : null,
               ),
 
-              items: probabilidadesIperc.map((ProbabilidadIpercOption opcion) {
-                return DropdownMenuItem<ProbabilidadIpercOption>(
+              items: probabilidades.map((ProbabilidadModel opcion) {
+                return DropdownMenuItem<ProbabilidadModel>(
                   value: opcion,
-                  child: Text(opcion.etiqueta),
+
+                  child: Text(opcion.textoSeleccion),
                 );
               }).toList(),
 
@@ -1684,10 +1785,10 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // ---------------------------------------------------
+            // ================================================
             // SEVERIDAD RESIDUAL
-            // ---------------------------------------------------
-            DropdownButtonFormField<SeveridadIpercOption>(
+            // ================================================
+            DropdownButtonFormField<SeveridadModel>(
               initialValue: severidad,
 
               isExpanded: true,
@@ -1704,24 +1805,26 @@ class _SeccionEvaluacionResidual extends StatelessWidget {
                     : null,
               ),
 
-              items: severidadesIperc.map((SeveridadIpercOption opcion) {
-                return DropdownMenuItem<SeveridadIpercOption>(
+              items: severidades.map((SeveridadModel opcion) {
+                return DropdownMenuItem<SeveridadModel>(
                   value: opcion,
-                  child: Text(opcion.etiqueta),
+
+                  child: Text(opcion.textoSeleccion),
                 );
               }).toList(),
 
               onChanged: bloqueada ? null : onSeveridadChanged,
             ),
 
-            // ---------------------------------------------------
-            // RESULTADO RESIDUAL AUTOMÁTICO
-            // ---------------------------------------------------
+            // ================================================
+            // RESULTADO
+            // ================================================
             if (probabilidad != null && severidad != null) ...<Widget>[
               const SizedBox(height: 12),
 
               _ResumenEvaluacionRiesgo(
                 probabilidad: probabilidad!,
+
                 severidad: severidad!,
               ),
             ],
@@ -1744,13 +1847,13 @@ class _ComparacionEvaluaciones extends StatelessWidget {
     required this.severidadResidual,
   });
 
-  final ProbabilidadIpercOption probabilidadInicial;
+  final ProbabilidadModel probabilidadInicial;
 
-  final SeveridadIpercOption severidadInicial;
+  final SeveridadModel severidadInicial;
 
-  final ProbabilidadIpercOption probabilidadResidual;
+  final ProbabilidadModel probabilidadResidual;
 
-  final SeveridadIpercOption severidadResidual;
+  final SeveridadModel severidadResidual;
 
   @override
   Widget build(BuildContext context) {

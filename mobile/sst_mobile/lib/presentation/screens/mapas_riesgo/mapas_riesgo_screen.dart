@@ -466,10 +466,10 @@ class _LeyendaRiesgo extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: <Widget>[
-        _LeyendaItem(texto: 'Bajo', color: Colors.green),
-        _LeyendaItem(texto: 'Medio', color: Colors.amber),
-        _LeyendaItem(texto: 'Alto', color: Colors.orange),
-        _LeyendaItem(texto: 'Crítico', color: Colors.red),
+        _LeyendaItem(texto: 'Bajo (1 - 4)', color: Colors.green),
+        _LeyendaItem(texto: 'Moderado (5 - 9)', color: Colors.amber),
+        _LeyendaItem(texto: 'Alto (10 - 16)', color: Colors.orange),
+        _LeyendaItem(texto: 'Crítico (17 - 25)', color: Colors.red),
         _LeyendaItem(texto: 'Sin evaluar', color: Colors.grey),
       ],
     );
