@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
+import '../../../core/services/secure_storage_service.dart';
 import '../../../data/models/matriz_iperc_local_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_offline_repository.dart';
@@ -76,6 +77,8 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
   final MatrizIpercOfflineRepository _offlineRepository =
       MatrizIpercOfflineRepository();
+
+  final SecureStorageService _secureStorage = SecureStorageService.instance;
 
   // =============================================================
   // ESTADO
@@ -331,16 +334,19 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     });
 
     try {
+      // ---------------------------------------------------------
+      // OBTENER USUARIO AUTENTICADO
+      // ---------------------------------------------------------
+
+      final int usuarioEliminacionId = await _obtenerUsuarioAutenticadoId();
+
+      // ---------------------------------------------------------
+      // ELIMINAR EN BACKEND
+      // ---------------------------------------------------------
+
       await _repository.eliminar(
         matriz.id,
-
-        // =====================================================
-        // TEMPORAL
-        // =====================================================
-        //
-        // Después reemplazaremos este 1 por el ID real
-        // del usuario autenticado.
-        usuarioEliminacionId: 1,
+        usuarioEliminacionId: usuarioEliminacionId,
       );
 
       if (!mounted) {
@@ -362,6 +368,12 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         ),
         esError: true,
       );
+    } on StateError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(error.message, esError: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -499,21 +511,23 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     }
 
     try {
-      await _offlineRepository.deleteOffline(
-        idLocal: matriz.idLocal,
+      // ---------------------------------------------------------
+      // ELIMINAR LOCALMENTE
+      // ---------------------------------------------------------
+      //
+      // El repositorio obtiene internamente el ID real
+      // del usuario autenticado.
+      // ---------------------------------------------------------
 
-        // =====================================================
-        // TEMPORAL
-        // =====================================================
-        //
-        // Después reemplazaremos este valor por
-        // el ID del usuario autenticado.
-        usuarioEliminacionId: 1,
-      );
+      await _offlineRepository.deleteOffline(idLocal: matriz.idLocal);
 
       if (!mounted) {
         return;
       }
+
+      // ---------------------------------------------------------
+      // ACTUALIZAR ESTADO GLOBAL DE SINCRONIZACIÓN
+      // ---------------------------------------------------------
 
       await _notificarCambioLocal();
 
@@ -527,6 +541,21 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       );
 
       await _cargarMatrices();
+    } on ArgumentError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        error.message?.toString() ?? error.toString(),
+        esError: true,
+      );
+    } on StateError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(error.message, esError: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -534,6 +563,33 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
       _mostrarMensaje(_limpiarMensaje(error), esError: true);
     }
+  }
+
+  // =============================================================
+  // OBTENER USUARIO AUTENTICADO
+  // =============================================================
+
+  Future<int> _obtenerUsuarioAutenticadoId() async {
+    final String usuarioTexto =
+        (await _secureStorage.getUsuarioId())?.trim() ?? '';
+
+    if (usuarioTexto.isEmpty) {
+      throw StateError(
+        'No se encontró el usuario autenticado. '
+        'Inicie sesión nuevamente.',
+      );
+    }
+
+    final int? usuarioId = int.tryParse(usuarioTexto);
+
+    if (usuarioId == null || usuarioId <= 0) {
+      throw StateError(
+        'El identificador del usuario autenticado '
+        'no es válido: $usuarioTexto.',
+      );
+    }
+
+    return usuarioId;
   }
 
   // =============================================================

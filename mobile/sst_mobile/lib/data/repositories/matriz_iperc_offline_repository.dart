@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/sync_constants.dart';
+import '../../core/services/secure_storage_service.dart';
 import '../datasources/local/matriz_iperc_local_datasource.dart';
 import '../datasources/local/sync_queue_local_datasource.dart';
 import '../models/matriz_iperc_local_model.dart';
@@ -16,26 +17,35 @@ import '../models/sync_queue_model.dart';
 ///
 /// Operaciones soportadas:
 ///
-/// - Crear offline.
-/// - Editar offline.
-/// - Eliminar offline.
-/// - Consultar matrices.
-/// - Consultar pendientes.
-/// - Agregar operaciones a la cola de sincronización.
+/// - Crear una matriz offline.
+/// - Actualizar una matriz offline.
+/// - Eliminar una matriz offline.
+/// - Consultar matrices locales.
+/// - Consultar matrices pendientes.
+/// - Registrar operaciones en la cola de sincronización.
 ///
-/// Las operaciones pendientes serán procesadas posteriormente por
-/// SyncService cuando vuelva la conexión.
+/// Cuando el dispositivo recupera conexión, SyncService procesa
+/// las operaciones pendientes y las envía al backend.
 /// ===============================================================
 class MatrizIpercOfflineRepository {
   MatrizIpercOfflineRepository({
     MatrizIpercLocalDatasource? matrizDatasource,
     SyncQueueLocalDatasource? syncQueueDatasource,
+    SecureStorageService? secureStorageService,
   }) : _matrizDatasource = matrizDatasource ?? MatrizIpercLocalDatasource(),
-       _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource();
+       _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource(),
+       _secureStorageService =
+           secureStorageService ?? SecureStorageService.instance;
+
+  // =============================================================
+  // DEPENDENCIAS
+  // =============================================================
 
   final MatrizIpercLocalDatasource _matrizDatasource;
 
   final SyncQueueLocalDatasource _syncQueueDatasource;
+
+  final SecureStorageService _secureStorageService;
 
   final Uuid _uuid = const Uuid();
 
@@ -43,23 +53,41 @@ class MatrizIpercOfflineRepository {
   // CREAR MATRIZ OFFLINE
   // =============================================================
 
+  /// Crea una nueva matriz IPERC en SQLite.
+  ///
+  /// La matriz queda marcada como no sincronizada y se agrega
+  /// automáticamente una operación CREAR a la cola.
   Future<MatrizIpercLocalModel> createOffline({
     required String institucionId,
-    String? sedeId,
-    String? areaId,
-    String? procesoId,
-    String? actividadId,
-    String? puestoTrabajoId,
+    required String sedeId,
+    required String areaId,
+    required String puestoTrabajoId,
+    required String procesoId,
+    required String actividadId,
     String? codigo,
     required String nombre,
     String? descripcion,
     required DateTime fechaEvaluacion,
   }) async {
-    final String institucion = institucionId.trim();
+    // -----------------------------------------------------------
+    // VALIDAR DATOS ORGANIZACIONALES
+    // -----------------------------------------------------------
 
-    if (institucion.isEmpty) {
-      throw ArgumentError('La institución es obligatoria.');
-    }
+    final String institucion = _validarIdTexto(institucionId, 'institución');
+
+    final String sede = _validarIdTexto(sedeId, 'sede');
+
+    final String area = _validarIdTexto(areaId, 'área');
+
+    final String puesto = _validarIdTexto(puestoTrabajoId, 'puesto de trabajo');
+
+    final String proceso = _validarIdTexto(procesoId, 'proceso');
+
+    final String actividad = _validarIdTexto(actividadId, 'actividad');
+
+    // -----------------------------------------------------------
+    // VALIDAR NOMBRE
+    // -----------------------------------------------------------
 
     final String nombreLimpio = nombre.trim();
 
@@ -71,7 +99,17 @@ class MatrizIpercOfflineRepository {
       throw ArgumentError('El nombre debe tener al menos 5 caracteres.');
     }
 
+    // -----------------------------------------------------------
+    // OBTENER USUARIO AUTENTICADO
+    // -----------------------------------------------------------
+
+    final int usuarioRegistroId = await _obtenerUsuarioAutenticadoId();
+
     final DateTime ahora = DateTime.now().toUtc();
+
+    // -----------------------------------------------------------
+    // CREAR MODELO LOCAL
+    // -----------------------------------------------------------
 
     final MatrizIpercLocalModel matriz = MatrizIpercLocalModel(
       idLocal: _uuid.v4(),
@@ -80,15 +118,15 @@ class MatrizIpercOfflineRepository {
 
       institucionId: institucion,
 
-      sedeId: _textoOpcional(sedeId),
+      sedeId: sede,
 
-      areaId: _textoOpcional(areaId),
+      areaId: area,
 
-      procesoId: _textoOpcional(procesoId),
+      procesoId: proceso,
 
-      actividadId: _textoOpcional(actividadId),
+      actividadId: actividad,
 
-      puestoTrabajoId: _textoOpcional(puestoTrabajoId),
+      puestoTrabajoId: puesto,
 
       codigo: _textoOpcional(codigo),
 
@@ -112,16 +150,32 @@ class MatrizIpercOfflineRepository {
     );
 
     // -----------------------------------------------------------
-    // GUARDAR SQLITE
+    // GUARDAR EN SQLITE
     // -----------------------------------------------------------
 
     await _matrizDatasource.insert(matriz);
 
     // -----------------------------------------------------------
-    // AGREGAR CREAR A LA COLA
+    // PREPARAR INFORMACIÓN DE SINCRONIZACIÓN
     // -----------------------------------------------------------
 
-    await _agregarOperacionCola(matriz: matriz, operacion: SyncConstants.crear);
+    final Map<String, dynamic> datosCola = Map<String, dynamic>.from(
+      matriz.toMap(),
+    );
+
+    // El usuario que realmente creó la matriz queda almacenado
+    // junto con la operación.
+    datosCola['usuarioRegistroId'] = usuarioRegistroId;
+
+    // -----------------------------------------------------------
+    // AGREGAR OPERACIÓN CREAR
+    // -----------------------------------------------------------
+
+    await _agregarOperacionCola(
+      matriz: matriz,
+      operacion: SyncConstants.crear,
+      datosPersonalizados: datosCola,
+    );
 
     return matriz;
   }
@@ -130,43 +184,30 @@ class MatrizIpercOfflineRepository {
   // ACTUALIZAR MATRIZ OFFLINE
   // =============================================================
 
-  /// Actualiza una matriz almacenada en SQLite.
+  /// Actualiza una matriz almacenada localmente.
   ///
-  /// Puede utilizarse tanto para una matriz:
+  /// Puede tratarse de:
   ///
-  /// - creada completamente offline;
-  /// - como para una matriz que ya tenga idServidor.
+  /// - una matriz creada completamente offline;
+  /// - una matriz que anteriormente ya fue sincronizada.
   ///
-  /// La operación queda registrada como ACTUALIZAR.
+  /// Después de modificarla queda nuevamente como pendiente.
   Future<MatrizIpercLocalModel> updateOffline({
     required String idLocal,
-
     required String institucionId,
-
     required String sedeId,
-
     required String areaId,
-
     required String puestoTrabajoId,
-
     required String procesoId,
-
     required String actividadId,
-
     required String nombre,
-
     String? descripcion,
-
     String? codigo,
-
     DateTime? fechaEvaluacion,
-
     String estadoMatriz = 'BORRADOR',
-
-    int usuarioActualizacionId = 1,
   }) async {
     // -----------------------------------------------------------
-    // VALIDACIONES
+    // VALIDAR ID LOCAL
     // -----------------------------------------------------------
 
     final String localId = idLocal.trim();
@@ -176,6 +217,10 @@ class MatrizIpercOfflineRepository {
         'El identificador local de la matriz es obligatorio.',
       );
     }
+
+    // -----------------------------------------------------------
+    // BUSCAR MATRIZ
+    // -----------------------------------------------------------
 
     final MatrizIpercLocalModel? existente = await _matrizDatasource.getById(
       localId,
@@ -189,6 +234,26 @@ class MatrizIpercOfflineRepository {
       throw StateError('No se puede actualizar una matriz eliminada.');
     }
 
+    // -----------------------------------------------------------
+    // VALIDAR DATOS ORGANIZACIONALES
+    // -----------------------------------------------------------
+
+    final String institucion = _validarIdTexto(institucionId, 'institución');
+
+    final String sede = _validarIdTexto(sedeId, 'sede');
+
+    final String area = _validarIdTexto(areaId, 'área');
+
+    final String puesto = _validarIdTexto(puestoTrabajoId, 'puesto de trabajo');
+
+    final String proceso = _validarIdTexto(procesoId, 'proceso');
+
+    final String actividad = _validarIdTexto(actividadId, 'actividad');
+
+    // -----------------------------------------------------------
+    // VALIDAR NOMBRE
+    // -----------------------------------------------------------
+
     final String nombreLimpio = nombre.trim();
 
     if (nombreLimpio.isEmpty) {
@@ -199,32 +264,11 @@ class MatrizIpercOfflineRepository {
       throw ArgumentError('El nombre debe tener al menos 5 caracteres.');
     }
 
-    if (usuarioActualizacionId <= 0) {
-      throw ArgumentError('El usuario que actualiza la matriz es obligatorio.');
-    }
+    // -----------------------------------------------------------
+    // OBTENER USUARIO AUTENTICADO
+    // -----------------------------------------------------------
 
-    final String institucion = institucionId.trim();
-
-    final String sede = sedeId.trim();
-
-    final String area = areaId.trim();
-
-    final String puesto = puestoTrabajoId.trim();
-
-    final String proceso = procesoId.trim();
-
-    final String actividad = actividadId.trim();
-
-    if (institucion.isEmpty ||
-        sede.isEmpty ||
-        area.isEmpty ||
-        puesto.isEmpty ||
-        proceso.isEmpty ||
-        actividad.isEmpty) {
-      throw ArgumentError(
-        'Debe seleccionar todos los datos organizacionales obligatorios.',
-      );
-    }
+    final int usuarioActualizacionId = await _obtenerUsuarioAutenticadoId();
 
     final DateTime ahora = DateTime.now().toUtc();
 
@@ -261,7 +305,7 @@ class MatrizIpercOfflineRepository {
           ? existente.estadoMatriz
           : estadoMatriz.trim(),
 
-      // Cada edición genera un cambio pendiente.
+      // Cualquier modificación vuelve a dejarla pendiente.
       sincronizado: false,
 
       eliminado: false,
@@ -280,7 +324,7 @@ class MatrizIpercOfflineRepository {
     await _matrizDatasource.update(actualizada);
 
     // -----------------------------------------------------------
-    // DATOS PARA SINCRONIZACIÓN
+    // PREPARAR DATOS DE LA COLA
     // -----------------------------------------------------------
 
     final Map<String, dynamic> datosCola = Map<String, dynamic>.from(
@@ -306,15 +350,13 @@ class MatrizIpercOfflineRepository {
   // ELIMINAR MATRIZ OFFLINE
   // =============================================================
 
-  /// Realiza eliminación lógica en SQLite.
+  /// Realiza eliminación lógica de la matriz en SQLite.
   ///
-  /// La matriz desaparece del listado normal, pero permanece
-  /// almacenada para poder sincronizar posteriormente el DELETE.
-  Future<void> deleteOffline({
-    required String idLocal,
-
-    int usuarioEliminacionId = 1,
-  }) async {
+  /// Si la matriz ya existe en MySQL, SyncService enviará DELETE.
+  ///
+  /// Si fue creada y eliminada sin haberse sincronizado nunca,
+  /// no existe registro remoto que eliminar.
+  Future<void> deleteOffline({required String idLocal}) async {
     final String localId = idLocal.trim();
 
     if (localId.isEmpty) {
@@ -323,9 +365,9 @@ class MatrizIpercOfflineRepository {
       );
     }
 
-    if (usuarioEliminacionId <= 0) {
-      throw ArgumentError('El usuario que elimina la matriz es obligatorio.');
-    }
+    // -----------------------------------------------------------
+    // OBTENER MATRIZ
+    // -----------------------------------------------------------
 
     final MatrizIpercLocalModel? matriz = await _matrizDatasource.getById(
       localId,
@@ -340,7 +382,13 @@ class MatrizIpercOfflineRepository {
     }
 
     // -----------------------------------------------------------
-    // PREPARAR DATOS ANTES DE MARCARLA ELIMINADA
+    // OBTENER USUARIO AUTENTICADO
+    // -----------------------------------------------------------
+
+    final int usuarioEliminacionId = await _obtenerUsuarioAutenticadoId();
+
+    // -----------------------------------------------------------
+    // PREPARAR DATOS ANTES DE ELIMINAR
     // -----------------------------------------------------------
 
     final Map<String, dynamic> datosCola = Map<String, dynamic>.from(
@@ -356,7 +404,7 @@ class MatrizIpercOfflineRepository {
     await _matrizDatasource.deleteLogical(localId);
 
     // -----------------------------------------------------------
-    // AGREGAR DELETE A COLA
+    // AGREGAR DELETE A LA COLA
     // -----------------------------------------------------------
 
     await _agregarOperacionCola(
@@ -397,7 +445,7 @@ class MatrizIpercOfflineRepository {
   }
 
   // =============================================================
-  // OBTENER ID SERVIDOR
+  // OBTENER ID DEL SERVIDOR
   // =============================================================
 
   Future<int?> getServerId(String idLocal) {
@@ -423,26 +471,32 @@ class MatrizIpercOfflineRepository {
   }
 
   // =============================================================
-  // AGREGAR OPERACIÓN A COLA
+  // AGREGAR OPERACIÓN A LA COLA
   // =============================================================
 
   Future<void> _agregarOperacionCola({
     required MatrizIpercLocalModel matriz,
-
     required String operacion,
-
     Map<String, dynamic>? datosPersonalizados,
   }) async {
+    final String operacionLimpia = operacion.trim().toUpperCase();
+
+    if (operacionLimpia.isEmpty) {
+      throw ArgumentError('La operación de sincronización es obligatoria.');
+    }
+
     final DateTime ahora = DateTime.now().toUtc();
 
-    final Map<String, dynamic> datos = datosPersonalizados ?? matriz.toMap();
+    final Map<String, dynamic> datos = datosPersonalizados != null
+        ? Map<String, dynamic>.from(datosPersonalizados)
+        : Map<String, dynamic>.from(matriz.toMap());
 
     final SyncQueueModel queueItem = SyncQueueModel(
       entidad: SyncConstants.matrizIperc,
 
       entidadIdLocal: matriz.idLocal,
 
-      operacion: operacion,
+      operacion: operacionLimpia,
 
       datosJson: jsonEncode(datos),
 
@@ -450,6 +504,60 @@ class MatrizIpercOfflineRepository {
     );
 
     await _syncQueueDatasource.insert(queueItem);
+  }
+
+  // =============================================================
+  // OBTENER USUARIO AUTENTICADO
+  // =============================================================
+
+  /// Obtiene desde FlutterSecureStorage el ID del usuario que
+  /// inició sesión.
+  ///
+  /// Nunca utiliza un ID fijo como 1.
+  Future<int> _obtenerUsuarioAutenticadoId() async {
+    final String texto =
+        (await _secureStorageService.getUsuarioId())?.trim() ?? '';
+
+    if (texto.isEmpty) {
+      throw StateError(
+        'No se encontró el usuario autenticado. '
+        'Inicie sesión nuevamente.',
+      );
+    }
+
+    final int? usuarioId = int.tryParse(texto);
+
+    if (usuarioId == null || usuarioId <= 0) {
+      throw StateError(
+        'El identificador del usuario autenticado '
+        'no es válido: $texto.',
+      );
+    }
+
+    return usuarioId;
+  }
+
+  // =============================================================
+  // VALIDAR ID
+  // =============================================================
+
+  String _validarIdTexto(String value, String nombre) {
+    final String texto = value.trim();
+
+    if (texto.isEmpty) {
+      throw ArgumentError('Debe seleccionar $nombre.');
+    }
+
+    final int? id = int.tryParse(texto);
+
+    if (id == null || id <= 0) {
+      throw ArgumentError(
+        'El identificador de $nombre '
+        'no es válido: $texto.',
+      );
+    }
+
+    return id.toString();
   }
 
   // =============================================================

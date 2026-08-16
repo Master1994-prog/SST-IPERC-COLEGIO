@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/network/network_info.dart';
+import '../../../core/services/secure_storage_service.dart';
 import '../../../data/datasources/local/catalogos_organizacion_local_datasource.dart';
 import '../../../data/datasources/remote/catalogos_remote_datasource.dart';
 import '../../../data/datasources/remote/matriz_iperc_remote_datasource.dart';
@@ -15,19 +16,18 @@ import '../../providers/sync_provider.dart';
 /// NUEVA MATRIZ IPERC
 /// ===============================================================
 ///
-/// La pantalla trabaja de dos maneras:
+/// La pantalla trabaja en dos modos:
 ///
 /// ONLINE:
 /// - Obtiene catálogos desde el backend.
 /// - Guarda una copia de los catálogos en SQLite.
-/// - Intenta registrar la matriz directamente en el backend.
+/// - Registra la matriz directamente en el backend.
 ///
 /// OFFLINE:
 /// - Obtiene los catálogos almacenados en SQLite.
 /// - Guarda la matriz en SQLite.
-/// - Agrega la matriz a la cola de sincronización.
-/// - Cuando vuelva internet, SyncProvider/SyncService la enviará
-///   al backend.
+/// - Registra una operación pendiente.
+/// - SyncService la enviará al backend cuando vuelva la conexión.
 /// ===============================================================
 class NuevaMatrizIpercScreen extends StatefulWidget {
   const NuevaMatrizIpercScreen({
@@ -72,6 +72,8 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
   final NetworkInfo _networkInfo = NetworkInfo.instance;
 
+  final SecureStorageService _secureStorage = SecureStorageService.instance;
+
   // =============================================================
   // CATÁLOGOS
   // =============================================================
@@ -93,10 +95,15 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   // =============================================================
 
   CatalogoItemModel? _institucionSeleccionada;
+
   CatalogoItemModel? _sedeSeleccionada;
+
   CatalogoItemModel? _areaSeleccionada;
+
   CatalogoItemModel? _procesoSeleccionado;
+
   CatalogoItemModel? _actividadSeleccionada;
+
   CatalogoItemModel? _puestoTrabajoSeleccionado;
 
   // =============================================================
@@ -104,15 +111,20 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   // =============================================================
 
   bool _cargandoInstituciones = true;
+
   bool _cargandoSedes = false;
+
   bool _cargandoAreas = false;
+
   bool _cargandoProcesos = false;
+
   bool _cargandoActividades = false;
+
   bool _cargandoPuestosTrabajo = false;
 
   bool _guardando = false;
 
-  /// Indica que la pantalla está utilizando la copia SQLite.
+  /// Indica que la pantalla está utilizando catálogos SQLite.
   bool _usandoCatalogosLocales = false;
 
   String? _mensajeErrorCarga;
@@ -137,7 +149,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   @override
   void dispose() {
     _codigoController.dispose();
+
     _nombreController.dispose();
+
     _objetivoController.dispose();
 
     super.dispose();
@@ -180,20 +194,31 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     if (mounted) {
       setState(() {
         _cargandoInstituciones = true;
+
         _mensajeErrorCarga = null;
 
         _instituciones = <CatalogoItemModel>[];
+
         _sedes = <CatalogoItemModel>[];
+
         _areas = <CatalogoItemModel>[];
+
         _puestosTrabajo = <CatalogoItemModel>[];
+
         _procesos = <CatalogoItemModel>[];
+
         _actividades = <CatalogoItemModel>[];
 
         _institucionSeleccionada = null;
+
         _sedeSeleccionada = null;
+
         _areaSeleccionada = null;
+
         _puestoTrabajoSeleccionado = null;
+
         _procesoSeleccionado = null;
+
         _actividadSeleccionada = null;
       });
     }
@@ -210,7 +235,6 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
           final List<CatalogoItemModel> remotas = await _catalogosRemote
               .obtenerInstituciones();
 
-          // Guardamos copia para uso offline.
           await _catalogosLocal.guardarInstituciones(remotas);
 
           if (!mounted) {
@@ -219,19 +243,20 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
           setState(() {
             _instituciones = remotas;
+
             _usandoCatalogosLocales = false;
           });
 
           return;
         } on DioException {
-          // Si la API no responde, intentaremos SQLite.
+          // Intentamos SQLite.
         } catch (_) {
-          // También intentamos SQLite.
+          // Intentamos SQLite.
         }
       }
 
       // ---------------------------------------------------------
-      // OFFLINE / FALLBACK
+      // OFFLINE
       // ---------------------------------------------------------
 
       final List<CatalogoItemModel> locales = await _catalogosLocal
@@ -255,6 +280,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
       setState(() {
         _instituciones = locales;
+
         _usandoCatalogosLocales = true;
       });
     } catch (error) {
@@ -284,15 +310,23 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       _institucionSeleccionada = institucion;
 
       _sedeSeleccionada = null;
+
       _areaSeleccionada = null;
+
       _puestoTrabajoSeleccionado = null;
+
       _procesoSeleccionado = null;
+
       _actividadSeleccionada = null;
 
       _sedes = <CatalogoItemModel>[];
+
       _areas = <CatalogoItemModel>[];
+
       _puestosTrabajo = <CatalogoItemModel>[];
+
       _procesos = <CatalogoItemModel>[];
+
       _actividades = <CatalogoItemModel>[];
     });
 
@@ -302,6 +336,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
     setState(() {
       _cargandoSedes = true;
+
       _cargandoAreas = true;
     });
 
@@ -311,12 +346,15 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       if (conectado) {
         try {
           final List<List<CatalogoItemModel>> resultados =
-              await Future.wait(<Future<List<CatalogoItemModel>>>[
-                _catalogosRemote.obtenerSedes(institucionId: institucion.id),
-                _catalogosRemote.obtenerAreas(institucionId: institucion.id),
-              ]);
+              await Future.wait<List<CatalogoItemModel>>(
+                <Future<List<CatalogoItemModel>>>[
+                  _catalogosRemote.obtenerSedes(institucionId: institucion.id),
+                  _catalogosRemote.obtenerAreas(institucionId: institucion.id),
+                ],
+              );
 
           final List<CatalogoItemModel> sedes = resultados[0];
+
           final List<CatalogoItemModel> areas = resultados[1];
 
           await Future.wait<void>(<Future<void>>[
@@ -330,7 +368,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
           setState(() {
             _sedes = sedes;
+
             _areas = areas;
+
             _usandoCatalogosLocales = false;
           });
 
@@ -342,15 +382,13 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         }
       }
 
-      // ---------------------------------------------------------
-      // SQLITE
-      // ---------------------------------------------------------
-
       final List<List<CatalogoItemModel>> locales =
-          await Future.wait(<Future<List<CatalogoItemModel>>>[
-            _catalogosLocal.obtenerSedes(institucionId: institucion.id),
-            _catalogosLocal.obtenerAreas(institucionId: institucion.id),
-          ]);
+          await Future.wait<List<CatalogoItemModel>>(
+            <Future<List<CatalogoItemModel>>>[
+              _catalogosLocal.obtenerSedes(institucionId: institucion.id),
+              _catalogosLocal.obtenerAreas(institucionId: institucion.id),
+            ],
+          );
 
       if (!mounted) {
         return;
@@ -358,7 +396,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
       setState(() {
         _sedes = locales[0];
+
         _areas = locales[1];
+
         _usandoCatalogosLocales = true;
       });
 
@@ -379,6 +419,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       if (mounted) {
         setState(() {
           _cargandoSedes = false;
+
           _cargandoAreas = false;
         });
       }
@@ -394,11 +435,15 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       _areaSeleccionada = area;
 
       _puestoTrabajoSeleccionado = null;
+
       _procesoSeleccionado = null;
+
       _actividadSeleccionada = null;
 
       _puestosTrabajo = <CatalogoItemModel>[];
+
       _procesos = <CatalogoItemModel>[];
+
       _actividades = <CatalogoItemModel>[];
     });
 
@@ -408,6 +453,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
     setState(() {
       _cargandoPuestosTrabajo = true;
+
       _cargandoProcesos = true;
     });
 
@@ -417,12 +463,15 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       if (conectado) {
         try {
           final List<List<CatalogoItemModel>> resultados =
-              await Future.wait(<Future<List<CatalogoItemModel>>>[
-                _catalogosRemote.obtenerPuestosTrabajo(areaId: area.id),
-                _catalogosRemote.obtenerProcesos(areaId: area.id),
-              ]);
+              await Future.wait<List<CatalogoItemModel>>(
+                <Future<List<CatalogoItemModel>>>[
+                  _catalogosRemote.obtenerPuestosTrabajo(areaId: area.id),
+                  _catalogosRemote.obtenerProcesos(areaId: area.id),
+                ],
+              );
 
           final List<CatalogoItemModel> puestos = resultados[0];
+
           final List<CatalogoItemModel> procesos = resultados[1];
 
           await Future.wait<void>(<Future<void>>[
@@ -436,23 +485,27 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
           setState(() {
             _puestosTrabajo = puestos;
+
             _procesos = procesos;
+
             _usandoCatalogosLocales = false;
           });
 
           return;
         } on DioException {
-          // Pasamos a SQLite.
+          // Pasar a SQLite.
         } catch (_) {
-          // Pasamos a SQLite.
+          // Pasar a SQLite.
         }
       }
 
       final List<List<CatalogoItemModel>> locales =
-          await Future.wait(<Future<List<CatalogoItemModel>>>[
-            _catalogosLocal.obtenerPuestosTrabajo(areaId: area.id),
-            _catalogosLocal.obtenerProcesos(areaId: area.id),
-          ]);
+          await Future.wait<List<CatalogoItemModel>>(
+            <Future<List<CatalogoItemModel>>>[
+              _catalogosLocal.obtenerPuestosTrabajo(areaId: area.id),
+              _catalogosLocal.obtenerProcesos(areaId: area.id),
+            ],
+          );
 
       if (!mounted) {
         return;
@@ -460,7 +513,9 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
       setState(() {
         _puestosTrabajo = locales[0];
+
         _procesos = locales[1];
+
         _usandoCatalogosLocales = true;
       });
 
@@ -481,6 +536,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       if (mounted) {
         setState(() {
           _cargandoPuestosTrabajo = false;
+
           _cargandoProcesos = false;
         });
       }
@@ -527,6 +583,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
           setState(() {
             _actividades = actividades;
+
             _usandoCatalogosLocales = false;
           });
 
@@ -547,6 +604,7 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
       setState(() {
         _actividades = locales;
+
         _usandoCatalogosLocales = true;
       });
 
@@ -563,6 +621,33 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         });
       }
     }
+  }
+
+  // =============================================================
+  // OBTENER USUARIO AUTENTICADO
+  // =============================================================
+
+  Future<int> _obtenerUsuarioAutenticadoId() async {
+    final String usuarioTexto =
+        (await _secureStorage.getUsuarioId())?.trim() ?? '';
+
+    if (usuarioTexto.isEmpty) {
+      throw StateError(
+        'No se encontró el usuario autenticado. '
+        'Inicie sesión nuevamente.',
+      );
+    }
+
+    final int? usuarioId = int.tryParse(usuarioTexto);
+
+    if (usuarioId == null || usuarioId <= 0) {
+      throw StateError(
+        'El identificador del usuario autenticado '
+        'no es válido: $usuarioTexto.',
+      );
+    }
+
+    return usuarioId;
   }
 
   // =============================================================
@@ -583,10 +668,16 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     });
 
     try {
+      // ---------------------------------------------------------
+      // VALIDAR USUARIO ANTES DE GUARDAR
+      // ---------------------------------------------------------
+
+      await _obtenerUsuarioAutenticadoId();
+
       final bool conectado = await _networkInfo.isConnected;
 
       // =========================================================
-      // INTENTAR ONLINE
+      // ONLINE
       // =========================================================
 
       if (conectado) {
@@ -595,12 +686,6 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
           return;
         } on DioException catch (error) {
-          // -----------------------------------------------------
-          // Si es un error real de conexión, se guarda offline.
-          // Si el backend respondió 400/404/500, no debemos
-          // esconder el error almacenando silenciosamente.
-          // -----------------------------------------------------
-
           if (!_esErrorConexion(error)) {
             rethrow;
           }
@@ -644,6 +729,12 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
         error.message?.toString() ?? error.toString(),
         esError: true,
       );
+    } on StateError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(error.message, esError: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -667,20 +758,43 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   // =============================================================
 
   Future<void> _guardarOnline() async {
+    // -----------------------------------------------------------
+    // OBTENER USUARIO REAL
+    // -----------------------------------------------------------
+
+    final int usuarioRegistroId = await _obtenerUsuarioAutenticadoId();
+
+    // -----------------------------------------------------------
+    // PAYLOAD
+    // -----------------------------------------------------------
+
     final Map<String, dynamic> datos = <String, dynamic>{
       'codigo': _codigoController.text.trim(),
+
       'nombre': _nombreController.text.trim(),
+
       'objetivo': _objetivoController.text.trim(),
+
       'institucionId': _institucionSeleccionada!.id,
+
       'sedeId': _sedeSeleccionada!.id,
+
       'areaId': _areaSeleccionada!.id,
+
       'puestoTrabajoId': _puestoTrabajoSeleccionado!.id,
+
       'procesoId': _procesoSeleccionado!.id,
+
       'actividadId': _actividadSeleccionada!.id,
-      'usuarioRegistroId': 1,
+
+      'usuarioRegistroId': usuarioRegistroId,
     };
 
     debugPrint('DATOS MATRIZ IPERC ONLINE: $datos');
+
+    // -----------------------------------------------------------
+    // POST
+    // -----------------------------------------------------------
 
     final String idServidor = await _matrizRemote.create(datos);
 
@@ -688,7 +802,10 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
       return;
     }
 
-    _mostrarMensaje('Matriz registrada correctamente. ID: $idServidor');
+    _mostrarMensaje(
+      'Matriz registrada correctamente. '
+      'ID: $idServidor',
+    );
 
     Navigator.of(context).pop(true);
   }
@@ -710,18 +827,26 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
 
     final CatalogoItemModel actividad = _actividadSeleccionada!;
 
+    // El repositorio offline ya obtiene el usuario autenticado
+    // directamente desde SecureStorageService.
+
     final matriz = await _matrizOfflineRepository.createOffline(
       institucionId: institucion.id.toString(),
+
       sedeId: sede.id.toString(),
+
       areaId: area.id.toString(),
+
       puestoTrabajoId: puesto.id.toString(),
+
       procesoId: proceso.id.toString(),
+
       actividadId: actividad.id.toString(),
+
       codigo: _codigoController.text.trim(),
+
       nombre: _nombreController.text.trim(),
 
-      // En el modelo local se mantiene como descripción.
-      // SyncService lo transforma posteriormente a "objetivo".
       descripcion: _objetivoController.text.trim(),
 
       fechaEvaluacion: DateTime.now().toUtc(),
@@ -730,16 +855,14 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
     debugPrint('MATRIZ IPERC OFFLINE: ${matriz.idLocal}');
 
     // -----------------------------------------------------------
-    // ACTUALIZAR CONTADOR GLOBAL DE PENDIENTES
+    // ACTUALIZAR CONTADOR DE PENDIENTES
     // -----------------------------------------------------------
 
     if (mounted) {
       try {
         await context.read<SyncProvider>().notifyLocalChange();
       } catch (_) {
-        // La matriz ya fue guardada correctamente.
-        // Si SyncProvider no estuviera disponible en este contexto,
-        // no se debe cancelar el guardado local.
+        // La matriz ya quedó correctamente almacenada.
       }
     }
 

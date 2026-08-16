@@ -14,7 +14,11 @@ import '../../../data/repositories/matriz_iperc_offline_repository.dart';
 /// 1. modifica la matriz local;
 /// 2. la marca como pendiente;
 /// 3. agrega ACTUALIZAR a la cola;
-/// 4. SyncService hará PUT cuando vuelva Internet.
+/// 4. SyncService realizará PUT cuando vuelva Internet.
+///
+/// El usuario responsable de la modificación se obtiene
+/// automáticamente desde SecureStorageService dentro del
+/// repositorio offline.
 /// ===============================================================
 class EditarMatrizIpercOfflineScreen extends StatefulWidget {
   const EditarMatrizIpercOfflineScreen({required this.matriz, super.key});
@@ -28,16 +32,36 @@ class EditarMatrizIpercOfflineScreen extends StatefulWidget {
 
 class _EditarMatrizIpercOfflineScreenState
     extends State<EditarMatrizIpercOfflineScreen> {
+  // =============================================================
+  // FORMULARIO
+  // =============================================================
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  // =============================================================
+  // REPOSITORIO
+  // =============================================================
 
   final MatrizIpercOfflineRepository _repository =
       MatrizIpercOfflineRepository();
+
+  // =============================================================
+  // CONTROLADORES
+  // =============================================================
 
   late final TextEditingController _nombreController;
 
   late final TextEditingController _objetivoController;
 
+  // =============================================================
+  // ESTADO
+  // =============================================================
+
   bool _guardando = false;
+
+  // =============================================================
+  // INIT
+  // =============================================================
 
   @override
   void initState() {
@@ -50,9 +74,14 @@ class _EditarMatrizIpercOfflineScreenState
     );
   }
 
+  // =============================================================
+  // DISPOSE
+  // =============================================================
+
   @override
   void dispose() {
     _nombreController.dispose();
+
     _objetivoController.dispose();
 
     super.dispose();
@@ -77,6 +106,10 @@ class _EditarMatrizIpercOfflineScreenState
 
     final MatrizIpercLocalModel matriz = widget.matriz;
 
+    // -----------------------------------------------------------
+    // OBTENER RELACIONES ORGANIZACIONALES
+    // -----------------------------------------------------------
+
     final String institucionId = matriz.institucionId.trim();
 
     final String sedeId = matriz.sedeId?.trim() ?? '';
@@ -88,6 +121,10 @@ class _EditarMatrizIpercOfflineScreenState
     final String procesoId = matriz.procesoId?.trim() ?? '';
 
     final String actividadId = matriz.actividadId?.trim() ?? '';
+
+    // -----------------------------------------------------------
+    // VALIDAR RELACIONES
+    // -----------------------------------------------------------
 
     if (institucionId.isEmpty ||
         sedeId.isEmpty ||
@@ -108,6 +145,16 @@ class _EditarMatrizIpercOfflineScreenState
     });
 
     try {
+      // ---------------------------------------------------------
+      // ACTUALIZAR SQLITE
+      // ---------------------------------------------------------
+      //
+      // Ya NO enviamos usuarioActualizacionId.
+      //
+      // MatrizIpercOfflineRepository obtiene automáticamente
+      // el usuario autenticado desde SecureStorageService.
+      // ---------------------------------------------------------
+
       await _repository.updateOffline(
         idLocal: matriz.idLocal,
 
@@ -132,14 +179,15 @@ class _EditarMatrizIpercOfflineScreenState
         fechaEvaluacion: matriz.fechaEvaluacion,
 
         estadoMatriz: matriz.estadoMatriz,
-
-        // Temporal hasta conectar el ID real del usuario logueado.
-        usuarioActualizacionId: 1,
       );
 
       if (!mounted) {
         return;
       }
+
+      // ---------------------------------------------------------
+      // MENSAJE
+      // ---------------------------------------------------------
 
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -153,6 +201,27 @@ class _EditarMatrizIpercOfflineScreenState
         );
 
       Navigator.of(context).pop(true);
+    } on ArgumentError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        error.message?.toString() ?? error.toString(),
+        esError: true,
+      );
+    } on StateError catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(error.message, esError: true);
+    } on FormatException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(error.message, esError: true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -184,7 +253,6 @@ class _EditarMatrizIpercOfflineScreenState
 
     return Scaffold(
       appBar: AppBar(title: const Text('Editar matriz offline')),
-
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -192,7 +260,7 @@ class _EditarMatrizIpercOfflineScreenState
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: <Widget>[
               // =================================================
-              // INFORMACIÓN
+              // INFORMACIÓN GENERAL
               // =================================================
               Card(
                 child: Padding(
@@ -305,7 +373,7 @@ class _EditarMatrizIpercOfflineScreenState
               const SizedBox(height: 20),
 
               // =================================================
-              // ESTADO SINCRONIZACIÓN
+              // SINCRONIZACIÓN
               // =================================================
               Text(
                 'Sincronización',
@@ -341,7 +409,7 @@ class _EditarMatrizIpercOfflineScreenState
               const SizedBox(height: 20),
 
               // =================================================
-              // RELACIONES
+              // ORGANIZACIÓN
               // =================================================
               Text(
                 'Información organizacional',
@@ -392,11 +460,19 @@ class _EditarMatrizIpercOfflineScreenState
     );
   }
 
+  // =============================================================
+  // TEXTO OPCIONAL
+  // =============================================================
+
   String? _textoOpcional(String? value) {
     final String texto = value?.trim() ?? '';
 
     return texto.isEmpty ? null : texto;
   }
+
+  // =============================================================
+  // LIMPIAR ERROR
+  // =============================================================
 
   String _limpiarError(Object error) {
     String mensaje = error.toString().trim();
@@ -418,13 +494,20 @@ class _EditarMatrizIpercOfflineScreenState
     return mensaje.isEmpty ? 'No se pudo actualizar la matriz local.' : mensaje;
   }
 
+  // =============================================================
+  // MENSAJE
+  // =============================================================
+
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(mensaje),
-
           backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
         ),
       );
@@ -434,11 +517,11 @@ class _EditarMatrizIpercOfflineScreenState
 /// ===============================================================
 /// DATO LOCAL
 /// ===============================================================
-
 class _DatoLocal extends StatelessWidget {
   const _DatoLocal({required this.titulo, required this.valor});
 
   final String titulo;
+
   final String? valor;
 
   @override

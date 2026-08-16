@@ -9,8 +9,11 @@ import '../../data/models/sync_queue_model.dart';
 import '../../data/services/detalle_iperc_sync_service.dart';
 import '../constants/sync_constants.dart';
 import '../network/network_info.dart';
+import 'secure_storage_service.dart';
 
-/// Resultado general del proceso automático de sincronización.
+/// ===============================================================
+/// RESULTADO DE SINCRONIZACIÓN
+/// ===============================================================
 class SyncResult {
   const SyncResult({
     required this.total,
@@ -40,16 +43,23 @@ class SyncResult {
   }
 }
 
-/// Servicio general de sincronización.
+/// ===============================================================
+/// SERVICIO GENERAL DE SINCRONIZACIÓN
+/// ===============================================================
 ///
-/// Procesa las operaciones almacenadas en:
+/// Procesa las operaciones almacenadas en SQLite dentro de:
 ///
 /// `sincronizaciones_pendientes`
 ///
-/// Entidades admitidas:
+/// Entidades actualmente admitidas:
 ///
 /// - MATRIZ_IPERC.
 /// - DETALLE_IPERC.
+///
+/// Las operaciones se procesan en orden de creación para respetar:
+///
+/// CREAR -> ACTUALIZAR -> ELIMINAR
+/// ===============================================================
 class SyncService {
   SyncService({
     NetworkInfo? networkInfo,
@@ -57,6 +67,7 @@ class SyncService {
     MatrizIpercLocalDatasource? matrizLocalDatasource,
     MatrizIpercRemoteDatasource? matrizRemoteDatasource,
     DetalleIpercSyncService? detalleIpercSyncService,
+    SecureStorageService? secureStorageService,
   }) : _networkInfo = networkInfo ?? NetworkInfo.instance,
        _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource(),
        _matrizLocalDatasource =
@@ -64,7 +75,13 @@ class SyncService {
        _matrizRemoteDatasource =
            matrizRemoteDatasource ?? MatrizIpercRemoteDatasource(),
        _detalleIpercSyncService =
-           detalleIpercSyncService ?? DetalleIpercSyncService();
+           detalleIpercSyncService ?? DetalleIpercSyncService(),
+       _secureStorageService =
+           secureStorageService ?? SecureStorageService.instance;
+
+  // =============================================================
+  // DEPENDENCIAS
+  // =============================================================
 
   final NetworkInfo _networkInfo;
 
@@ -76,17 +93,28 @@ class SyncService {
 
   final DetalleIpercSyncService _detalleIpercSyncService;
 
+  final SecureStorageService _secureStorageService;
+
+  // =============================================================
+  // ESTADO
+  // =============================================================
+
   bool _isSynchronizing = false;
 
   bool get isSynchronizing {
     return _isSynchronizing;
   }
 
+  // =============================================================
+  // SINCRONIZAR PENDIENTES
+  // =============================================================
+
   /// Sincroniza todas las operaciones pendientes.
   ///
-  /// Las operaciones se procesan en el orden en que fueron
-  /// registradas en SQLite.
+  /// Las operaciones se procesan respetando el orden en que
+  /// fueron registradas en SQLite.
   Future<SyncResult> synchronizePending() async {
+    // Evita ejecutar dos sincronizaciones simultáneamente.
     if (_isSynchronizing) {
       return const SyncResult(
         total: 0,
@@ -95,6 +123,10 @@ class SyncService {
         withoutConnection: false,
       );
     }
+
+    // -----------------------------------------------------------
+    // COMPROBAR CONEXIÓN
+    // -----------------------------------------------------------
 
     final bool connected = await _networkInfo.isConnected;
 
@@ -113,8 +145,16 @@ class SyncService {
     int failed = 0;
 
     try {
+      // ---------------------------------------------------------
+      // OBTENER COLA
+      // ---------------------------------------------------------
+
       final List<SyncQueueModel> pendingItems = await _syncQueueDatasource
           .getPending();
+
+      // ---------------------------------------------------------
+      // PROCESAR UNO POR UNO
+      // ---------------------------------------------------------
 
       for (final SyncQueueModel item in pendingItems) {
         final int? queueId = item.id;
@@ -125,11 +165,10 @@ class SyncService {
         }
 
         try {
-          /*
-           * Se comprueba la conexión antes de cada registro.
-           * Esto evita continuar enviando operaciones cuando
-           * la conexión se pierde a mitad del proceso.
-           */
+          // -----------------------------------------------------
+          // VERIFICAR CONEXIÓN ANTES DE CADA OPERACIÓN
+          // -----------------------------------------------------
+
           final bool sigueConectado = await _networkInfo.isConnected;
 
           if (!sigueConectado) {
@@ -141,21 +180,31 @@ class SyncService {
             );
           }
 
+          // -----------------------------------------------------
+          // MARCAR SINCRONIZANDO
+          // -----------------------------------------------------
+
           await _syncQueueDatasource.markAsSynchronizing(queueId);
+
+          // -----------------------------------------------------
+          // PROCESAR OPERACIÓN
+          // -----------------------------------------------------
 
           await _processItem(item);
 
-          /*
-           * Los datasources locales también pueden actualizar
-           * la cola durante la confirmación. Esta llamada asegura
-           * que el elemento procesado quede definitivamente
-           * marcado como sincronizado mediante su ID.
-           */
+          // -----------------------------------------------------
+          // CONFIRMAR SINCRONIZACIÓN
+          // -----------------------------------------------------
+
           await _syncQueueDatasource.markAsSynchronized(queueId);
 
           synchronized++;
         } catch (error) {
           failed++;
+
+          // -----------------------------------------------------
+          // GUARDAR ERROR
+          // -----------------------------------------------------
 
           await _syncQueueDatasource.markAsError(
             id: queueId,
@@ -176,17 +225,29 @@ class SyncService {
     }
   }
 
-  /// Procesa una operación según su entidad y tipo.
+  // =============================================================
+  // PROCESAR ELEMENTO
+  // =============================================================
+
+  /// Determina qué servicio debe procesar la operación.
   Future<void> _processItem(SyncQueueModel item) async {
     final String entidad = item.entidad.trim().toUpperCase();
 
     final String operacion = item.operacion.trim().toUpperCase();
+
+    // -----------------------------------------------------------
+    // MATRIZ IPERC
+    // -----------------------------------------------------------
 
     if (entidad == SyncConstants.matrizIperc) {
       await _processMatrix(item, operacion);
 
       return;
     }
+
+    // -----------------------------------------------------------
+    // DETALLE IPERC
+    // -----------------------------------------------------------
 
     if (entidad == SyncConstants.detalleIperc) {
       await _processDetail(item, operacion);
@@ -200,11 +261,11 @@ class SyncService {
     );
   }
 
-  // ============================================================
+  // =============================================================
   // MATRIZ IPERC
-  // ============================================================
+  // =============================================================
 
-  /// Procesa operaciones relacionadas con matrices IPERC.
+  /// Procesa una operación relacionada con una Matriz IPERC.
   Future<void> _processMatrix(SyncQueueModel item, String operacion) async {
     final Map<String, dynamic> data = _decodeData(item.datosJson);
 
@@ -229,12 +290,26 @@ class SyncService {
     }
   }
 
-  /// Registra una matriz local en el backend.
+  // =============================================================
+  // CREAR MATRIZ IPERC
+  // =============================================================
+
+  /// Registra en el backend una matriz creada en SQLite.
   Future<void> _createMatrix(
     SyncQueueModel item,
     Map<String, dynamic> localData,
   ) async {
-    final Map<String, dynamic> apiData = _transformMatrixForApi(localData);
+    // -----------------------------------------------------------
+    // TRANSFORMAR DATOS
+    // -----------------------------------------------------------
+
+    final Map<String, dynamic> apiData = await _transformMatrixForApi(
+      localData,
+    );
+
+    // -----------------------------------------------------------
+    // ENVIAR POST
+    // -----------------------------------------------------------
 
     final String serverId = await _matrizRemoteDatasource.create(apiData);
 
@@ -247,15 +322,28 @@ class SyncService {
       );
     }
 
+    final int? servidorNumerico = int.tryParse(idServidor);
+
+    if (servidorNumerico == null || servidorNumerico <= 0) {
+      throw FormatException(
+        'El backend devolvió un identificador '
+        'de matriz no válido: $idServidor.',
+      );
+    }
+
+    // -----------------------------------------------------------
+    // GUARDAR ID REMOTO
+    // -----------------------------------------------------------
+
     await _matrizLocalDatasource.markAsSynchronized(
       idLocal: item.entidadIdLocal,
       idServidor: idServidor,
     );
   }
 
-  // ============================================================
+  // =============================================================
   // ACTUALIZAR MATRIZ IPERC
-  // ============================================================
+  // =============================================================
 
   Future<void> _updateMatrix(
     SyncQueueModel item,
@@ -270,53 +358,38 @@ class SyncService {
       );
     }
 
-    // ----------------------------------------------------------
-    // OBTENER ID REAL DEL BACKEND
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // OBTENER ID DEL BACKEND
+    // -----------------------------------------------------------
 
     int? idServidor = await _matrizLocalDatasource.getServerId(idLocal);
 
-    // ----------------------------------------------------------
-    // FALLBACK:
-    // también intentamos obtenerlo del JSON de la cola.
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // FALLBACK DESDE JSON
+    // -----------------------------------------------------------
 
     idServidor ??= _intOptional(localData['id_servidor']);
 
     if (idServidor == null || idServidor <= 0) {
-      // ========================================================
-      // CASO IMPORTANTE
-      // ========================================================
-      //
-      // Si la matriz fue creada offline y todavía no existe
-      // en el backend, no podemos ejecutar PUT.
-      //
-      // Primero debe sincronizarse su operación CREAR.
-      // ========================================================
-
       throw StateError(
         'La matriz todavía no tiene un ID del servidor. '
         'Primero debe sincronizarse su creación.',
       );
     }
 
-    // ----------------------------------------------------------
-    // USUARIO QUE ACTUALIZA
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // OBTENER USUARIO REAL
+    // -----------------------------------------------------------
 
-    final int usuarioActualizacionId =
-        _intOptional(localData['usuarioActualizacionId']) ?? 1;
+    final int usuarioActualizacionId = await _resolverUsuarioId(
+      localData: localData,
+      clave: 'usuarioActualizacionId',
+      operacion: 'actualización',
+    );
 
-    if (usuarioActualizacionId <= 0) {
-      throw ArgumentError(
-        'El usuario que actualiza la matriz '
-        'es obligatorio.',
-      );
-    }
-
-    // ----------------------------------------------------------
-    // CONSTRUIR PAYLOAD DEL BACKEND
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // CONSTRUIR PAYLOAD
+    // -----------------------------------------------------------
 
     final Map<String, dynamic> apiData = <String, dynamic>{
       'nombre': localData['nombre']?.toString().trim(),
@@ -364,15 +437,27 @@ class SyncService {
       'usuarioActualizacionId': usuarioActualizacionId,
     };
 
-    // ----------------------------------------------------------
-    // PUT AL BACKEND
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // VALIDAR NOMBRE
+    // -----------------------------------------------------------
+
+    final String nombre = apiData['nombre']?.toString().trim() ?? '';
+
+    if (nombre.isEmpty) {
+      throw const FormatException(
+        'La matriz offline no contiene un nombre válido.',
+      );
+    }
+
+    // -----------------------------------------------------------
+    // ENVIAR PUT
+    // -----------------------------------------------------------
 
     await _matrizRemoteDatasource.actualizar(idServidor, apiData);
 
-    // ----------------------------------------------------------
-    // MARCAR LOCAL COMO SINCRONIZADA
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // CONFIRMAR LOCAL
+    // -----------------------------------------------------------
 
     await _matrizLocalDatasource.markAsSynchronized(
       idLocal: idLocal,
@@ -380,9 +465,9 @@ class SyncService {
     );
   }
 
-  // ============================================================
+  // =============================================================
   // ELIMINAR MATRIZ IPERC
-  // ============================================================
+  // =============================================================
 
   Future<void> _deleteMatrix(
     SyncQueueModel item,
@@ -397,45 +482,42 @@ class SyncService {
       );
     }
 
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
     // OBTENER ID DEL BACKEND
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
 
     int? idServidor = await _matrizLocalDatasource.getServerId(idLocal);
 
     idServidor ??= _intOptional(localData['id_servidor']);
 
-    // ==========================================================
+    // ===========================================================
     // MATRIZ QUE NUNCA LLEGÓ AL SERVIDOR
-    // ==========================================================
+    // ===========================================================
     //
     // Si se creó offline y se eliminó antes de sincronizarse,
-    // no existe nada que borrar en MySQL.
+    // no existe registro en MySQL que eliminar.
     //
-    // La operación puede considerarse terminada.
-    // ==========================================================
+    // En ese caso la operación DELETE puede terminar sin hacer
+    // ninguna llamada HTTP.
+    // ===========================================================
 
     if (idServidor == null || idServidor <= 0) {
       return;
     }
 
-    // ----------------------------------------------------------
-    // USUARIO QUE ELIMINA
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
+    // USUARIO REAL
+    // -----------------------------------------------------------
 
-    final int usuarioEliminacionId =
-        _intOptional(localData['usuarioEliminacionId']) ?? 1;
+    final int usuarioEliminacionId = await _resolverUsuarioId(
+      localData: localData,
+      clave: 'usuarioEliminacionId',
+      operacion: 'eliminación',
+    );
 
-    if (usuarioEliminacionId <= 0) {
-      throw ArgumentError(
-        'El usuario que elimina la matriz '
-        'es obligatorio.',
-      );
-    }
-
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
     // DELETE AL BACKEND
-    // ----------------------------------------------------------
+    // -----------------------------------------------------------
 
     await _matrizRemoteDatasource.eliminar(
       idServidor,
@@ -443,9 +525,41 @@ class SyncService {
     );
   }
 
-  /// Convierte el mapa almacenado en SQLite al formato esperado
-  /// por el endpoint de matrices IPERC.
-  Map<String, dynamic> _transformMatrixForApi(Map<String, dynamic> localData) {
+  // =============================================================
+  // TRANSFORMAR MATRIZ PARA API
+  // =============================================================
+
+  /// Convierte una Matriz IPERC almacenada en SQLite al formato
+  /// esperado por el endpoint POST del backend.
+  Future<Map<String, dynamic>> _transformMatrixForApi(
+    Map<String, dynamic> localData,
+  ) async {
+    // -----------------------------------------------------------
+    // USUARIO QUE CREÓ LA MATRIZ
+    // -----------------------------------------------------------
+
+    final int usuarioRegistroId = await _resolverUsuarioId(
+      localData: localData,
+      clave: 'usuarioRegistroId',
+      operacion: 'registro',
+    );
+
+    // -----------------------------------------------------------
+    // VALIDAR NOMBRE
+    // -----------------------------------------------------------
+
+    final String nombre = localData['nombre']?.toString().trim() ?? '';
+
+    if (nombre.isEmpty) {
+      throw const FormatException(
+        'La matriz offline no contiene un nombre válido.',
+      );
+    }
+
+    // -----------------------------------------------------------
+    // PAYLOAD
+    // -----------------------------------------------------------
+
     return <String, dynamic>{
       'institucionId': _intFromLocal(
         localData['institucion_id'],
@@ -485,19 +599,19 @@ class SyncService {
 
       'codigo': _textoOpcional(localData['codigo']),
 
-      'nombre': localData['nombre']?.toString().trim(),
+      'nombre': nombre,
 
       'objetivo': _textoOpcional(localData['descripcion']),
 
-      'usuarioRegistroId': 1,
+      'usuarioRegistroId': usuarioRegistroId,
     };
   }
 
-  // ============================================================
+  // =============================================================
   // DETALLE IPERC
-  // ============================================================
+  // =============================================================
 
-  /// Procesa una operación relacionada con un detalle IPERC.
+  /// Procesa una operación relacionada con Detalle IPERC.
   ///
   /// El servicio especializado consulta el registro actual desde
   /// SQLite y determina si debe crear, actualizar o eliminar.
@@ -526,11 +640,10 @@ class SyncService {
     await _detalleIpercSyncService.sincronizarPorIdLocal(idLocal);
   }
 
-  // ============================================================
-  // CONVERSIÓN Y ERRORES
-  // ============================================================
+  // =============================================================
+  // DECODIFICAR JSON
+  // =============================================================
 
-  /// Convierte el JSON almacenado en la cola en un mapa.
   Map<String, dynamic> _decodeData(String jsonText) {
     final String contenido = jsonText.trim();
 
@@ -548,6 +661,61 @@ class SyncService {
     }
 
     return Map<String, dynamic>.from(decoded);
+  }
+
+  // =============================================================
+  // OBTENER USUARIO DE OPERACIÓN
+  // =============================================================
+
+  /// Obtiene el usuario responsable de la operación.
+  ///
+  /// Prioridad:
+  ///
+  /// 1. Usuario almacenado originalmente en el JSON de la cola.
+  /// 2. Usuario autenticado actualmente en SecureStorage.
+  ///
+  /// Esto permite mantener compatibilidad con operaciones antiguas
+  /// que pudieran haberse creado antes de guardar el usuario
+  /// dentro de `datos_json`.
+  Future<int> _resolverUsuarioId({
+    required Map<String, dynamic> localData,
+    required String clave,
+    required String operacion,
+  }) async {
+    // -----------------------------------------------------------
+    // 1. USUARIO GUARDADO EN LA OPERACIÓN
+    // -----------------------------------------------------------
+
+    final int? usuarioCola = _intOptional(localData[clave]);
+
+    if (usuarioCola != null && usuarioCola > 0) {
+      return usuarioCola;
+    }
+
+    // -----------------------------------------------------------
+    // 2. USUARIO DE LA SESIÓN ACTUAL
+    // -----------------------------------------------------------
+
+    final String usuarioTexto =
+        (await _secureStorageService.getUsuarioId())?.trim() ?? '';
+
+    if (usuarioTexto.isEmpty) {
+      throw StateError(
+        'No se pudo identificar al usuario responsable '
+        'de la $operacion. Inicie sesión nuevamente.',
+      );
+    }
+
+    final int? usuarioId = int.tryParse(usuarioTexto);
+
+    if (usuarioId == null || usuarioId <= 0) {
+      throw StateError(
+        'El identificador del usuario autenticado '
+        'no es válido: $usuarioTexto.',
+      );
+    }
+
+    return usuarioId;
   }
 
   // =============================================================
@@ -576,7 +744,8 @@ class SyncService {
 
     if (id == null || id <= 0) {
       throw FormatException(
-        'El identificador de $nombre no es válido: $texto.',
+        'El identificador de $nombre '
+        'no es válido: $texto.',
       );
     }
 
@@ -635,9 +804,17 @@ class SyncService {
     return texto.isEmpty ? null : texto;
   }
 
+  // =============================================================
+  // MENSAJE DE ERROR
+  // =============================================================
+
   /// Convierte excepciones técnicas en mensajes almacenables
   /// dentro de la cola de sincronización.
   String _getErrorMessage(Object error) {
+    // -----------------------------------------------------------
+    // DIO
+    // -----------------------------------------------------------
+
     if (error is DioException) {
       final dynamic responseData = error.response?.data;
 
@@ -671,18 +848,34 @@ class SyncService {
       return error.message ?? 'Error de comunicación con el servidor.';
     }
 
+    // -----------------------------------------------------------
+    // ARGUMENT ERROR
+    // -----------------------------------------------------------
+
     if (error is ArgumentError) {
       return error.message?.toString().trim() ??
           'Los datos de sincronización no son válidos.';
     }
 
+    // -----------------------------------------------------------
+    // STATE ERROR
+    // -----------------------------------------------------------
+
     if (error is StateError) {
       return error.message;
     }
 
+    // -----------------------------------------------------------
+    // FORMAT EXCEPTION
+    // -----------------------------------------------------------
+
     if (error is FormatException) {
       return error.message;
     }
+
+    // -----------------------------------------------------------
+    // OTROS
+    // -----------------------------------------------------------
 
     String mensaje = error.toString().trim();
 
