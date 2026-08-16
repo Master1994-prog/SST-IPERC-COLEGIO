@@ -1,19 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../data/models/seguimiento_iperc_local_model.dart';
 import '../../../data/models/seguimiento_iperc_model.dart';
 import '../../providers/seguimiento_iperc_provider.dart';
 import 'seguimiento_iperc_form_screen.dart';
 
-/// Lista y administra los seguimientos IPERC registrados.
+/// ===============================================================
+/// PANTALLA - SEGUIMIENTOS IPERC
+/// ===============================================================
+///
+/// Administra seguimientos provenientes de:
+///
+/// - Backend.
+/// - SQLite.
+///
+/// Cuando existe conexión se muestran primero los datos remotos.
+/// Los registros locales que ya tienen el mismo `idServidor` que un
+/// registro remoto se ocultan para evitar duplicados.
+///
+/// Los seguimientos todavía pendientes de sincronización se muestran
+/// con una etiqueta "Pendiente de sincronizar".
+/// ===============================================================
 class SeguimientosIpercScreen extends StatelessWidget {
   const SeguimientosIpercScreen({
     this.detalleIpercId,
+    this.detalleIpercIdLocal,
     this.titulo = 'Seguimientos IPERC',
     super.key,
   });
 
+  /// ID del Detalle IPERC en el backend.
   final int? detalleIpercId;
+
+  /// UUID local del Detalle IPERC.
+  final String? detalleIpercIdLocal;
+
   final String titulo;
 
   @override
@@ -21,18 +43,30 @@ class SeguimientosIpercScreen extends StatelessWidget {
     return ChangeNotifierProvider<SeguimientoIpercProvider>(
       create: (_) {
         final SeguimientoIpercProvider provider = SeguimientoIpercProvider();
-        Future<void>.microtask(() {
-          final int? detalleId = detalleIpercId;
-          if (detalleId != null && detalleId > 0) {
-            return provider.cargarPorDetalle(detalleId);
+
+        Future<void>.microtask(() async {
+          final String localId = detalleIpercIdLocal?.trim() ?? '';
+
+          if (localId.isNotEmpty) {
+            await provider.cargarPorDetalleLocal(localId);
+            return;
           }
 
-          return provider.cargarTodos();
+          final int? servidorId = detalleIpercId;
+
+          if (servidorId != null && servidorId > 0) {
+            await provider.cargarPorDetalle(servidorId);
+            return;
+          }
+
+          await provider.cargarTodos();
         });
+
         return provider;
       },
       child: _SeguimientosIpercView(
         detalleIpercId: detalleIpercId,
+        detalleIpercIdLocal: detalleIpercIdLocal,
         titulo: titulo,
       ),
     );
@@ -40,15 +74,18 @@ class SeguimientosIpercScreen extends StatelessWidget {
 }
 
 class _SeguimientosIpercView extends StatefulWidget {
-  const _SeguimientosIpercView({required this.titulo, this.detalleIpercId});
+  const _SeguimientosIpercView({
+    required this.titulo,
+    this.detalleIpercId,
+    this.detalleIpercIdLocal,
+  });
 
   final int? detalleIpercId;
+  final String? detalleIpercIdLocal;
   final String titulo;
 
   @override
-  State<_SeguimientosIpercView> createState() {
-    return _SeguimientosIpercViewState();
-  }
+  State<_SeguimientosIpercView> createState() => _SeguimientosIpercViewState();
 }
 
 class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
@@ -64,6 +101,10 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
     return context.read<SeguimientoIpercProvider>().refrescar();
   }
 
+  // =============================================================
+  // NUEVO
+  // =============================================================
+
   Future<void> _abrirNuevo() async {
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
@@ -74,6 +115,7 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
           value: provider,
           child: SeguimientoIpercFormScreen(
             detalleIpercIdInicial: widget.detalleIpercId,
+            detalleIpercIdLocalInicial: widget.detalleIpercIdLocal,
           ),
         ),
       ),
@@ -86,7 +128,11 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
     await _actualizar();
   }
 
-  Future<void> _abrirEditar(SeguimientoIpercModel seguimiento) async {
+  // =============================================================
+  // EDITAR REMOTO
+  // =============================================================
+
+  Future<void> _abrirEditarRemoto(SeguimientoIpercModel seguimiento) async {
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
@@ -106,14 +152,105 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
     await _actualizar();
   }
 
-  Future<void> _confirmarEliminar(SeguimientoIpercModel seguimiento) async {
+  // =============================================================
+  // EDITAR LOCAL
+  // =============================================================
+
+  Future<void> _abrirEditarLocal(SeguimientoIpercLocalModel seguimiento) async {
+    final SeguimientoIpercProvider provider = context
+        .read<SeguimientoIpercProvider>();
+
+    final bool? actualizado = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ChangeNotifierProvider<SeguimientoIpercProvider>.value(
+          value: provider,
+          child: SeguimientoIpercFormScreen(seguimientoLocal: seguimiento),
+        ),
+      ),
+    );
+
+    if (!mounted || actualizado != true) {
+      return;
+    }
+
+    await _actualizar();
+  }
+
+  // =============================================================
+  // ELIMINAR REMOTO
+  // =============================================================
+
+  Future<void> _confirmarEliminarRemoto(
+    SeguimientoIpercModel seguimiento,
+  ) async {
+    final bool confirmado = await _preguntarEliminar(
+      seguimiento.detalleVisible,
+    );
+
+    if (!mounted || !confirmado) {
+      return;
+    }
+
+    final SeguimientoIpercProvider provider = context
+        .read<SeguimientoIpercProvider>();
+
+    final bool eliminado = await provider.eliminar(seguimiento.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje(
+      eliminado
+          ? 'Seguimiento eliminado correctamente.'
+          : provider.error ?? 'No se pudo eliminar el seguimiento.',
+      esError: !eliminado,
+    );
+  }
+
+  // =============================================================
+  // ELIMINAR LOCAL
+  // =============================================================
+
+  Future<void> _confirmarEliminarLocal(
+    SeguimientoIpercLocalModel seguimiento,
+  ) async {
+    final bool confirmado = await _preguntarEliminar(
+      seguimiento.detalleVisible,
+    );
+
+    if (!mounted || !confirmado) {
+      return;
+    }
+
+    final SeguimientoIpercProvider provider = context
+        .read<SeguimientoIpercProvider>();
+
+    final bool eliminado = await provider.eliminarOffline(
+      idLocal: seguimiento.idLocal,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje(
+      eliminado
+          ? 'Seguimiento eliminado localmente.'
+          : provider.error ?? 'No se pudo eliminar el seguimiento.',
+      esError: !eliminado,
+    );
+  }
+
+  Future<bool> _preguntarEliminar(String detalleVisible) async {
     final bool? confirmado = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Eliminar seguimiento'),
           content: Text(
-            '¿Deseas eliminar el seguimiento de "${seguimiento.detalleVisible}"?',
+            '¿Deseas eliminar el seguimiento de '
+            '"$detalleVisible"?',
           ),
           actions: <Widget>[
             TextButton(
@@ -130,29 +267,17 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       },
     );
 
-    if (!mounted || confirmado != true) {
-      return;
-    }
-
-    final SeguimientoIpercProvider provider = context
-        .read<SeguimientoIpercProvider>();
-    final bool eliminado = await provider.eliminar(seguimiento.id);
-
-    if (!mounted) {
-      return;
-    }
-
-    _mostrarMensaje(
-      eliminado
-          ? 'Seguimiento eliminado correctamente.'
-          : provider.error ?? 'No se pudo eliminar el seguimiento.',
-      esError: !eliminado,
-    );
+    return confirmado == true;
   }
 
-  Future<void> _verificar(SeguimientoIpercModel seguimiento) async {
+  // =============================================================
+  // VERIFICAR REMOTO
+  // =============================================================
+
+  Future<void> _verificarRemoto(SeguimientoIpercModel seguimiento) async {
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
+
     final bool verificado = await provider.verificar(seguimiento.id);
 
     if (!mounted) {
@@ -167,6 +292,34 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
     );
   }
 
+  // =============================================================
+  // VERIFICAR LOCAL
+  // =============================================================
+
+  Future<void> _verificarLocal(SeguimientoIpercLocalModel seguimiento) async {
+    final SeguimientoIpercProvider provider = context
+        .read<SeguimientoIpercProvider>();
+
+    final bool verificado = await provider.verificarOffline(
+      idLocal: seguimiento.idLocal,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje(
+      verificado
+          ? 'Seguimiento verificado localmente.'
+          : provider.error ?? 'No se pudo verificar el seguimiento.',
+      esError: !verificado,
+    );
+  }
+
+  // =============================================================
+  // MENSAJES
+  // =============================================================
+
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
@@ -179,6 +332,10 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
         ),
       );
   }
+
+  // =============================================================
+  // BUILD
+  // =============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -223,12 +380,43 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
                 return const Center(child: CircularProgressIndicator());
               }
 
+              final List<SeguimientoIpercModel> remotos =
+                  provider.seguimientosFiltrados;
+
+              // IDs remotos ya mostrados por el backend.
+              final Set<int> idsRemotos = remotos
+                  .where((SeguimientoIpercModel item) => item.id > 0)
+                  .map((SeguimientoIpercModel item) => item.id)
+                  .toSet();
+
+              // Un local sincronizado se oculta si su equivalente remoto
+              // ya está presente, evitando tarjetas duplicadas.
+              final List<SeguimientoIpercLocalModel> locales = provider
+                  .seguimientosLocalesFiltrados
+                  .where(
+                    (SeguimientoIpercLocalModel item) =>
+                        item.idServidor == null ||
+                        !idsRemotos.contains(item.idServidor),
+                  )
+                  .toList(growable: false);
+
+              final int totalVisible = remotos.length + locales.length;
+
               return RefreshIndicator(
                 onRefresh: _actualizar,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                   children: <Widget>[
-                    _ResumenSeguimientos(provider: provider),
+                    _EstadoConexionCard(
+                      conectado: provider.isConnected,
+                      pendientes: provider.pendientesSincronizacion,
+                    ),
+                    const SizedBox(height: 12),
+                    _ResumenSeguimientos(
+                      total: totalVisible,
+                      pendientes: _contarPendientes(remotos, locales),
+                      verificados: _contarVerificados(remotos, locales),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _busquedaController,
@@ -254,31 +442,42 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
                       _ErrorCard(mensaje: provider.error!),
                     ],
                     const SizedBox(height: 12),
-                    if (provider.seguimientosFiltrados.isEmpty)
+                    if (totalVisible == 0)
                       _VacioCard(buscando: provider.terminoBusqueda.isNotEmpty)
-                    else
-                      ...List<Widget>.generate(
-                        provider.seguimientosFiltrados.length,
-                        (int index) {
-                          final SeguimientoIpercModel seguimiento =
-                              provider.seguimientosFiltrados[index];
-                          final bool esUltimo =
-                              index ==
-                              provider.seguimientosFiltrados.length - 1;
-
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: esUltimo ? 0 : 16),
-                            child: _SeguimientoCard(
-                              seguimiento: seguimiento,
-                              onEditar: () => _abrirEditar(seguimiento),
-                              onEliminar: () => _confirmarEliminar(seguimiento),
-                              onVerificar: seguimiento.verificado
-                                  ? null
-                                  : () => _verificar(seguimiento),
-                            ),
-                          );
-                        },
+                    else ...<Widget>[
+                      // Registros locales pendientes o no presentes en
+                      // el resultado remoto.
+                      ...locales.map(
+                        (SeguimientoIpercLocalModel seguimiento) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _SeguimientoLocalCard(
+                            seguimiento: seguimiento,
+                            onEditar: () => _abrirEditarLocal(seguimiento),
+                            onEliminar: () =>
+                                _confirmarEliminarLocal(seguimiento),
+                            onVerificar: seguimiento.verificado
+                                ? null
+                                : () => _verificarLocal(seguimiento),
+                          ),
+                        ),
                       ),
+
+                      // Registros confirmados por backend.
+                      ...remotos.map(
+                        (SeguimientoIpercModel seguimiento) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _SeguimientoRemotoCard(
+                            seguimiento: seguimiento,
+                            onEditar: () => _abrirEditarRemoto(seguimiento),
+                            onEliminar: () =>
+                                _confirmarEliminarRemoto(seguimiento),
+                            onVerificar: seguimiento.verificado
+                                ? null
+                                : () => _verificarRemoto(seguimiento),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               );
@@ -286,12 +485,82 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       ),
     );
   }
+
+  int _contarPendientes(
+    List<SeguimientoIpercModel> remotos,
+    List<SeguimientoIpercLocalModel> locales,
+  ) {
+    return remotos
+            .where((SeguimientoIpercModel item) => !item.verificado)
+            .length +
+        locales
+            .where((SeguimientoIpercLocalModel item) => !item.verificado)
+            .length;
+  }
+
+  int _contarVerificados(
+    List<SeguimientoIpercModel> remotos,
+    List<SeguimientoIpercLocalModel> locales,
+  ) {
+    return remotos
+            .where((SeguimientoIpercModel item) => item.verificado)
+            .length +
+        locales
+            .where((SeguimientoIpercLocalModel item) => item.verificado)
+            .length;
+  }
 }
 
-class _ResumenSeguimientos extends StatelessWidget {
-  const _ResumenSeguimientos({required this.provider});
+// ===============================================================
+// ESTADO DE CONEXIÓN
+// ===============================================================
 
-  final SeguimientoIpercProvider provider;
+class _EstadoConexionCard extends StatelessWidget {
+  const _EstadoConexionCard({
+    required this.conectado,
+    required this.pendientes,
+  });
+
+  final bool conectado;
+  final int pendientes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: Icon(
+          conectado ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+        ),
+        title: Text(conectado ? 'Modo online' : 'Modo offline'),
+        subtitle: Text(
+          pendientes > 0
+              ? '$pendientes seguimiento(s) '
+                    'pendiente(s) de sincronizar.'
+              : conectado
+              ? 'Conexión disponible.'
+              : 'Los cambios se guardarán '
+                    'en el dispositivo.',
+        ),
+      ),
+    );
+  }
+}
+
+// ===============================================================
+// RESUMEN
+// ===============================================================
+
+class _ResumenSeguimientos extends StatelessWidget {
+  const _ResumenSeguimientos({
+    required this.total,
+    required this.pendientes,
+    required this.verificados,
+  });
+
+  final int total;
+  final int pendientes;
+  final int verificados;
 
   @override
   Widget build(BuildContext context) {
@@ -303,21 +572,18 @@ class _ResumenSeguimientos extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Expanded(
-              child: _ResumenDato(
-                etiqueta: 'Total',
-                valor: provider.total.toString(),
-              ),
+              child: _ResumenDato(etiqueta: 'Total', valor: total.toString()),
             ),
             Expanded(
               child: _ResumenDato(
                 etiqueta: 'Pendientes',
-                valor: provider.pendientes.toString(),
+                valor: pendientes.toString(),
               ),
             ),
             Expanded(
               child: _ResumenDato(
                 etiqueta: 'Verificados',
-                valor: provider.verificados.toString(),
+                valor: verificados.toString(),
               ),
             ),
           ],
@@ -350,8 +616,47 @@ class _ResumenDato extends StatelessWidget {
   }
 }
 
-class _SeguimientoCard extends StatelessWidget {
-  const _SeguimientoCard({
+// ===============================================================
+// TARJETA LOCAL
+// ===============================================================
+
+class _SeguimientoLocalCard extends StatelessWidget {
+  const _SeguimientoLocalCard({
+    required this.seguimiento,
+    required this.onEditar,
+    required this.onEliminar,
+    this.onVerificar,
+  });
+
+  final SeguimientoIpercLocalModel seguimiento;
+  final VoidCallback onEditar;
+  final VoidCallback onEliminar;
+  final VoidCallback? onVerificar;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeguimientoBaseCard(
+      detalleVisible: seguimiento.detalleVisible,
+      fechaSeguimiento: seguimiento.fechaSeguimiento,
+      descripcion: seguimiento.descripcion,
+      observaciones: seguimiento.observaciones,
+      porcentajeAvance: seguimiento.porcentajeAvance,
+      verificado: seguimiento.verificado,
+      sincronizado: seguimiento.sincronizado,
+      esLocal: true,
+      onEditar: onEditar,
+      onEliminar: onEliminar,
+      onVerificar: onVerificar,
+    );
+  }
+}
+
+// ===============================================================
+// TARJETA REMOTA
+// ===============================================================
+
+class _SeguimientoRemotoCard extends StatelessWidget {
+  const _SeguimientoRemotoCard({
     required this.seguimiento,
     required this.onEditar,
     required this.onEliminar,
@@ -359,6 +664,55 @@ class _SeguimientoCard extends StatelessWidget {
   });
 
   final SeguimientoIpercModel seguimiento;
+  final VoidCallback onEditar;
+  final VoidCallback onEliminar;
+  final VoidCallback? onVerificar;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeguimientoBaseCard(
+      detalleVisible: seguimiento.detalleVisible,
+      fechaSeguimiento: seguimiento.fechaSeguimiento,
+      descripcion: seguimiento.descripcion,
+      observaciones: seguimiento.observaciones,
+      porcentajeAvance: seguimiento.porcentajeAvance,
+      verificado: seguimiento.verificado,
+      sincronizado: true,
+      esLocal: false,
+      onEditar: onEditar,
+      onEliminar: onEliminar,
+      onVerificar: onVerificar,
+    );
+  }
+}
+
+// ===============================================================
+// TARJETA COMÚN
+// ===============================================================
+
+class _SeguimientoBaseCard extends StatelessWidget {
+  const _SeguimientoBaseCard({
+    required this.detalleVisible,
+    required this.fechaSeguimiento,
+    required this.descripcion,
+    required this.porcentajeAvance,
+    required this.verificado,
+    required this.sincronizado,
+    required this.esLocal,
+    required this.onEditar,
+    required this.onEliminar,
+    this.observaciones,
+    this.onVerificar,
+  });
+
+  final String detalleVisible;
+  final DateTime fechaSeguimiento;
+  final String descripcion;
+  final String? observaciones;
+  final double porcentajeAvance;
+  final bool verificado;
+  final bool sincronizado;
+  final bool esLocal;
   final VoidCallback onEditar;
   final VoidCallback onEliminar;
   final VoidCallback? onVerificar;
@@ -378,11 +732,11 @@ class _SeguimientoCard extends StatelessWidget {
             Row(
               children: <Widget>[
                 CircleAvatar(
-                  backgroundColor: seguimiento.verificado
+                  backgroundColor: verificado
                       ? colors.primaryContainer
                       : colors.errorContainer,
                   child: Icon(
-                    seguimiento.verificado
+                    verificado
                         ? Icons.verified_outlined
                         : Icons.pending_actions_outlined,
                   ),
@@ -393,11 +747,11 @@ class _SeguimientoCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        seguimiento.detalleVisible,
+                        detalleVisible,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
-                      Text(_formatearFecha(seguimiento.fechaSeguimiento)),
+                      Text(_formatearFecha(fechaSeguimiento)),
                     ],
                   ),
                 ),
@@ -436,10 +790,10 @@ class _SeguimientoCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Text(seguimiento.descripcion),
-            if ((seguimiento.observaciones ?? '').isNotEmpty) ...<Widget>[
+            Text(descripcion),
+            if ((observaciones ?? '').trim().isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
-              Text('Obs.: ${seguimiento.observaciones}'),
+              Text('Obs.: ${observaciones!.trim()}'),
             ],
             const SizedBox(height: 12),
             Wrap(
@@ -448,19 +802,31 @@ class _SeguimientoCard extends StatelessWidget {
               children: <Widget>[
                 Chip(
                   avatar: const Icon(Icons.percent, size: 18),
-                  label: Text(
-                    '${seguimiento.porcentajeAvance.toStringAsFixed(0)}%',
-                  ),
+                  label: Text('${porcentajeAvance.toStringAsFixed(0)}%'),
                 ),
                 Chip(
                   avatar: Icon(
-                    seguimiento.verificado
+                    verificado
                         ? Icons.check_circle_outline
                         : Icons.schedule_outlined,
                     size: 18,
                   ),
-                  label: Text(seguimiento.estadoVisible),
+                  label: Text(verificado ? 'Verificado' : 'Pendiente'),
                 ),
+                if (esLocal)
+                  Chip(
+                    avatar: Icon(
+                      sincronizado
+                          ? Icons.cloud_done_outlined
+                          : Icons.cloud_upload_outlined,
+                      size: 18,
+                    ),
+                    label: Text(
+                      sincronizado
+                          ? 'Sincronizado'
+                          : 'Pendiente de sincronizar',
+                    ),
+                  ),
               ],
             ),
           ],
@@ -469,6 +835,10 @@ class _SeguimientoCard extends StatelessWidget {
     );
   }
 }
+
+// ===============================================================
+// ERROR / VACÍO
+// ===============================================================
 
 class _ErrorCard extends StatelessWidget {
   const _ErrorCard({required this.mensaje});
@@ -522,7 +892,8 @@ class _VacioCard extends StatelessWidget {
 
 String _formatearFecha(DateTime fecha) {
   final String dia = fecha.day.toString().padLeft(2, '0');
+
   final String mes = fecha.month.toString().padLeft(2, '0');
-  final String anio = fecha.year.toString();
-  return '$dia/$mes/$anio';
+
+  return '$dia/$mes/${fecha.year}';
 }

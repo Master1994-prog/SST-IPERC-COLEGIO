@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../data/models/detalle_iperc_local_model.dart';
 import '../../providers/detalle_iperc_offline_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import 'detalle_iperc_form_screen.dart';
 
 /// ===============================================================
@@ -134,6 +135,46 @@ class _DetallesIpercOfflineScreenState
 
       await context.read<SyncProvider>().refreshStatus();
     }
+  }
+
+  // =============================================================
+  // ABRIR SEGUIMIENTOS IPERC
+  // =============================================================
+
+  /// Abre los seguimientos asociados al peligro evaluado.
+  ///
+  /// Se envían ambos identificadores cuando están disponibles:
+  ///
+  /// - [idLocal]: permite trabajar completamente offline.
+  /// - [idServidor]: permite consultar/registrar contra el backend
+  ///   cuando el detalle ya fue sincronizado.
+  Future<void> _abrirSeguimientos(DetalleIpercLocalModel detalle) async {
+    final String idLocal = detalle.idLocal.trim();
+
+    final int? idServidor = int.tryParse(detalle.idServidor?.trim() ?? '');
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) {
+          return SeguimientosIpercScreen(
+            detalleIpercId: idServidor != null && idServidor > 0
+                ? idServidor
+                : null,
+            detalleIpercIdLocal: idLocal.isNotEmpty ? idLocal : null,
+            titulo: 'Seguimientos - Ítem ${detalle.item}',
+          );
+        },
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    // Al regresar actualizamos el estado de sincronización global,
+    // porque un seguimiento creado/actualizado offline puede haber
+    // agregado una nueva operación pendiente.
+    await context.read<SyncProvider>().refreshStatus();
   }
 
   // =============================================================
@@ -688,6 +729,10 @@ class _DetallesIpercOfflineScreenState
                     tooltip: 'Opciones',
                     onSelected: (String opcion) {
                       switch (opcion) {
+                        case 'seguimientos':
+                          _abrirSeguimientos(detalle);
+                          break;
+
                         case 'editar':
                           _abrirFormulario(detalle: detalle);
                           break;
@@ -699,6 +744,14 @@ class _DetallesIpercOfflineScreenState
                     },
                     itemBuilder: (BuildContext context) {
                       return const <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(
+                          value: 'seguimientos',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.fact_check_outlined),
+                            title: Text('Seguimientos'),
+                          ),
+                        ),
                         PopupMenuItem<String>(
                           value: 'editar',
                           child: ListTile(

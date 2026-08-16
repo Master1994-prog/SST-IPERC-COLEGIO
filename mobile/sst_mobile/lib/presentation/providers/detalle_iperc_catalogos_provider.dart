@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/network/network_info.dart';
 import '../../data/datasources/local/detalle_iperc_catalogos_local_datasource.dart';
 import '../../data/models/consecuencia_model.dart';
 import '../../data/models/peligro_model.dart';
@@ -14,30 +15,29 @@ import '../../data/repositories/severidad_repository.dart';
 /// PROVIDER - CATÁLOGOS DETALLE IPERC
 /// ===============================================================
 ///
-/// Trabaja con:
+/// Administra los catálogos necesarios para registrar un peligro
+/// evaluado en un Detalle IPERC:
 ///
 /// - Peligros.
 /// - Consecuencias.
 /// - Probabilidades.
 /// - Severidades.
 ///
-/// Estrategia:
+/// ESTRATEGIA ONLINE/OFFLINE:
 ///
-/// 1. Leer SQLite.
-/// 2. Mostrar lo disponible.
-/// 3. Consultar cada endpoint por separado.
-/// 4. Guardar inmediatamente cada catálogo exitoso.
-/// 5. Si uno falla, los demás continúan funcionando.
+/// 1. Siempre intenta leer SQLite primero.
+/// 2. Comprueba si existe Internet real.
+/// 3. Si NO hay Internet:
+///    - Usa únicamente SQLite.
+///    - NO intenta llamar al backend.
+/// 4. Si hay Internet:
+///    - Actualiza cada catálogo por separado.
+///    - Guarda inmediatamente en SQLite cada catálogo válido.
+/// 5. Una respuesta incompleta del servidor nunca sustituye una
+///    escala local completa de Probabilidad o Severidad.
 ///
-/// IMPORTANTE:
-///
-/// Probabilidades y Severidades solamente se consideran utilizables
-/// cuando contienen la escala IPERC completa:
-///
-/// 1, 2, 3, 4, 5
-///
-/// Una respuesta parcial del backend nunca reemplaza una escala local
-/// completa almacenada previamente.
+/// Esto evita que "Agregar peligro evaluado" muestre un error de
+/// conexión cuando ya existen catálogos locales disponibles.
 /// ===============================================================
 class DetalleIpercCatalogosProvider extends ChangeNotifier {
   DetalleIpercCatalogosProvider({
@@ -46,6 +46,7 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     ProbabilidadRepository? probabilidadRepository,
     SeveridadRepository? severidadRepository,
     DetalleIpercCatalogosLocalDatasource? localDatasource,
+    NetworkInfo? networkInfo,
   }) : _peligroRepository = peligroRepository ?? PeligroRepository(),
        _consecuenciaRepository =
            consecuenciaRepository ?? ConsecuenciaRepository(),
@@ -53,14 +54,24 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
            probabilidadRepository ?? ProbabilidadRepository(),
        _severidadRepository = severidadRepository ?? SeveridadRepository(),
        _localDatasource =
-           localDatasource ?? DetalleIpercCatalogosLocalDatasource();
+           localDatasource ?? DetalleIpercCatalogosLocalDatasource(),
+       _networkInfo = networkInfo ?? NetworkInfo.instance;
+
+  // =============================================================
+  // DEPENDENCIAS
+  // =============================================================
 
   final PeligroRepository _peligroRepository;
+
   final ConsecuenciaRepository _consecuenciaRepository;
+
   final ProbabilidadRepository _probabilidadRepository;
+
   final SeveridadRepository _severidadRepository;
 
   final DetalleIpercCatalogosLocalDatasource _localDatasource;
+
+  final NetworkInfo _networkInfo;
 
   // =============================================================
   // CATÁLOGOS
@@ -79,18 +90,27 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   // =============================================================
 
   bool _cargando = false;
+
   bool _cargandoLocal = false;
+
   bool _actualizandoRemoto = false;
 
   bool _cargado = false;
+
   bool _usandoDatosLocales = false;
 
+  bool _isConnected = false;
+
   String? _error;
+
   String? _advertencia;
 
   DateTime? _ultimaActualizacionPeligros;
+
   DateTime? _ultimaActualizacionConsecuencias;
+
   DateTime? _ultimaActualizacionProbabilidades;
+
   DateTime? _ultimaActualizacionSeveridades;
 
   // =============================================================
@@ -118,6 +138,10 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
   bool get usandoDatosLocales => _usandoDatosLocales;
 
+  bool get isConnected => _isConnected;
+
+  bool get isOffline => !_isConnected;
+
   String? get error => _error;
 
   String? get advertencia => _advertencia;
@@ -141,15 +165,11 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
   bool get tieneConsecuencias => _consecuencias.isNotEmpty;
 
-  /// Solo existe un catálogo utilizable cuando están presentes
-  /// exactamente los valores requeridos por la matriz IPERC 5x5:
+  /// La matriz 5x5 solamente es segura si existe la escala completa:
   /// 1, 2, 3, 4 y 5.
   bool get tieneProbabilidades =>
       _escalaProbabilidadesCompleta(_probabilidades);
 
-  /// Solo existe un catálogo utilizable cuando están presentes
-  /// exactamente los valores requeridos por la matriz IPERC 5x5:
-  /// 1, 2, 3, 4 y 5.
   bool get tieneSeveridades => _escalaSeveridadesCompleta(_severidades);
 
   bool get tieneCatalogos =>
@@ -185,13 +205,37 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     try {
       // ---------------------------------------------------------
-      // 1. SQLITE
+      // 1. LEER SQLITE SIEMPRE
       // ---------------------------------------------------------
 
       await _cargarDesdeLocal();
 
       // ---------------------------------------------------------
-      // 2. BACKEND
+      // 2. COMPROBAR CONEXIÓN REAL
+      // ---------------------------------------------------------
+
+      _isConnected = await _networkInfo.isConnected;
+
+      // ---------------------------------------------------------
+      // 3. SIN INTERNET: NO LLAMAR AL BACKEND
+      // ---------------------------------------------------------
+
+      if (!_isConnected) {
+        _cargado = tieneCatalogos;
+
+        _usandoDatosLocales =
+            tienePeligros ||
+            tieneConsecuencias ||
+            _probabilidades.isNotEmpty ||
+            _severidades.isNotEmpty;
+
+        _actualizarEstadoFinal(sinConexion: true);
+
+        return tieneCatalogos;
+      }
+
+      // ---------------------------------------------------------
+      // 4. CON INTERNET: ACTUALIZAR BACKEND
       // ---------------------------------------------------------
 
       await _actualizarDesdeRemoto();
@@ -212,6 +256,10 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   // RECARGAR
   // =============================================================
 
+  /// Fuerza una nueva comprobación.
+  ///
+  /// Si el teléfono está offline, vuelve a leer SQLite pero NO hace
+  /// peticiones HTTP.
   Future<bool> recargar() async {
     if (_cargando || _actualizandoRemoto) {
       return tieneCatalogos;
@@ -222,15 +270,39 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    await _actualizarDesdeRemoto();
+    _cargando = true;
 
-    _cargado = tieneCatalogos;
+    try {
+      await _cargarDesdeLocal();
 
-    _actualizarEstadoFinal();
+      _isConnected = await _networkInfo.isConnected;
 
-    notifyListeners();
+      if (!_isConnected) {
+        _cargado = tieneCatalogos;
 
-    return tieneCatalogos;
+        _usandoDatosLocales =
+            tienePeligros ||
+            tieneConsecuencias ||
+            _probabilidades.isNotEmpty ||
+            _severidades.isNotEmpty;
+
+        _actualizarEstadoFinal(sinConexion: true);
+
+        return tieneCatalogos;
+      }
+
+      await _actualizarDesdeRemoto();
+
+      _cargado = tieneCatalogos;
+
+      _actualizarEstadoFinal();
+
+      return tieneCatalogos;
+    } finally {
+      _cargando = false;
+
+      notifyListeners();
+    }
   }
 
   // =============================================================
@@ -255,25 +327,21 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
       final List<SeveridadModel> severidades = await _localDatasource
           .obtenerSeveridades();
 
-      if (peligros.isNotEmpty) {
-        _peligros = peligros;
-      }
+      // ---------------------------------------------------------
+      // REEMPLAZAR MEMORIA CON EL ESTADO REAL DE SQLITE
+      // ---------------------------------------------------------
+      //
+      // No conservamos accidentalmente datos antiguos en memoria si
+      // SQLite está vacío.
+      // ---------------------------------------------------------
 
-      if (consecuencias.isNotEmpty) {
-        _consecuencias = consecuencias;
-      }
+      _peligros = List<PeligroModel>.from(peligros);
 
-      // Se conserva lo leído localmente aunque sea parcial para
-      // poder diagnosticarlo correctamente. Los getters
-      // tieneProbabilidades / tieneSeveridades determinarán si
-      // realmente es una escala utilizable.
-      if (probabilidades.isNotEmpty) {
-        _probabilidades = probabilidades;
-      }
+      _consecuencias = List<ConsecuenciaModel>.from(consecuencias);
 
-      if (severidades.isNotEmpty) {
-        _severidades = severidades;
-      }
+      _probabilidades = List<ProbabilidadModel>.from(probabilidades);
+
+      _severidades = List<SeveridadModel>.from(severidades);
 
       _ordenar();
 
@@ -317,167 +385,154 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
     final List<String> errores = <String>[];
 
-    // ===========================================================
-    // PELIGROS
-    // ===========================================================
-
     try {
-      final List<PeligroModel> resultado = await _peligroRepository
-          .obtenerActivos();
+      // =========================================================
+      // PELIGROS
+      // =========================================================
 
-      final List<PeligroModel> validos = resultado
-          .where((PeligroModel item) => item.id > 0 && item.estaDisponible)
-          .toList();
+      try {
+        final List<PeligroModel> resultado = await _peligroRepository
+            .obtenerActivos();
 
-      if (validos.isNotEmpty) {
-        _peligros = validos;
+        final List<PeligroModel> validos = resultado
+            .where((PeligroModel item) => item.id > 0 && item.estaDisponible)
+            .toList(growable: false);
 
-        await _localDatasource.guardarPeligros(validos);
+        if (validos.isNotEmpty) {
+          _peligros = validos;
 
-        _ultimaActualizacionPeligros = DateTime.now().toUtc();
-      } else {
-        errores.add('Peligros: no existen registros activos.');
+          await _localDatasource.guardarPeligros(validos);
+
+          _ultimaActualizacionPeligros = DateTime.now().toUtc();
+        } else {
+          errores.add('Peligros: no existen registros activos.');
+        }
+      } catch (error) {
+        errores.add('Peligros: ${_limpiarError(error)}');
       }
-    } catch (error) {
-      errores.add('Peligros: ${_limpiarError(error)}');
-    }
 
-    // ===========================================================
-    // CONSECUENCIAS
-    // ===========================================================
+      // =========================================================
+      // CONSECUENCIAS
+      // =========================================================
 
-    try {
-      final List<ConsecuenciaModel> resultado = await _consecuenciaRepository
-          .obtenerActivos();
+      try {
+        final List<ConsecuenciaModel> resultado = await _consecuenciaRepository
+            .obtenerActivos();
 
-      final List<ConsecuenciaModel> validos = resultado
-          .where((ConsecuenciaModel item) => item.id > 0 && item.estaDisponible)
-          .toList();
+        final List<ConsecuenciaModel> validos = resultado
+            .where(
+              (ConsecuenciaModel item) => item.id > 0 && item.estaDisponible,
+            )
+            .toList(growable: false);
 
-      if (validos.isNotEmpty) {
-        _consecuencias = validos;
+        if (validos.isNotEmpty) {
+          _consecuencias = validos;
 
-        await _localDatasource.guardarConsecuencias(validos);
+          await _localDatasource.guardarConsecuencias(validos);
 
-        _ultimaActualizacionConsecuencias = DateTime.now().toUtc();
-      } else {
-        errores.add('Consecuencias: no existen registros activos.');
+          _ultimaActualizacionConsecuencias = DateTime.now().toUtc();
+        } else {
+          errores.add('Consecuencias: no existen registros activos.');
+        }
+      } catch (error) {
+        errores.add('Consecuencias: ${_limpiarError(error)}');
       }
-    } catch (error) {
-      errores.add('Consecuencias: ${_limpiarError(error)}');
-    }
 
-    // ===========================================================
-    // PROBABILIDADES
-    // ===========================================================
+      // =========================================================
+      // PROBABILIDADES
+      // =========================================================
 
-    try {
-      final List<ProbabilidadModel> resultado = await _probabilidadRepository
-          .obtenerTodas();
+      try {
+        final List<ProbabilidadModel> resultado = await _probabilidadRepository
+            .obtenerTodas();
 
-      final List<ProbabilidadModel> validos = resultado
-          .where(
-            (ProbabilidadModel item) =>
-                item.id > 0 && item.valor >= 1 && item.valor <= 5,
-          )
-          .toList();
+        final List<ProbabilidadModel> validos = resultado
+            .where(
+              (ProbabilidadModel item) =>
+                  item.id > 0 && item.valor >= 1 && item.valor <= 5,
+            )
+            .toList(growable: false);
 
-      // ---------------------------------------------------------
-      // SOLO REEMPLAZAR SI LA ESCALA ESTÁ COMPLETA
-      // ---------------------------------------------------------
+        if (_escalaProbabilidadesCompleta(validos)) {
+          _probabilidades = validos;
 
-      if (_escalaProbabilidadesCompleta(validos)) {
-        _probabilidades = validos;
+          await _localDatasource.guardarProbabilidades(validos);
 
-        await _localDatasource.guardarProbabilidades(validos);
-
-        _ultimaActualizacionProbabilidades = DateTime.now().toUtc();
-      } else {
-        errores.add(
-          'Probabilidades: el backend no devolvió '
-          'la escala completa 1, 2, 3, 4, 5.',
-        );
-
-        // No modificamos _probabilidades.
-        // Si SQLite tenía una escala completa, se conserva.
+          _ultimaActualizacionProbabilidades = DateTime.now().toUtc();
+        } else {
+          errores.add(
+            'Probabilidades: el backend no devolvió '
+            'la escala completa 1, 2, 3, 4, 5.',
+          );
+        }
+      } catch (error) {
+        errores.add('Probabilidades: ${_limpiarError(error)}');
       }
-    } catch (error) {
-      errores.add('Probabilidades: ${_limpiarError(error)}');
-    }
 
-    // ===========================================================
-    // SEVERIDADES
-    // ===========================================================
+      // =========================================================
+      // SEVERIDADES
+      // =========================================================
 
-    try {
-      final List<SeveridadModel> resultado = await _severidadRepository
-          .obtenerTodas();
+      try {
+        final List<SeveridadModel> resultado = await _severidadRepository
+            .obtenerTodas();
 
-      final List<SeveridadModel> validos = resultado
-          .where(
-            (SeveridadModel item) =>
-                item.id > 0 && item.valor >= 1 && item.valor <= 5,
-          )
-          .toList();
+        final List<SeveridadModel> validos = resultado
+            .where(
+              (SeveridadModel item) =>
+                  item.id > 0 && item.valor >= 1 && item.valor <= 5,
+            )
+            .toList(growable: false);
 
-      // ---------------------------------------------------------
-      // SOLO REEMPLAZAR SI LA ESCALA ESTÁ COMPLETA
-      // ---------------------------------------------------------
+        if (_escalaSeveridadesCompleta(validos)) {
+          _severidades = validos;
 
-      if (_escalaSeveridadesCompleta(validos)) {
-        _severidades = validos;
+          await _localDatasource.guardarSeveridades(validos);
 
-        await _localDatasource.guardarSeveridades(validos);
-
-        _ultimaActualizacionSeveridades = DateTime.now().toUtc();
-      } else {
-        errores.add(
-          'Severidades: el backend no devolvió '
-          'la escala completa 1, 2, 3, 4, 5.',
-        );
-
-        // No modificamos _severidades.
-        // Si SQLite tenía una escala completa, se conserva.
+          _ultimaActualizacionSeveridades = DateTime.now().toUtc();
+        } else {
+          errores.add(
+            'Severidades: el backend no devolvió '
+            'la escala completa 1, 2, 3, 4, 5.',
+          );
+        }
+      } catch (error) {
+        errores.add('Severidades: ${_limpiarError(error)}');
       }
-    } catch (error) {
-      errores.add('Severidades: ${_limpiarError(error)}');
-    }
 
-    _ordenar();
+      _ordenar();
 
-    _actualizandoRemoto = false;
+      // =========================================================
+      // RESULTADO
+      // =========================================================
 
-    // ===========================================================
-    // RESULTADO
-    // ===========================================================
+      if (errores.isEmpty) {
+        _error = null;
+        _advertencia = null;
+        _usandoDatosLocales = false;
 
-    if (errores.isEmpty) {
-      _error = null;
-      _advertencia = null;
+        return;
+      }
 
-      _usandoDatosLocales = false;
+      if (tieneCatalogos) {
+        _error = null;
+
+        _advertencia =
+            'Algunos catálogos no pudieron actualizarse:\n'
+            '${errores.join('\n')}';
+
+        _usandoDatosLocales = true;
+      } else {
+        _error =
+            'No se pudieron cargar todos los '
+            'catálogos IPERC:\n'
+            '${errores.join('\n')}';
+      }
+    } finally {
+      _actualizandoRemoto = false;
 
       notifyListeners();
-
-      return;
     }
-
-    if (tieneCatalogos) {
-      _error = null;
-
-      _advertencia =
-          'Algunos catálogos no pudieron actualizarse:\n'
-          '${errores.join('\n')}';
-
-      _usandoDatosLocales = true;
-    } else {
-      _error =
-          'No se pudieron cargar todos los '
-          'catálogos IPERC:\n'
-          '${errores.join('\n')}';
-    }
-
-    notifyListeners();
   }
 
   // =============================================================
@@ -622,9 +677,18 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   // ESTADO FINAL
   // =============================================================
 
-  void _actualizarEstadoFinal() {
+  void _actualizarEstadoFinal({bool sinConexion = false}) {
     if (tieneCatalogos) {
       _error = null;
+
+      // Offline con datos completos NO es un error.
+      //
+      // Tampoco mostramos la advertencia "no se pudo conectar",
+      // porque el usuario ya puede continuar normalmente.
+      if (sinConexion) {
+        _advertencia = null;
+        _usandoDatosLocales = true;
+      }
 
       return;
     }
@@ -647,9 +711,17 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
       faltantes.add('Severidades (escala 1-5)');
     }
 
-    _error =
-        'Faltan catálogos IPERC: '
-        '${faltantes.join(', ')}.';
+    if (sinConexion) {
+      _error =
+          'Los catálogos offline todavía no están '
+          'completos. Faltan: '
+          '${faltantes.join(', ')}. '
+          'Conéctate una vez a Internet para descargarlos.';
+    } else {
+      _error =
+          'Faltan catálogos IPERC: '
+          '${faltantes.join(', ')}.';
+    }
   }
 
   // =============================================================
@@ -679,9 +751,11 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     _severidades = <SeveridadModel>[];
 
     _cargado = false;
+
     _usandoDatosLocales = false;
 
     _error = null;
+
     _advertencia = null;
 
     notifyListeners();

@@ -34,6 +34,9 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// Versión 5:
 /// - actividad_id en matrices_iperc_local.
+///
+/// Versión 6:
+/// - seguimientos_iperc_local.
 /// ===============================================================
 class AppDatabase {
   AppDatabase._();
@@ -46,7 +49,7 @@ class AppDatabase {
   // VERSIÓN ACTUAL
   // =============================================================
 
-  static const int databaseVersion = 5;
+  static const int databaseVersion = 6;
 
   Database? _database;
 
@@ -101,6 +104,8 @@ class AppDatabase {
       await _createMatricesIpercTable(txn);
 
       await _createDetallesIpercTable(txn);
+
+      await _createSeguimientosIpercTable(txn);
 
       await _createSyncQueueTable(txn);
 
@@ -308,6 +313,102 @@ class AppDatabase {
   }
 
   // =============================================================
+  // SEGUIMIENTOS IPERC LOCAL
+  // =============================================================
+
+  Future<void> _createSeguimientosIpercTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS seguimientos_iperc_local (
+
+        id_local TEXT PRIMARY KEY,
+
+        id_servidor INTEGER,
+
+        -- =====================================================
+        -- DETALLE IPERC PADRE
+        -- =====================================================
+
+        detalle_iperc_id_local TEXT NOT NULL,
+
+        detalle_iperc_id_servidor INTEGER,
+
+        detalle_item INTEGER,
+
+        detalle_tarea TEXT,
+
+        -- =====================================================
+        -- SEGUIMIENTO
+        -- =====================================================
+
+        fecha_seguimiento TEXT NOT NULL,
+
+        usuario_id INTEGER NOT NULL,
+
+        usuario_nombre TEXT,
+
+        descripcion TEXT NOT NULL,
+
+        porcentaje_avance REAL NOT NULL
+          DEFAULT 0
+          CHECK (
+            porcentaje_avance >= 0
+            AND porcentaje_avance <= 100
+          ),
+
+        verificado INTEGER NOT NULL
+          DEFAULT 0
+          CHECK (
+            verificado IN (0, 1)
+          ),
+
+        fecha_verificacion TEXT,
+
+        observaciones TEXT,
+
+        -- =====================================================
+        -- EVIDENCIA
+        -- =====================================================
+
+        archivo TEXT,
+
+        nombre_archivo TEXT,
+
+        tipo_archivo TEXT,
+
+        -- =====================================================
+        -- SINCRONIZACIÓN
+        -- =====================================================
+
+        sincronizado INTEGER NOT NULL
+          DEFAULT 0
+          CHECK (
+            sincronizado IN (0, 1)
+          ),
+
+        eliminado INTEGER NOT NULL
+          DEFAULT 0
+          CHECK (
+            eliminado IN (0, 1)
+          ),
+
+        fecha_registro TEXT NOT NULL,
+
+        fecha_actualizacion TEXT,
+
+        fecha_sincronizacion TEXT,
+
+        FOREIGN KEY (
+          detalle_iperc_id_local
+        )
+        REFERENCES detalles_iperc_local(
+          id_local
+        )
+        ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  // =============================================================
   // COLA DE SINCRONIZACIÓN
   // =============================================================
 
@@ -415,6 +516,31 @@ class AppDatabase {
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS
+      idx_seguimientos_iperc_detalle_local
+      ON seguimientos_iperc_local(
+        detalle_iperc_id_local
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_seguimientos_iperc_detalle_servidor
+      ON seguimientos_iperc_local(
+        detalle_iperc_id_servidor
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
+      idx_seguimientos_iperc_sincronizado
+      ON seguimientos_iperc_local(
+        sincronizado,
+        eliminado
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS
       idx_sincronizaciones_estado
       ON sincronizaciones_pendientes(
         estado,
@@ -470,6 +596,14 @@ class AppDatabase {
 
       if (oldVersion < 5) {
         await _upgradeToVersion5(txn);
+      }
+
+      // -------------------------------------------------------
+      // V5 → V6
+      // -------------------------------------------------------
+
+      if (oldVersion < 6) {
+        await _upgradeToVersion6(txn);
       }
 
       await _createIndexes(txn);
@@ -634,6 +768,21 @@ class AppDatabase {
       ALTER TABLE matrices_iperc_local
       ADD COLUMN actividad_id TEXT
     ''');
+  }
+
+  // =============================================================
+  // MIGRACIÓN V5 → V6
+  // =============================================================
+
+  /// Agrega la tabla local de Seguimiento IPERC.
+  ///
+  /// Esta migración es aditiva:
+  /// - No elimina tablas.
+  /// - No modifica matrices existentes.
+  /// - No modifica detalles existentes.
+  /// - No borra la cola de sincronización.
+  Future<void> _upgradeToVersion6(DatabaseExecutor db) async {
+    await _createSeguimientosIpercTable(db);
   }
 
   // =============================================================

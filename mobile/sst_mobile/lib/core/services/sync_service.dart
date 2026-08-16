@@ -7,10 +7,14 @@ import '../../data/datasources/local/sync_queue_local_datasource.dart';
 import '../../data/datasources/remote/matriz_iperc_remote_datasource.dart';
 import '../../data/models/sync_queue_model.dart';
 import '../../data/services/detalle_iperc_sync_service.dart';
+import '../../data/services/seguimiento_iperc_sync_service.dart';
 import '../constants/sync_constants.dart';
 import '../network/network_info.dart';
 import 'secure_storage_service.dart';
 
+/// ===============================================================
+/// RESULTADO DE SINCRONIZACIÓN
+/// ===============================================================
 class SyncResult {
   const SyncResult({
     required this.total,
@@ -19,9 +23,16 @@ class SyncResult {
     required this.withoutConnection,
   });
 
+  /// Cantidad total de operaciones encontradas en la cola.
   final int total;
+
+  /// Operaciones procesadas correctamente.
   final int synchronized;
+
+  /// Operaciones que terminaron con error.
   final int failed;
+
+  /// Indica que la sincronización no pudo continuar por falta de red.
   final bool withoutConnection;
 
   bool get successful {
@@ -33,6 +44,26 @@ class SyncResult {
   }
 }
 
+/// ===============================================================
+/// SERVICIO GENERAL DE SINCRONIZACIÓN
+/// ===============================================================
+///
+/// Procesa la cola:
+///
+/// `sincronizaciones_pendientes`
+///
+/// respetando las dependencias del modelo IPERC:
+///
+/// MATRIZ_IPERC
+///      ↓
+/// DETALLE_IPERC
+///      ↓
+/// SEGUIMIENTO_IPERC
+///
+/// La sincronización general es el único punto que debe recorrer la
+/// cola completa. Los servicios especializados sincronizan únicamente
+/// el registro que se les solicita.
+/// ===============================================================
 class SyncService {
   SyncService({
     NetworkInfo? networkInfo,
@@ -40,6 +71,7 @@ class SyncService {
     MatrizIpercLocalDatasource? matrizLocalDatasource,
     MatrizIpercRemoteDatasource? matrizRemoteDatasource,
     DetalleIpercSyncService? detalleIpercSyncService,
+    SeguimientoIpercSyncService? seguimientoIpercSyncService,
     SecureStorageService? secureStorageService,
   }) : _networkInfo = networkInfo ?? NetworkInfo.instance,
        _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource(),
@@ -49,15 +81,40 @@ class SyncService {
            matrizRemoteDatasource ?? MatrizIpercRemoteDatasource(),
        _detalleIpercSyncService =
            detalleIpercSyncService ?? DetalleIpercSyncService(),
+       _seguimientoIpercSyncService =
+           seguimientoIpercSyncService ?? SeguimientoIpercSyncService(),
        _secureStorageService =
            secureStorageService ?? SecureStorageService.instance;
 
+  // =============================================================
+  // DEPENDENCIAS
+  // =============================================================
+
   final NetworkInfo _networkInfo;
+
   final SyncQueueLocalDatasource _syncQueueDatasource;
+
   final MatrizIpercLocalDatasource _matrizLocalDatasource;
+
   final MatrizIpercRemoteDatasource _matrizRemoteDatasource;
+
   final DetalleIpercSyncService _detalleIpercSyncService;
+
+  final SeguimientoIpercSyncService _seguimientoIpercSyncService;
+
   final SecureStorageService _secureStorageService;
+
+  // =============================================================
+  // BLOQUEO GLOBAL
+  // =============================================================
+  //
+  // Es static porque diferentes Providers pueden construir distintas
+  // instancias de SyncService.
+  //
+  // IMPORTANTE:
+  // El bloqueo se activa ANTES del primer await para evitar que dos
+  // llamadas simultáneas superen la validación al mismo tiempo.
+  // =============================================================
 
   static bool _globalSynchronizing = false;
 
@@ -65,7 +122,15 @@ class SyncService {
     return _globalSynchronizing;
   }
 
+  // =============================================================
+  // SINCRONIZAR PENDIENTES
+  // =============================================================
+
   Future<SyncResult> synchronizePending() async {
+    // -----------------------------------------------------------
+    // EVITAR DOS SINCRONIZACIONES SIMULTÁNEAS
+    // -----------------------------------------------------------
+
     if (_globalSynchronizing) {
       return const SyncResult(
         total: 0,
@@ -75,23 +140,32 @@ class SyncService {
       );
     }
 
-    final bool connected = await _networkInfo.isConnected;
-
-    if (!connected) {
-      return const SyncResult(
-        total: 0,
-        synchronized: 0,
-        failed: 0,
-        withoutConnection: true,
-      );
-    }
-
+    // El lock debe adquirirse antes de cualquier await.
     _globalSynchronizing = true;
 
     int synchronized = 0;
     int failed = 0;
 
     try {
+      // ---------------------------------------------------------
+      // COMPROBAR CONEXIÓN
+      // ---------------------------------------------------------
+
+      final bool connected = await _networkInfo.isConnected;
+
+      if (!connected) {
+        return const SyncResult(
+          total: 0,
+          synchronized: 0,
+          failed: 0,
+          withoutConnection: true,
+        );
+      }
+
+      // ---------------------------------------------------------
+      // LEER OPERACIONES PENDIENTES
+      // ---------------------------------------------------------
+
       final List<SyncQueueModel> originales = await _syncQueueDatasource
           .getPending();
 
@@ -99,7 +173,15 @@ class SyncService {
         originales,
       );
 
+      // ---------------------------------------------------------
+      // ORDENAR POR DEPENDENCIA
+      // ---------------------------------------------------------
+
       pendingItems.sort(_compararOperaciones);
+
+      // ---------------------------------------------------------
+      // PROCESAR UNA POR UNA
+      // ---------------------------------------------------------
 
       for (final SyncQueueModel item in pendingItems) {
         final int? queueId = item.id;
@@ -110,7 +192,15 @@ class SyncService {
         }
 
         try {
+          // -----------------------------------------------------
+          // VALIDAR ESTRUCTURA DE LA OPERACIÓN
+          // -----------------------------------------------------
+
           _validarOperacionCola(item);
+
+          // -----------------------------------------------------
+          // REVISAR CONEXIÓN ANTES DE CADA PETICIÓN
+          // -----------------------------------------------------
 
           final bool sigueConectado = await _networkInfo.isConnected;
 
@@ -123,9 +213,21 @@ class SyncService {
             );
           }
 
+          // -----------------------------------------------------
+          // MARCAR EN PROCESO
+          // -----------------------------------------------------
+
           await _syncQueueDatasource.markAsSynchronizing(queueId);
 
+          // -----------------------------------------------------
+          // EJECUTAR OPERACIÓN
+          // -----------------------------------------------------
+
           await _processItem(item);
+
+          // -----------------------------------------------------
+          // CONFIRMAR COLA
+          // -----------------------------------------------------
 
           await _syncQueueDatasource.markAsSynchronized(queueId);
 
@@ -133,13 +235,20 @@ class SyncService {
         } catch (error) {
           failed++;
 
+          // -----------------------------------------------------
+          // REGISTRAR ERROR SIN ROMPER EL RESTO DE LA COLA
+          // -----------------------------------------------------
+
           try {
             await _syncQueueDatasource.markAsError(
               id: queueId,
               error: _getErrorMessage(error),
               numeroIntentos: item.numeroIntentos + 1,
             );
-          } catch (_) {}
+          } catch (_) {
+            // Si incluso guardar el error falla, continuamos con
+            // las demás operaciones para no bloquear toda la cola.
+          }
         }
       }
 
@@ -150,9 +259,17 @@ class SyncService {
         withoutConnection: false,
       );
     } finally {
+      // ---------------------------------------------------------
+      // SIEMPRE LIBERAR EL LOCK
+      // ---------------------------------------------------------
+
       _globalSynchronizing = false;
     }
   }
+
+  // =============================================================
+  // ORDEN DE SINCRONIZACIÓN
+  // =============================================================
 
   int _compararOperaciones(SyncQueueModel a, SyncQueueModel b) {
     final int prioridadA = _prioridadOperacion(a);
@@ -173,8 +290,19 @@ class SyncService {
     return (a.id ?? 0).compareTo(b.id ?? 0);
   }
 
+  /// Define el orden técnico de procesamiento.
+  ///
+  /// 10 = Crear matriz.
+  /// 20 = Actualizar matriz.
+  /// 30 = Detalles.
+  /// 40 = Seguimientos.
+  /// 50 = Eliminar matriz.
+  ///
+  /// Esto asegura que un seguimiento nunca se procese antes de que
+  /// su Detalle IPERC padre tenga ID remoto.
   int _prioridadOperacion(SyncQueueModel item) {
     final String entidad = item.entidad.trim().toUpperCase();
+
     final String operacion = item.operacion.trim().toUpperCase();
 
     if (entidad == SyncConstants.matrizIperc &&
@@ -191,17 +319,27 @@ class SyncService {
       return 30;
     }
 
+    if (entidad == SyncConstants.seguimientoIperc) {
+      return 40;
+    }
+
     if (entidad == SyncConstants.matrizIperc &&
         operacion == SyncConstants.eliminar) {
-      return 40;
+      return 50;
     }
 
     return 100;
   }
 
+  // =============================================================
+  // VALIDAR OPERACIÓN DE COLA
+  // =============================================================
+
   void _validarOperacionCola(SyncQueueModel item) {
     final String entidad = item.entidad.trim().toUpperCase();
+
     final String idLocal = item.entidadIdLocal.trim();
+
     final String operacion = item.operacion.trim().toUpperCase();
 
     if (entidad.isEmpty) {
@@ -224,7 +362,8 @@ class SyncService {
 
     final bool entidadValida =
         entidad == SyncConstants.matrizIperc ||
-        entidad == SyncConstants.detalleIperc;
+        entidad == SyncConstants.detalleIperc ||
+        entidad == SyncConstants.seguimientoIperc;
 
     if (!entidadValida) {
       throw UnsupportedError(
@@ -244,8 +383,13 @@ class SyncService {
     }
   }
 
+  // =============================================================
+  // ENRUTAR OPERACIÓN
+  // =============================================================
+
   Future<void> _processItem(SyncQueueModel item) async {
     final String entidad = item.entidad.trim().toUpperCase();
+
     final String operacion = item.operacion.trim().toUpperCase();
 
     if (entidad == SyncConstants.matrizIperc) {
@@ -258,10 +402,19 @@ class SyncService {
       return;
     }
 
+    if (entidad == SyncConstants.seguimientoIperc) {
+      await _processSeguimiento(item, operacion);
+      return;
+    }
+
     throw UnsupportedError(
       'No existe sincronización para la entidad "${item.entidad}".',
     );
   }
+
+  // =============================================================
+  // MATRIZ IPERC
+  // =============================================================
 
   Future<void> _processMatrix(SyncQueueModel item, String operacion) async {
     final Map<String, dynamic> data = _decodeData(item.datosJson);
@@ -286,6 +439,10 @@ class SyncService {
     }
   }
 
+  // =============================================================
+  // CREAR MATRIZ
+  // =============================================================
+
   Future<void> _createMatrix(
     SyncQueueModel item,
     Map<String, dynamic> localData,
@@ -308,8 +465,8 @@ class SyncService {
 
     if (servidorNumerico == null || servidorNumerico <= 0) {
       throw FormatException(
-        'El backend devolvió un identificador de matriz no válido: '
-        '$idServidor.',
+        'El backend devolvió un identificador '
+        'de matriz no válido: $idServidor.',
       );
     }
 
@@ -319,6 +476,10 @@ class SyncService {
     );
   }
 
+  // =============================================================
+  // ACTUALIZAR MATRIZ
+  // =============================================================
+
   Future<void> _updateMatrix(
     SyncQueueModel item,
     Map<String, dynamic> localData,
@@ -327,7 +488,8 @@ class SyncService {
 
     if (idLocal.isEmpty) {
       throw ArgumentError(
-        'La actualización de la matriz no contiene un identificador local.',
+        'La actualización de la matriz no contiene '
+        'un identificador local.',
       );
     }
 
@@ -401,6 +563,10 @@ class SyncService {
     );
   }
 
+  // =============================================================
+  // ELIMINAR MATRIZ
+  // =============================================================
+
   Future<void> _deleteMatrix(
     SyncQueueModel item,
     Map<String, dynamic> localData,
@@ -409,7 +575,8 @@ class SyncService {
 
     if (idLocal.isEmpty) {
       throw ArgumentError(
-        'La eliminación de la matriz no contiene un identificador local.',
+        'La eliminación de la matriz no contiene '
+        'un identificador local.',
       );
     }
 
@@ -417,6 +584,7 @@ class SyncService {
 
     idServidor ??= _intOptional(localData['id_servidor']);
 
+    // Una matriz nunca creada en el servidor no necesita DELETE.
     if (idServidor == null || idServidor <= 0) {
       return;
     }
@@ -432,6 +600,10 @@ class SyncService {
       usuarioEliminacionId: usuarioEliminacionId,
     );
   }
+
+  // =============================================================
+  // TRANSFORMAR MATRIZ LOCAL PARA API
+  // =============================================================
 
   Future<Map<String, dynamic>> _transformMatrixForApi(
     Map<String, dynamic> localData,
@@ -488,6 +660,10 @@ class SyncService {
     };
   }
 
+  // =============================================================
+  // DETALLE IPERC
+  // =============================================================
+
   Future<void> _processDetail(SyncQueueModel item, String operacion) async {
     final bool operacionValida =
         operacion == SyncConstants.crear ||
@@ -496,7 +672,8 @@ class SyncService {
 
     if (!operacionValida) {
       throw UnsupportedError(
-        'La operación "$operacion" no es válida para DETALLE_IPERC.',
+        'La operación "$operacion" no es válida '
+        'para DETALLE_IPERC.',
       );
     }
 
@@ -512,6 +689,42 @@ class SyncService {
     await _detalleIpercSyncService.sincronizarPorIdLocal(idLocal);
   }
 
+  // =============================================================
+  // SEGUIMIENTO IPERC
+  // =============================================================
+
+  Future<void> _processSeguimiento(
+    SyncQueueModel item,
+    String operacion,
+  ) async {
+    final bool operacionValida =
+        operacion == SyncConstants.crear ||
+        operacion == SyncConstants.actualizar ||
+        operacion == SyncConstants.eliminar;
+
+    if (!operacionValida) {
+      throw UnsupportedError(
+        'La operación "$operacion" no es válida '
+        'para SEGUIMIENTO_IPERC.',
+      );
+    }
+
+    final String idLocal = item.entidadIdLocal.trim();
+
+    if (idLocal.isEmpty) {
+      throw ArgumentError(
+        'La operación de Seguimiento IPERC no contiene '
+        'un identificador local.',
+      );
+    }
+
+    await _seguimientoIpercSyncService.sincronizarPorIdLocal(idLocal);
+  }
+
+  // =============================================================
+  // DECODIFICAR JSON DE COLA
+  // =============================================================
+
   Map<String, dynamic> _decodeData(String jsonText) {
     final String contenido = jsonText.trim();
 
@@ -523,23 +736,36 @@ class SyncService {
 
     if (decoded is! Map) {
       throw const FormatException(
-        'Los datos de la operación pendiente no tienen un formato válido.',
+        'Los datos de la operación pendiente '
+        'no tienen un formato válido.',
       );
     }
 
     return Map<String, dynamic>.from(decoded);
   }
 
+  // =============================================================
+  // RESOLVER USUARIO REAL
+  // =============================================================
+
   Future<int> _resolverUsuarioId({
     required Map<String, dynamic> localData,
     required String clave,
     required String operacion,
   }) async {
+    // -----------------------------------------------------------
+    // USUARIO GUARDADO EN LA OPERACIÓN
+    // -----------------------------------------------------------
+
     final int? usuarioCola = _intOptional(localData[clave]);
 
     if (usuarioCola != null && usuarioCola > 0) {
       return usuarioCola;
     }
+
+    // -----------------------------------------------------------
+    // FALLBACK: SESIÓN AUTENTICADA
+    // -----------------------------------------------------------
 
     final String usuarioTexto =
         (await _secureStorageService.getUsuarioId())?.trim() ?? '';
@@ -563,6 +789,10 @@ class SyncService {
     return usuarioId;
   }
 
+  // =============================================================
+  // CONVERSIONES
+  // =============================================================
+
   int? _intFromLocal(
     dynamic value, {
     required String nombre,
@@ -573,7 +803,8 @@ class SyncService {
     if (texto.isEmpty) {
       if (obligatorio) {
         throw FormatException(
-          'La matriz offline no tiene un identificador válido de $nombre.',
+          'La matriz offline no tiene un '
+          'identificador válido de $nombre.',
         );
       }
 
@@ -630,6 +861,10 @@ class SyncService {
 
     return texto.isEmpty ? null : texto;
   }
+
+  // =============================================================
+  // MENSAJE DE ERROR
+  // =============================================================
 
   String _getErrorMessage(Object error) {
     if (error is DioException) {
