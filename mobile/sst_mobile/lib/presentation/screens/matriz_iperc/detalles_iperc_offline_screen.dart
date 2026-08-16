@@ -2,11 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/detalle_iperc_local_model.dart';
-import '../../../data/services/detalle_iperc_sync_service.dart';
 import '../../providers/detalle_iperc_offline_provider.dart';
+import '../../providers/sync_provider.dart';
 import 'detalle_iperc_form_screen.dart';
 
+/// ===============================================================
+/// PANTALLA OFFLINE - DETALLES IPERC
+/// ===============================================================
+///
 /// Muestra los detalles IPERC almacenados localmente para una matriz.
+///
+/// IMPORTANTE:
+///
+/// La sincronización manual se realiza exclusivamente mediante
+/// SyncProvider, que utiliza SyncService general.
+///
+/// De esta forma se respeta siempre:
+///
+/// MATRIZ_IPERC
+///      ↓
+/// DETALLE_IPERC
+///
+/// y nunca se intenta sincronizar un detalle antes de que su matriz
+/// tenga un ID válido en el servidor.
+/// ===============================================================
 class DetallesIpercOfflineScreen extends StatefulWidget {
   const DetallesIpercOfflineScreen({
     super.key,
@@ -15,15 +34,10 @@ class DetallesIpercOfflineScreen extends StatefulWidget {
     this.nombreMatriz,
   });
 
-  /// Identificador local de la matriz seleccionada.
   final String matrizIdLocal;
 
-  /// Identificador asignado por el backend.
-  ///
-  /// Puede ser nulo cuando la matriz todavía no fue sincronizada.
   final int? matrizIdServidor;
 
-  /// Nombre mostrado en el encabezado.
   final String? nombreMatriz;
 
   @override
@@ -33,16 +47,33 @@ class DetallesIpercOfflineScreen extends StatefulWidget {
 
 class _DetallesIpercOfflineScreenState
     extends State<DetallesIpercOfflineScreen> {
+  // =============================================================
+  // INICIALIZAR
+  // =============================================================
+
   @override
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargarDetalles();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        return;
+      }
+
+      await _cargarDetalles();
+
+      if (!mounted) {
+        return;
+      }
+
+      await context.read<SyncProvider>().refreshStatus();
     });
   }
 
-  /// Carga los detalles almacenados para la matriz.
+  // =============================================================
+  // CARGAR DETALLES
+  // =============================================================
+
   Future<void> _cargarDetalles({bool mostrarCarga = true}) async {
     await context.read<DetalleIpercOfflineProvider>().cargarPorMatriz(
       widget.matrizIdLocal,
@@ -50,7 +81,10 @@ class _DetallesIpercOfflineScreenState
     );
   }
 
-  /// Calcula el siguiente número de ítem disponible.
+  // =============================================================
+  // SIGUIENTE ÍTEM
+  // =============================================================
+
   int _calcularSiguienteItem(List<DetalleIpercLocalModel> detalles) {
     if (detalles.isEmpty) {
       return 1;
@@ -67,7 +101,10 @@ class _DetallesIpercOfflineScreenState
     return mayorItem + 1;
   }
 
-  /// Abre el formulario para crear o editar un detalle.
+  // =============================================================
+  // ABRIR FORMULARIO
+  // =============================================================
+
   Future<void> _abrirFormulario({DetalleIpercLocalModel? detalle}) async {
     final DetalleIpercOfflineProvider provider = context
         .read<DetalleIpercOfflineProvider>();
@@ -90,63 +127,102 @@ class _DetallesIpercOfflineScreenState
 
     if (resultado == true && mounted) {
       await _cargarDetalles(mostrarCarga: false);
+
+      if (!mounted) {
+        return;
+      }
+
+      await context.read<SyncProvider>().refreshStatus();
     }
   }
 
-  /// Ejecuta la sincronización manual.
+  // =============================================================
+  // SINCRONIZACIÓN GLOBAL
+  // =============================================================
+
   Future<void> _sincronizar() async {
-    final DetalleIpercOfflineProvider provider = context
+    final SyncProvider syncProvider = context.read<SyncProvider>();
+
+    final DetalleIpercOfflineProvider detalleProvider = context
         .read<DetalleIpercOfflineProvider>();
 
-    if (!provider.tienePendientes) {
-      _mostrarMensaje('No existen registros pendientes de sincronización.');
+    if (syncProvider.isSynchronizing) {
       return;
     }
 
-    final DetalleIpercSyncResult? resultado = await provider
-        .sincronizarPendientes();
+    await syncProvider.refreshStatus();
 
     if (!mounted) {
       return;
     }
 
-    if (resultado == null) {
-      _mostrarMensaje(
-        provider.errorSincronizacion ?? 'No se pudo iniciar la sincronización.',
-        esError: true,
-      );
+    if (syncProvider.pendingCount <= 0 && !detalleProvider.tienePendientes) {
+      _mostrarMensaje('No existen registros pendientes de sincronización.');
       return;
     }
 
-    if (resultado.sinPendientes) {
-      _mostrarMensaje('No existen registros pendientes.');
+    await syncProvider.synchronize();
+
+    if (!mounted) {
       return;
     }
 
-    if (resultado.exitoso) {
-      _mostrarMensaje(
-        '${resultado.sincronizados} '
-        '${resultado.sincronizados == 1 ? 'registro sincronizado' : 'registros sincronizados'} correctamente.',
-      );
-      return;
-    }
-
-    if (resultado.parcialmenteExitoso) {
-      _mostrarMensaje(
-        'Se sincronizaron ${resultado.sincronizados} registros. '
-        '${resultado.fallidos} presentaron errores.',
-        esError: true,
-      );
-      return;
-    }
-
-    _mostrarMensaje(
-      provider.errorSincronizacion ?? 'No se pudo sincronizar ningún registro.',
-      esError: true,
+    // Recargar los detalles después del ciclo global.
+    await detalleProvider.cargarPorMatriz(
+      widget.matrizIdLocal,
+      mostrarCarga: false,
     );
+
+    if (!mounted) {
+      return;
+    }
+
+    await syncProvider.refreshStatus();
+
+    if (!mounted) {
+      return;
+    }
+
+    switch (syncProvider.status) {
+      case SyncStatus.completed:
+        _mostrarMensaje(
+          syncProvider.message ?? 'Sincronización completada correctamente.',
+        );
+        break;
+
+      case SyncStatus.offline:
+        _mostrarMensaje(
+          syncProvider.message ?? 'No hay conexión con el servidor.',
+          esError: true,
+        );
+        break;
+
+      case SyncStatus.error:
+        _mostrarMensaje(
+          syncProvider.message ??
+              syncProvider.lastError ??
+              'Ocurrió un error durante la sincronización.',
+          esError: true,
+        );
+        break;
+
+      case SyncStatus.idle:
+        _mostrarMensaje(
+          syncProvider.message ?? 'Estado de sincronización actualizado.',
+        );
+        break;
+
+      case SyncStatus.synchronizing:
+        // No debería quedar en este estado porque synchronize()
+        // se espera con await.
+        break;
+    }
   }
 
-  /// Solicita confirmación antes de eliminar un detalle.
+  // =============================================================
+  // ELIMINAR DETALLE
+  // =============================================================
+
   Future<void> _confirmarEliminacion(DetalleIpercLocalModel detalle) async {
     final String descripcion =
         detalle.peligroDescripcion?.trim().isNotEmpty == true
@@ -194,6 +270,12 @@ class _DetallesIpercOfflineScreenState
       return;
     }
 
+    await context.read<SyncProvider>().refreshStatus();
+
+    if (!mounted) {
+      return;
+    }
+
     _mostrarMensaje(
       eliminado
           ? 'Detalle eliminado localmente.'
@@ -202,7 +284,15 @@ class _DetallesIpercOfflineScreenState
     );
   }
 
+  // =============================================================
+  // MENSAJE
+  // =============================================================
+
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -215,39 +305,48 @@ class _DetallesIpercOfflineScreenState
       );
   }
 
+  // =============================================================
+  // BUILD
+  // =============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detalles IPERC'),
         actions: <Widget>[
-          Consumer<DetalleIpercOfflineProvider>(
+          Consumer2<DetalleIpercOfflineProvider, SyncProvider>(
             builder:
                 (
                   BuildContext context,
-                  DetalleIpercOfflineProvider provider,
+                  DetalleIpercOfflineProvider detalleProvider,
+                  SyncProvider syncProvider,
                   Widget? child,
                 ) {
+                  final bool hayPendientes =
+                      syncProvider.pendingCount > 0 ||
+                      detalleProvider.tienePendientes;
+
+                  final bool bloqueado =
+                      syncProvider.isSynchronizing ||
+                      detalleProvider.cargando ||
+                      detalleProvider.guardando ||
+                      !hayPendientes;
+
                   return IconButton(
-                    tooltip: provider.tienePendientes
+                    tooltip: hayPendientes
                         ? 'Sincronizar ahora'
                         : 'Sin registros pendientes',
-                    onPressed:
-                        provider.sincronizando ||
-                            provider.cargando ||
-                            provider.guardando ||
-                            !provider.tienePendientes
-                        ? null
-                        : _sincronizar,
-                    icon: provider.sincronizando
+                    onPressed: bloqueado ? null : _sincronizar,
+                    icon: syncProvider.isSynchronizing
                         ? const SizedBox(
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Badge(
-                            isLabelVisible: provider.tienePendientes,
-                            label: Text('${provider.cantidadPendientes}'),
+                            isLabelVisible: syncProvider.pendingCount > 0,
+                            label: Text('${syncProvider.pendingCount}'),
                             child: const Icon(Icons.sync),
                           ),
                   );
@@ -255,43 +354,62 @@ class _DetallesIpercOfflineScreenState
           ),
           IconButton(
             tooltip: 'Actualizar lista',
-            onPressed: () {
-              _cargarDetalles(mostrarCarga: false);
+            onPressed: () async {
+              await _cargarDetalles(mostrarCarga: false);
+
+              if (!context.mounted) {
+                return;
+              }
+
+              await context.read<SyncProvider>().refreshStatus();
             },
             icon: const Icon(Icons.refresh),
           ),
         ],
       ),
-      body: Consumer<DetalleIpercOfflineProvider>(
+      body: Consumer2<DetalleIpercOfflineProvider, SyncProvider>(
         builder:
             (
               BuildContext context,
-              DetalleIpercOfflineProvider provider,
+              DetalleIpercOfflineProvider detalleProvider,
+              SyncProvider syncProvider,
               Widget? child,
             ) {
-              if (provider.cargando && provider.detalles.isEmpty) {
+              if (detalleProvider.cargando &&
+                  detalleProvider.detalles.isEmpty) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              if (provider.tieneError && provider.detalles.isEmpty) {
-                return _construirError(provider);
+              if (detalleProvider.tieneError &&
+                  detalleProvider.detalles.isEmpty) {
+                return _construirError(detalleProvider);
               }
 
               return Column(
                 children: <Widget>[
-                  _construirEncabezado(provider),
+                  _construirEncabezado(detalleProvider, syncProvider),
 
-                  if (provider.sincronizando) const LinearProgressIndicator(),
+                  if (syncProvider.isSynchronizing)
+                    const LinearProgressIndicator(),
 
-                  if (provider.tieneErrorSincronizacion)
-                    _construirErrorSincronizacion(provider),
+                  if (syncProvider.hasError)
+                    _construirErrorSincronizacion(syncProvider),
 
                   Expanded(
-                    child: provider.detalles.isEmpty
+                    child: detalleProvider.detalles.isEmpty
                         ? _construirEstadoVacio()
                         : RefreshIndicator(
-                            onRefresh: () =>
-                                _cargarDetalles(mostrarCarga: false),
+                            onRefresh: () async {
+                              await _cargarDetalles(mostrarCarga: false);
+
+                              if (!context.mounted) {
+                                return;
+                              }
+
+                              await context
+                                  .read<SyncProvider>()
+                                  .refreshStatus();
+                            },
                             child: ListView.separated(
                               physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.fromLTRB(
@@ -300,14 +418,14 @@ class _DetallesIpercOfflineScreenState
                                 16,
                                 100,
                               ),
-                              itemCount: provider.detalles.length,
+                              itemCount: detalleProvider.detalles.length,
                               separatorBuilder:
                                   (BuildContext context, int index) {
                                     return const SizedBox(height: 12);
                                   },
                               itemBuilder: (BuildContext context, int index) {
                                 return _construirDetalle(
-                                  provider.detalles[index],
+                                  detalleProvider.detalles[index],
                                 );
                               },
                             ),
@@ -317,29 +435,44 @@ class _DetallesIpercOfflineScreenState
               );
             },
       ),
-      floatingActionButton: Consumer<DetalleIpercOfflineProvider>(
-        builder:
-            (
-              BuildContext context,
-              DetalleIpercOfflineProvider provider,
-              Widget? child,
-            ) {
-              return FloatingActionButton.extended(
-                onPressed: provider.procesando
-                    ? null
-                    : () => _abrirFormulario(),
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo detalle'),
-              );
-            },
-      ),
+      floatingActionButton:
+          Consumer2<DetalleIpercOfflineProvider, SyncProvider>(
+            builder:
+                (
+                  BuildContext context,
+                  DetalleIpercOfflineProvider detalleProvider,
+                  SyncProvider syncProvider,
+                  Widget? child,
+                ) {
+                  final bool bloqueado =
+                      detalleProvider.cargando ||
+                      detalleProvider.guardando ||
+                      syncProvider.isSynchronizing;
+
+                  return FloatingActionButton.extended(
+                    onPressed: bloqueado ? null : () => _abrirFormulario(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nuevo detalle'),
+                  );
+                },
+          ),
     );
   }
 
-  Widget _construirEncabezado(DetalleIpercOfflineProvider provider) {
+  // =============================================================
+  // ENCABEZADO
+  // =============================================================
+
+  Widget _construirEncabezado(
+    DetalleIpercOfflineProvider detalleProvider,
+    SyncProvider syncProvider,
+  ) {
     final String titulo = widget.nombreMatriz?.trim().isNotEmpty == true
         ? widget.nombreMatriz!.trim()
         : 'Matriz IPERC';
+
+    final bool hayPendientes =
+        syncProvider.pendingCount > 0 || detalleProvider.tienePendientes;
 
     return Container(
       width: double.infinity,
@@ -358,8 +491,8 @@ class _DetallesIpercOfflineScreenState
           ),
           const SizedBox(height: 4),
           Text(
-            '${provider.detalles.length} '
-            '${provider.detalles.length == 1 ? 'detalle' : 'detalles'}',
+            '${detalleProvider.detalles.length} '
+            '${detalleProvider.detalles.length == 1 ? 'detalle' : 'detalles'}',
           ),
 
           if (widget.matrizIdServidor == null) ...<Widget>[
@@ -370,15 +503,19 @@ class _DetallesIpercOfflineScreenState
                 const SizedBox(width: 6),
                 const Expanded(
                   child: Text(
-                    'La matriz todavía no tiene identificador del servidor.',
+                    'La matriz todavía no tiene identificador '
+                    'del servidor. La sincronización global '
+                    'creará primero la matriz y después '
+                    'sus detalles.',
                   ),
                 ),
               ],
             ),
           ],
 
-          if (provider.tienePendientes) ...<Widget>[
-            const SizedBox(height: 10),
+          const SizedBox(height: 10),
+
+          if (hayPendientes)
             Row(
               children: <Widget>[
                 Icon(
@@ -389,9 +526,13 @@ class _DetallesIpercOfflineScreenState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${provider.cantidadPendientes} '
-                    '${provider.cantidadPendientes == 1 ? 'registro pendiente' : 'registros pendientes'} '
-                    'de sincronización.',
+                    syncProvider.pendingCount > 0
+                        ? '${syncProvider.pendingCount} '
+                              '${syncProvider.pendingCount == 1 ? 'operación pendiente' : 'operaciones pendientes'} '
+                              'en la cola global.'
+                        : '${detalleProvider.cantidadPendientes} '
+                              '${detalleProvider.cantidadPendientes == 1 ? 'detalle pendiente' : 'detalles pendientes'} '
+                              'de sincronización.',
                     style: TextStyle(
                       color: Colors.orange.shade900,
                       fontWeight: FontWeight.w600,
@@ -400,8 +541,13 @@ class _DetallesIpercOfflineScreenState
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
-                  onPressed: provider.procesando ? null : _sincronizar,
-                  icon: provider.sincronizando
+                  onPressed:
+                      syncProvider.isSynchronizing ||
+                          detalleProvider.guardando ||
+                          detalleProvider.cargando
+                      ? null
+                      : _sincronizar,
+                  icon: syncProvider.isSynchronizing
                       ? const SizedBox(
                           width: 18,
                           height: 18,
@@ -409,15 +555,14 @@ class _DetallesIpercOfflineScreenState
                         )
                       : const Icon(Icons.sync, size: 18),
                   label: Text(
-                    provider.sincronizando
+                    syncProvider.isSynchronizing
                         ? 'Sincronizando'
                         : 'Sincronizar ahora',
                   ),
                 ),
               ],
-            ),
-          ] else ...<Widget>[
-            const SizedBox(height: 10),
+            )
+          else
             Row(
               children: <Widget>[
                 Icon(
@@ -426,22 +571,28 @@ class _DetallesIpercOfflineScreenState
                   color: Colors.green.shade700,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Todos los registros están sincronizados.',
-                  style: TextStyle(
-                    color: Colors.green.shade800,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    syncProvider.message ??
+                        'Todos los registros están sincronizados.',
+                    style: TextStyle(
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _construirErrorSincronizacion(DetalleIpercOfflineProvider provider) {
+  // =============================================================
+  // ERROR DE SINCRONIZACIÓN
+  // =============================================================
+
+  Widget _construirErrorSincronizacion(SyncProvider syncProvider) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -458,19 +609,24 @@ class _DetallesIpercOfflineScreenState
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              provider.errorSincronizacion ??
+              syncProvider.message ??
+                  syncProvider.lastError ??
                   'Ocurrió un error durante la sincronización.',
             ),
           ),
           IconButton(
             tooltip: 'Cerrar mensaje',
-            onPressed: provider.limpiarErrorSincronizacion,
+            onPressed: syncProvider.clearError,
             icon: const Icon(Icons.close),
           ),
         ],
       ),
     );
   }
+
+  // =============================================================
+  // TARJETA DETALLE
+  // =============================================================
 
   Widget _construirDetalle(DetalleIpercLocalModel detalle) {
     final Color colorInicial = _obtenerColorRiesgo(detalle.valorRiesgoInicial);
@@ -535,6 +691,7 @@ class _DetallesIpercOfflineScreenState
                         case 'editar':
                           _abrirFormulario(detalle: detalle);
                           break;
+
                         case 'eliminar':
                           _confirmarEliminacion(detalle);
                           break;
@@ -569,18 +726,14 @@ class _DetallesIpercOfflineScreenState
                   ),
                 ],
               ),
-
               const SizedBox(height: 14),
-
               _construirInformacion(
                 icono: Icons.work_outline,
                 titulo: 'Actividad',
                 contenido:
                     detalle.actividadDescripcion ?? 'Actividad no especificada',
               ),
-
               const SizedBox(height: 10),
-
               _construirInformacion(
                 icono: Icons.report_problem_outlined,
                 titulo: 'Consecuencia',
@@ -588,9 +741,7 @@ class _DetallesIpercOfflineScreenState
                     detalle.consecuenciaDescripcion ??
                     'Consecuencia no especificada',
               ),
-
               const SizedBox(height: 10),
-
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -599,13 +750,11 @@ class _DetallesIpercOfflineScreenState
                     texto: 'Inicial: ${detalle.nivelRiesgoInicial}',
                     valor: detalle.valorRiesgoInicial,
                   ),
-
                   if (valorResidual != null)
                     _construirIndicadorRiesgo(
                       texto: 'Residual: ${detalle.nivelRiesgoResidual ?? ''}',
                       valor: valorResidual,
                     ),
-
                   Chip(
                     avatar: Icon(
                       detalle.sincronizado
@@ -617,7 +766,6 @@ class _DetallesIpercOfflineScreenState
                       detalle.sincronizado ? 'Sincronizado' : 'Pendiente',
                     ),
                   ),
-
                   if (detalle.idServidor != null &&
                       detalle.idServidor!.trim().isNotEmpty)
                     Chip(
@@ -626,7 +774,6 @@ class _DetallesIpercOfflineScreenState
                     ),
                 ],
               ),
-
               if (detalle.controlDescripcion?.trim().isNotEmpty ==
                   true) ...<Widget>[
                 const SizedBox(height: 12),
@@ -642,6 +789,10 @@ class _DetallesIpercOfflineScreenState
       ),
     );
   }
+
+  // =============================================================
+  // INDICADOR DE RIESGO
+  // =============================================================
 
   Widget _construirIndicadorRiesgo({
     required String texto,
@@ -663,6 +814,10 @@ class _DetallesIpercOfflineScreenState
       backgroundColor: color.withValues(alpha: 0.10),
     );
   }
+
+  // =============================================================
+  // INFORMACIÓN
+  // =============================================================
 
   Widget _construirInformacion({
     required IconData icono,
@@ -691,9 +846,21 @@ class _DetallesIpercOfflineScreenState
     );
   }
 
+  // =============================================================
+  // ESTADO VACÍO
+  // =============================================================
+
   Widget _construirEstadoVacio() {
     return RefreshIndicator(
-      onRefresh: () => _cargarDetalles(mostrarCarga: false),
+      onRefresh: () async {
+        await _cargarDetalles(mostrarCarga: false);
+
+        if (!mounted) {
+          return;
+        }
+
+        await context.read<SyncProvider>().refreshStatus();
+      },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
@@ -728,6 +895,10 @@ class _DetallesIpercOfflineScreenState
     );
   }
 
+  // =============================================================
+  // ERROR DE CARGA
+  // =============================================================
+
   Widget _construirError(DetalleIpercOfflineProvider provider) {
     return Center(
       child: SingleChildScrollView(
@@ -749,7 +920,15 @@ class _DetallesIpercOfflineScreenState
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: _cargarDetalles,
+              onPressed: () async {
+                await _cargarDetalles();
+
+                if (!mounted) {
+                  return;
+                }
+
+                await context.read<SyncProvider>().refreshStatus();
+              },
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
             ),
@@ -758,6 +937,10 @@ class _DetallesIpercOfflineScreenState
       ),
     );
   }
+
+  // =============================================================
+  // COLOR DE RIESGO
+  // =============================================================
 
   Color _obtenerColorRiesgo(int valor) {
     if (valor <= 4) {

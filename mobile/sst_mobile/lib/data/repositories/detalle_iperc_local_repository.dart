@@ -1,25 +1,56 @@
 import '../datasources/local/detalle_iperc_local_datasource.dart';
 import '../models/detalle_iperc_local_model.dart';
 
-/// Repositorio para administrar los detalles IPERC almacenados en SQLite.
+/// ===============================================================
+/// REPOSITORIO LOCAL - DETALLE IPERC
+/// ===============================================================
 ///
-/// Las pantallas y providers deben utilizar este repositorio en lugar de
-/// acceder directamente al datasource.
+/// Administra los detalles IPERC almacenados en SQLite.
+///
+/// Responsabilidades:
+///
+/// - Crear.
+/// - Consultar.
+/// - Actualizar.
+/// - Eliminar.
+/// - Validar datos antes de enviarlos al datasource.
+/// - Confirmar sincronización.
+/// - Guardar información recibida desde el backend.
+///
+/// IMPORTANTE:
+///
+/// Los IDs reales de Probabilidad y Severidad se validan por separado
+/// de sus valores IPERC 1..5.
+///
+/// Ejemplo:
+///
+/// probabilidadInicialId = 8
+/// frecuenciaInicial = 3
+///
+/// Nunca se debe asumir:
+///
+/// ID catálogo == valor IPERC
+/// ===============================================================
 class DetalleIpercLocalRepository {
   DetalleIpercLocalRepository({DetalleIpercLocalDatasource? datasource})
     : _datasource = datasource ?? DetalleIpercLocalDatasource();
 
   final DetalleIpercLocalDatasource _datasource;
 
-  /// Registra un detalle IPERC localmente.
-  ///
-  /// El datasource también agregará la operación a la cola de sincronización.
+  // =============================================================
+  // CREAR
+  // =============================================================
+
   Future<void> crear(DetalleIpercLocalModel detalle) async {
-    _validarDetalle(detalle);
+    _validarDetalle(detalle, exigirIdsCatalogo: true);
+
     await _datasource.crear(detalle);
   }
 
-  /// Busca un detalle por su identificador local.
+  // =============================================================
+  // OBTENER POR ID LOCAL
+  // =============================================================
+
   Future<DetalleIpercLocalModel?> obtenerPorIdLocal(String idLocal) async {
     final String id = idLocal.trim();
 
@@ -30,7 +61,10 @@ class DetalleIpercLocalRepository {
     return _datasource.obtenerPorIdLocal(id);
   }
 
-  /// Busca un detalle por el identificador asignado por el servidor.
+  // =============================================================
+  // OBTENER POR ID SERVIDOR
+  // =============================================================
+
   Future<DetalleIpercLocalModel?> obtenerPorIdServidor(
     String idServidor,
   ) async {
@@ -40,10 +74,19 @@ class DetalleIpercLocalRepository {
       throw ArgumentError('El identificador del servidor es obligatorio.');
     }
 
+    final int? idNumerico = int.tryParse(id);
+
+    if (idNumerico == null || idNumerico <= 0) {
+      throw ArgumentError('El identificador del servidor no es válido.');
+    }
+
     return _datasource.obtenerPorIdServidor(id);
   }
 
-  /// Lista los detalles activos pertenecientes a una matriz local.
+  // =============================================================
+  // LISTAR POR MATRIZ
+  // =============================================================
+
   Future<List<DetalleIpercLocalModel>> listarPorMatriz(
     String matrizIdLocal,
   ) async {
@@ -58,26 +101,36 @@ class DetalleIpercLocalRepository {
     return _datasource.listarPorMatriz(matrizId);
   }
 
-  /// Lista todos los detalles IPERC activos almacenados localmente.
+  // =============================================================
+  // LISTAR TODOS
+  // =============================================================
+
   Future<List<DetalleIpercLocalModel>> listarTodos() async {
     return _datasource.listarTodos();
   }
 
-  /// Lista los detalles que todavía no se han sincronizado.
+  // =============================================================
+  // LISTAR PENDIENTES
+  // =============================================================
+
   Future<List<DetalleIpercLocalModel>> listarPendientes() async {
     return _datasource.listarPendientes();
   }
 
-  /// Actualiza un detalle y lo deja pendiente de sincronización.
+  // =============================================================
+  // ACTUALIZAR
+  // =============================================================
+
   Future<void> actualizar(DetalleIpercLocalModel detalle) async {
-    _validarDetalle(detalle);
+    _validarDetalle(detalle, exigirIdsCatalogo: true);
+
     await _datasource.actualizar(detalle);
   }
 
-  /// Elimina lógicamente un detalle local.
-  ///
-  /// La eliminación definitiva ocurrirá después de que el backend confirme
-  /// la sincronización.
+  // =============================================================
+  // ELIMINAR
+  // =============================================================
+
   Future<void> eliminar(String idLocal) async {
     final String id = idLocal.trim();
 
@@ -88,12 +141,16 @@ class DetalleIpercLocalRepository {
     await _datasource.eliminar(id);
   }
 
-  /// Marca un detalle como sincronizado y guarda su identificador remoto.
+  // =============================================================
+  // MARCAR COMO SINCRONIZADO
+  // =============================================================
+
   Future<void> marcarComoSincronizado({
     required String idLocal,
     required String idServidor,
   }) async {
     final String local = idLocal.trim();
+
     final String servidor = idServidor.trim();
 
     if (local.isEmpty) {
@@ -106,13 +163,24 @@ class DetalleIpercLocalRepository {
       );
     }
 
+    final int? servidorNumerico = int.tryParse(servidor);
+
+    if (servidorNumerico == null || servidorNumerico <= 0) {
+      throw ArgumentError(
+        'El identificador asignado por el servidor no es válido.',
+      );
+    }
+
     await _datasource.marcarComoSincronizado(
       idLocal: local,
       idServidor: servidor,
     );
   }
 
-  /// Confirma que el backend eliminó el registro y lo borra de SQLite.
+  // =============================================================
+  // CONFIRMAR ELIMINACIÓN
+  // =============================================================
+
   Future<void> confirmarEliminacionSincronizada(String idLocal) async {
     final String id = idLocal.trim();
 
@@ -123,34 +191,76 @@ class DetalleIpercLocalRepository {
     await _datasource.confirmarEliminacionSincronizada(id);
   }
 
-  /// Guarda o actualiza un detalle recibido desde el backend.
-  ///
-  /// No agrega operaciones a la cola porque los datos ya están sincronizados.
-  Future<void> guardarDesdeServidor(DetalleIpercLocalModel detalle) async {
-    _validarDetalle(detalle);
+  // =============================================================
+  // GUARDAR DESDE SERVIDOR
+  // =============================================================
 
-    if (detalle.idServidor == null || detalle.idServidor!.trim().isEmpty) {
+  Future<void> guardarDesdeServidor(DetalleIpercLocalModel detalle) async {
+    // -----------------------------------------------------------
+    // VALIDACIÓN ESTRUCTURAL
+    // -----------------------------------------------------------
+    //
+    // Para datos recibidos del backend no exigimos de forma
+    // estricta todos los IDs de catálogo antiguos.
+    //
+    // Esto evita rechazar registros históricos mientras la
+    // aplicación todavía mantiene compatibilidad con versiones
+    // anteriores.
+    // -----------------------------------------------------------
+
+    _validarDetalle(detalle, exigirIdsCatalogo: false);
+
+    final String idServidor = detalle.idServidor?.trim() ?? '';
+
+    if (idServidor.isEmpty) {
       throw ArgumentError(
-        'El detalle recibido debe contener el identificador del servidor.',
+        'El detalle recibido debe contener '
+        'el identificador del servidor.',
+      );
+    }
+
+    final int? servidorNumerico = int.tryParse(idServidor);
+
+    if (servidorNumerico == null || servidorNumerico <= 0) {
+      throw ArgumentError(
+        'El identificador del servidor '
+        'del detalle no es válido.',
       );
     }
 
     await _datasource.guardarDesdeServidor(detalle);
   }
 
-  /// Devuelve la cantidad de detalles pendientes de sincronización.
+  // =============================================================
+  // CONTAR PENDIENTES
+  // =============================================================
+
   Future<int> contarPendientes() async {
     return _datasource.contarPendientes();
   }
 
-  /// Indica si existen registros pendientes.
+  // =============================================================
+  // TIENE PENDIENTES
+  // =============================================================
+
   Future<bool> tienePendientes() async {
     final int total = await contarPendientes();
+
     return total > 0;
   }
 
-  /// Valida la información mínima necesaria del detalle IPERC.
-  void _validarDetalle(DetalleIpercLocalModel detalle) {
+  // =============================================================
+  // VALIDACIÓN GENERAL
+  // =============================================================
+
+  void _validarDetalle(
+    DetalleIpercLocalModel detalle, {
+    required bool exigirIdsCatalogo,
+  }) {
+    // ===========================================================
+    // IDENTIFICADORES PRINCIPALES
+    // ===========================================================
+
     if (detalle.idLocal.trim().isEmpty) {
       throw ArgumentError('El identificador local del detalle es obligatorio.');
     }
@@ -160,6 +270,88 @@ class DetalleIpercLocalRepository {
         'El identificador local de la matriz es obligatorio.',
       );
     }
+
+    if (detalle.matrizIdServidor != null && detalle.matrizIdServidor! <= 0) {
+      throw ArgumentError(
+        'El identificador de la matriz en el servidor no es válido.',
+      );
+    }
+
+    if (detalle.idServidor != null && detalle.idServidor!.trim().isNotEmpty) {
+      final int? idServidor = int.tryParse(detalle.idServidor!.trim());
+
+      if (idServidor == null || idServidor <= 0) {
+        throw ArgumentError(
+          'El identificador del detalle en el servidor no es válido.',
+        );
+      }
+    }
+
+    // ===========================================================
+    // ÍTEM / TAREA
+    // ===========================================================
+
+    if (detalle.item <= 0) {
+      throw ArgumentError('El número de ítem debe ser mayor que cero.');
+    }
+
+    if (detalle.tarea.trim().isEmpty) {
+      throw ArgumentError('La tarea del detalle IPERC es obligatoria.');
+    }
+
+    // ===========================================================
+    // PELIGRO
+    // ===========================================================
+
+    final int? peligroId = _idPositivoOpcional(detalle.peligroId);
+
+    if (peligroId == null) {
+      throw ArgumentError('El detalle debe contener un peligro válido.');
+    }
+
+    // ===========================================================
+    // CONSECUENCIA
+    // ===========================================================
+
+    final int? consecuenciaId = _idPositivoOpcional(detalle.consecuenciaId);
+
+    if (consecuenciaId == null) {
+      throw ArgumentError('El detalle debe contener una consecuencia válida.');
+    }
+
+    // ===========================================================
+    // EVALUACIÓN INICIAL - IDS REALES
+    // ===========================================================
+
+    if (exigirIdsCatalogo) {
+      if (detalle.probabilidadInicialId == null ||
+          detalle.probabilidadInicialId! <= 0) {
+        throw ArgumentError(
+          'El ID real de la probabilidad inicial es obligatorio.',
+        );
+      }
+
+      if (detalle.severidadInicialId == null ||
+          detalle.severidadInicialId! <= 0) {
+        throw ArgumentError(
+          'El ID real de la severidad inicial es obligatorio.',
+        );
+      }
+    } else {
+      if (detalle.probabilidadInicialId != null &&
+          detalle.probabilidadInicialId! <= 0) {
+        throw ArgumentError('El ID de probabilidad inicial no es válido.');
+      }
+
+      if (detalle.severidadInicialId != null &&
+          detalle.severidadInicialId! <= 0) {
+        throw ArgumentError('El ID de severidad inicial no es válido.');
+      }
+    }
+
+    // ===========================================================
+    // EVALUACIÓN INICIAL - VALORES 1..5
+    // ===========================================================
 
     if (detalle.severidadInicial < 1 || detalle.severidadInicial > 5) {
       throw ArgumentError('La severidad inicial debe encontrarse entre 1 y 5.');
@@ -185,29 +377,96 @@ class DetalleIpercLocalRepository {
       throw ArgumentError('El nivel del riesgo inicial es obligatorio.');
     }
 
+    // ===========================================================
+    // CONTROLES
+    // ===========================================================
+
+    _validarListaIds(detalle.controlIds, nombre: 'control');
+
+    // ===========================================================
+    // EPP
+    // ===========================================================
+
+    _validarListaIds(
+      detalle.equipoProteccionIds,
+      nombre: 'equipo de protección',
+    );
+
+    // ===========================================================
+    // EVALUACIÓN RESIDUAL
+    // ===========================================================
+
+    final bool tieneProbabilidadResidual = detalle.frecuenciaResidual != null;
+
     final bool tieneSeveridadResidual = detalle.severidadResidual != null;
-    final bool tieneFrecuenciaResidual = detalle.frecuenciaResidual != null;
+
     final bool tieneValorResidual = detalle.valorRiesgoResidual != null;
 
-    final bool evaluacionResidualIncompleta =
-        tieneSeveridadResidual || tieneFrecuenciaResidual || tieneValorResidual;
+    final bool tieneNivelResidual =
+        detalle.nivelRiesgoResidual != null &&
+        detalle.nivelRiesgoResidual!.trim().isNotEmpty;
 
-    if (evaluacionResidualIncompleta &&
-        !(tieneSeveridadResidual &&
-            tieneFrecuenciaResidual &&
-            tieneValorResidual)) {
-      throw ArgumentError(
-        'La evaluación residual debe incluir severidad, '
-        'frecuencia y valor de riesgo.',
-      );
-    }
+    final bool tieneProbabilidadResidualId =
+        detalle.probabilidadResidualId != null;
 
-    if (tieneSeveridadResidual &&
-        tieneFrecuenciaResidual &&
-        tieneValorResidual) {
+    final bool tieneSeveridadResidualId = detalle.severidadResidualId != null;
+
+    final bool existeCualquierDatoResidual =
+        tieneProbabilidadResidual ||
+        tieneSeveridadResidual ||
+        tieneValorResidual ||
+        tieneNivelResidual ||
+        tieneProbabilidadResidualId ||
+        tieneSeveridadResidualId;
+
+    if (existeCualquierDatoResidual) {
+      if (!tieneProbabilidadResidual ||
+          !tieneSeveridadResidual ||
+          !tieneValorResidual ||
+          !tieneNivelResidual) {
+        throw ArgumentError(
+          'La evaluación residual debe incluir '
+          'probabilidad, severidad, valor y nivel de riesgo.',
+        );
+      }
+
+      if (exigirIdsCatalogo) {
+        if (detalle.probabilidadResidualId == null ||
+            detalle.probabilidadResidualId! <= 0) {
+          throw ArgumentError(
+            'El ID real de la probabilidad residual es obligatorio.',
+          );
+        }
+
+        if (detalle.severidadResidualId == null ||
+            detalle.severidadResidualId! <= 0) {
+          throw ArgumentError(
+            'El ID real de la severidad residual es obligatorio.',
+          );
+        }
+      } else {
+        if (detalle.probabilidadResidualId != null &&
+            detalle.probabilidadResidualId! <= 0) {
+          throw ArgumentError('El ID de probabilidad residual no es válido.');
+        }
+
+        if (detalle.severidadResidualId != null &&
+            detalle.severidadResidualId! <= 0) {
+          throw ArgumentError('El ID de severidad residual no es válido.');
+        }
+      }
+
+      final int probabilidad = detalle.frecuenciaResidual!;
+
       final int severidad = detalle.severidadResidual!;
-      final int frecuencia = detalle.frecuenciaResidual!;
+
       final int valor = detalle.valorRiesgoResidual!;
+
+      if (probabilidad < 1 || probabilidad > 5) {
+        throw ArgumentError(
+          'La probabilidad residual debe encontrarse entre 1 y 5.',
+        );
+      }
 
       if (severidad < 1 || severidad > 5) {
         throw ArgumentError(
@@ -215,23 +474,88 @@ class DetalleIpercLocalRepository {
         );
       }
 
-      if (frecuencia < 1 || frecuencia > 5) {
-        throw ArgumentError(
-          'La frecuencia residual debe encontrarse entre 1 y 5.',
-        );
-      }
-
-      if (valor != severidad * frecuencia) {
+      if (valor != probabilidad * severidad) {
         throw ArgumentError(
           'El valor del riesgo residual debe ser igual a '
-          'severidad × frecuencia.',
+          'severidad × probabilidad.',
         );
       }
+    }
 
-      if (detalle.nivelRiesgoResidual == null ||
-          detalle.nivelRiesgoResidual!.trim().isEmpty) {
-        throw ArgumentError('El nivel de riesgo residual es obligatorio.');
+    // ===========================================================
+    // RESPONSABLE
+    // ===========================================================
+
+    final String responsable =
+        detalle.responsableImplementacionId?.trim() ?? '';
+
+    if (responsable.isNotEmpty) {
+      final int? responsableId = int.tryParse(responsable);
+
+      if (responsableId == null || responsableId <= 0) {
+        throw ArgumentError(
+          'El identificador del responsable '
+          'de implementación no es válido.',
+        );
       }
     }
+
+    // ===========================================================
+    // EVALUACIONES REMOTAS OPCIONALES
+    // ===========================================================
+
+    if (detalle.evaluacionInicialId != null &&
+        detalle.evaluacionInicialId! <= 0) {
+      throw ArgumentError(
+        'El identificador de evaluación inicial no es válido.',
+      );
+    }
+
+    if (detalle.evaluacionResidualId != null &&
+        detalle.evaluacionResidualId! <= 0) {
+      throw ArgumentError(
+        'El identificador de evaluación residual no es válido.',
+      );
+    }
+  }
+
+  // =============================================================
+  // VALIDAR LISTA DE IDS
+  // =============================================================
+
+  void _validarListaIds(List<String> ids, {required String nombre}) {
+    for (final String idTexto in ids) {
+      final String id = idTexto.trim();
+
+      if (id.isEmpty) {
+        throw ArgumentError('Existe un $nombre sin identificador válido.');
+      }
+
+      final int? valor = int.tryParse(id);
+
+      if (valor == null || valor <= 0) {
+        throw ArgumentError('El identificador de $nombre no es válido: $id.');
+      }
+    }
+  }
+
+  // =============================================================
+  // ID POSITIVO OPCIONAL
+  // =============================================================
+
+  int? _idPositivoOpcional(String? value) {
+    final String texto = value?.trim() ?? '';
+
+    if (texto.isEmpty) {
+      return null;
+    }
+
+    final int? id = int.tryParse(texto);
+
+    if (id == null || id <= 0) {
+      return null;
+    }
+
+    return id;
   }
 }

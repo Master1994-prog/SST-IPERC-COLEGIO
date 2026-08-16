@@ -13,19 +13,17 @@ import '../../providers/detalle_iperc_offline_provider.dart';
 /// FORMULARIO OFFLINE - DETALLE IPERC
 /// ===============================================================
 ///
-/// Permite registrar o editar un detalle IPERC.
+/// Permite crear y editar un Detalle IPERC en SQLite.
 ///
-/// El registro se almacena primero en SQLite.
+/// Mantiene separados:
 ///
-/// Para la evaluación de riesgos guarda por separado:
-///
-/// - ID real de Probabilidad.
+/// - ID real de Probabilidad en MySQL.
 /// - Valor de Probabilidad 1..5.
-/// - ID real de Severidad.
+/// - ID real de Severidad en MySQL.
 /// - Valor de Severidad 1..5.
 ///
-/// Esto permite sincronizar correctamente aunque el ID del catálogo
-/// sea distinto del valor utilizado en la matriz 5x5.
+/// Esto permite que la matriz 5x5 se calcule con los valores 1..5
+/// sin confundirlos con los identificadores reales del backend.
 /// ===============================================================
 class DetalleIpercFormScreen extends StatefulWidget {
   const DetalleIpercFormScreen({
@@ -36,32 +34,20 @@ class DetalleIpercFormScreen extends StatefulWidget {
     this.detalle,
   });
 
-  /// Identificador local de la matriz.
   final String matrizIdLocal;
-
-  /// Identificador de la matriz en el backend.
   final int? matrizIdServidor;
-
-  /// Número sugerido para un nuevo detalle.
   final int? siguienteItem;
-
-  /// Detalle que se editará.
   final DetalleIpercLocalModel? detalle;
 
   bool get esEdicion => detalle != null;
 
   @override
-  State<DetalleIpercFormScreen> createState() {
-    return _DetalleIpercFormScreenState();
-  }
+  State<DetalleIpercFormScreen> createState() =>
+      _DetalleIpercFormScreenState();
 }
 
 class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  // =============================================================
-  // CONTROLADORES
-  // =============================================================
 
   late final TextEditingController _itemController;
   late final TextEditingController _tareaController;
@@ -70,44 +56,22 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   late final TextEditingController _observacionesController;
   late final TextEditingController _responsableController;
 
-  // =============================================================
-  // PELIGRO / CONSECUENCIA
-  // =============================================================
-
   int? _peligroIdSeleccionado;
   int? _consecuenciaIdSeleccionada;
 
-  // =============================================================
-  // EVALUACIÓN INICIAL
-  // =============================================================
-
-  /// ID real del catálogo Probabilidades.
   int? _probabilidadInicialId;
-
-  /// ID real del catálogo Severidades.
   int? _severidadInicialId;
 
-  /// Valor 1..5.
-  int _frecuenciaInicial = 1;
+  int _probabilidadInicialValor = 1;
+  int _severidadInicialValor = 1;
 
-  /// Valor 1..5.
-  int _severidadInicial = 1;
-
-  // =============================================================
-  // EVALUACIÓN RESIDUAL
-  // =============================================================
+  bool _registrarEvaluacionResidual = false;
 
   int? _probabilidadResidualId;
   int? _severidadResidualId;
 
-  int? _frecuenciaResidual;
-  int? _severidadResidual;
-
-  bool _registrarEvaluacionResidual = false;
-
-  // =============================================================
-  // IMPLEMENTACIÓN
-  // =============================================================
+  int? _probabilidadResidualValor;
+  int? _severidadResidualValor;
 
   DateTime? _fechaCompromiso;
   DateTime? _fechaImplementacion;
@@ -121,10 +85,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     'VERIFICADO',
     'CERRADO',
   ];
-
-  // =============================================================
-  // INIT
-  // =============================================================
 
   @override
   void initState() {
@@ -156,58 +116,43 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       text: detalle?.responsableImplementacionId ?? '',
     );
 
-    _peligroIdSeleccionado = int.tryParse(detalle?.peligroId ?? '');
+    _peligroIdSeleccionado =
+        int.tryParse(detalle?.peligroId?.trim() ?? '');
 
-    _consecuenciaIdSeleccionada = int.tryParse(detalle?.consecuenciaId ?? '');
+    _consecuenciaIdSeleccionada =
+        int.tryParse(detalle?.consecuenciaId?.trim() ?? '');
 
     if (detalle != null) {
-      // ---------------------------------------------------------
-      // EVALUACIÓN INICIAL
-      // ---------------------------------------------------------
-
       _probabilidadInicialId = detalle.probabilidadInicialId;
-
       _severidadInicialId = detalle.severidadInicialId;
 
-      _frecuenciaInicial = detalle.frecuenciaInicial;
-
-      _severidadInicial = detalle.severidadInicial;
-
-      // ---------------------------------------------------------
-      // EVALUACIÓN RESIDUAL
-      // ---------------------------------------------------------
+      _probabilidadInicialValor = detalle.frecuenciaInicial;
+      _severidadInicialValor = detalle.severidadInicial;
 
       _probabilidadResidualId = detalle.probabilidadResidualId;
-
       _severidadResidualId = detalle.severidadResidualId;
 
-      _frecuenciaResidual = detalle.frecuenciaResidual;
-
-      _severidadResidual = detalle.severidadResidual;
+      _probabilidadResidualValor = detalle.frecuenciaResidual;
+      _severidadResidualValor = detalle.severidadResidual;
 
       _registrarEvaluacionResidual =
           detalle.frecuenciaResidual != null &&
           detalle.severidadResidual != null;
 
-      // ---------------------------------------------------------
-      // IMPLEMENTACIÓN
-      // ---------------------------------------------------------
-
       _fechaCompromiso = detalle.fechaCompromiso;
-
       _fechaImplementacion = detalle.fechaImplementacion;
 
-      _estadoImplementacion = detalle.estadoImplementacion ?? 'PENDIENTE';
+      final String estado = detalle.estadoImplementacion?.trim() ?? '';
+
+      if (_estadosImplementacion.contains(estado)) {
+        _estadoImplementacion = estado;
+      }
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cargarCatalogos();
     });
   }
-
-  // =============================================================
-  // DISPOSE
-  // =============================================================
 
   @override
   void dispose() {
@@ -221,13 +166,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     super.dispose();
   }
 
-  // =============================================================
-  // CARGAR CATÁLOGOS
-  // =============================================================
-
   Future<void> _cargarCatalogos() async {
-    final DetalleIpercCatalogosProvider catalogos = context
-        .read<DetalleIpercCatalogosProvider>();
+    final DetalleIpercCatalogosProvider catalogos =
+        context.read<DetalleIpercCatalogosProvider>();
 
     await catalogos.cargar();
 
@@ -235,148 +176,159 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return;
     }
 
-    // -----------------------------------------------------------
-    // COMPATIBILIDAD CON REGISTROS ANTIGUOS
-    // -----------------------------------------------------------
-    //
-    // Si el registro antiguo todavía no tiene un ID real válido,
-    // buscamos el catálogo mediante su valor 1..5.
-
-    _resolverEvaluacionesDesdeCatalogos(catalogos);
+    _resolverIdsCatalogo(catalogos);
 
     setState(() {});
   }
 
-  // =============================================================
-  // RESOLVER IDS DE CATÁLOGOS
-  // =============================================================
-
-  void _resolverEvaluacionesDesdeCatalogos(
+  void _resolverIdsCatalogo(
     DetalleIpercCatalogosProvider catalogos,
   ) {
-    // -----------------------------------------------------------
+    // ===========================================================
     // PROBABILIDAD INICIAL
-    // -----------------------------------------------------------
+    // ===========================================================
+    //
+    // Compatibilidad con registros antiguos:
+    // un valor IPERC 1..5 pudo quedar guardado por error dentro
+    // del campo destinado al ID real del catálogo.
+    //
+    // Por eso un ID solo se considera confiable si el catálogo
+    // encontrado por ese ID tiene también el mismo valor 1..5
+    // que estaba almacenado localmente.
 
-    final ProbabilidadModel? probabilidadInicialPorId = catalogos
-        .buscarProbabilidadPorId(_probabilidadInicialId);
+    final ProbabilidadModel? probabilidadPorId =
+        catalogos.buscarProbabilidadPorId(_probabilidadInicialId);
 
-    if (probabilidadInicialPorId != null) {
-      _probabilidadInicialId = probabilidadInicialPorId.id;
+    final bool probabilidadIdConfiable =
+        probabilidadPorId != null &&
+        probabilidadPorId.valor == _probabilidadInicialValor;
 
-      _frecuenciaInicial = probabilidadInicialPorId.valor;
+    if (probabilidadIdConfiable) {
+      _probabilidadInicialId = probabilidadPorId.id;
+      _probabilidadInicialValor = probabilidadPorId.valor;
     } else {
-      final ProbabilidadModel? porValor = catalogos.buscarProbabilidadPorValor(
-        _frecuenciaInicial,
-      );
+      final ProbabilidadModel? porValor =
+          catalogos.buscarProbabilidadPorValor(_probabilidadInicialValor);
 
       if (porValor != null) {
         _probabilidadInicialId = porValor.id;
-
-        _frecuenciaInicial = porValor.valor;
+        _probabilidadInicialValor = porValor.valor;
+      } else {
+        _probabilidadInicialId = null;
       }
     }
 
-    // -----------------------------------------------------------
+    // ===========================================================
     // SEVERIDAD INICIAL
-    // -----------------------------------------------------------
+    // ===========================================================
 
-    final SeveridadModel? severidadInicialPorId = catalogos
-        .buscarSeveridadPorId(_severidadInicialId);
+    final SeveridadModel? severidadPorId =
+        catalogos.buscarSeveridadPorId(_severidadInicialId);
 
-    if (severidadInicialPorId != null) {
-      _severidadInicialId = severidadInicialPorId.id;
+    final bool severidadIdConfiable =
+        severidadPorId != null &&
+        severidadPorId.valor == _severidadInicialValor;
 
-      _severidadInicial = severidadInicialPorId.valor;
+    if (severidadIdConfiable) {
+      _severidadInicialId = severidadPorId.id;
+      _severidadInicialValor = severidadPorId.valor;
     } else {
-      final SeveridadModel? porValor = catalogos.buscarSeveridadPorValor(
-        _severidadInicial,
-      );
+      final SeveridadModel? porValor =
+          catalogos.buscarSeveridadPorValor(_severidadInicialValor);
 
       if (porValor != null) {
         _severidadInicialId = porValor.id;
-
-        _severidadInicial = porValor.valor;
+        _severidadInicialValor = porValor.valor;
+      } else {
+        _severidadInicialId = null;
       }
     }
 
-    // -----------------------------------------------------------
-    // RESIDUAL
-    // -----------------------------------------------------------
+    // ===========================================================
+    // SIN EVALUACIÓN RESIDUAL
+    // ===========================================================
 
     if (!_registrarEvaluacionResidual) {
+      _probabilidadResidualId = null;
+      _severidadResidualId = null;
       return;
     }
 
-    if (_frecuenciaResidual != null) {
-      final ProbabilidadModel? porId = catalogos.buscarProbabilidadPorId(
-        _probabilidadResidualId,
-      );
+    // ===========================================================
+    // PROBABILIDAD RESIDUAL
+    // ===========================================================
 
-      if (porId != null) {
-        _probabilidadResidualId = porId.id;
+    if (_probabilidadResidualValor != null) {
+      final ProbabilidadModel? residualPorId =
+          catalogos.buscarProbabilidadPorId(_probabilidadResidualId);
 
-        _frecuenciaResidual = porId.valor;
+      final bool residualIdConfiable =
+          residualPorId != null &&
+          residualPorId.valor == _probabilidadResidualValor;
+
+      if (residualIdConfiable) {
+        _probabilidadResidualId = residualPorId.id;
+        _probabilidadResidualValor = residualPorId.valor;
       } else {
-        final ProbabilidadModel? porValor = catalogos
-            .buscarProbabilidadPorValor(_frecuenciaResidual!);
-
-        if (porValor != null) {
-          _probabilidadResidualId = porValor.id;
-
-          _frecuenciaResidual = porValor.valor;
-        }
-      }
-    }
-
-    if (_severidadResidual != null) {
-      final SeveridadModel? porId = catalogos.buscarSeveridadPorId(
-        _severidadResidualId,
-      );
-
-      if (porId != null) {
-        _severidadResidualId = porId.id;
-
-        _severidadResidual = porId.valor;
-      } else {
-        final SeveridadModel? porValor = catalogos.buscarSeveridadPorValor(
-          _severidadResidual!,
+        final ProbabilidadModel? porValor =
+            catalogos.buscarProbabilidadPorValor(
+          _probabilidadResidualValor!,
         );
 
         if (porValor != null) {
-          _severidadResidualId = porValor.id;
-
-          _severidadResidual = porValor.valor;
+          _probabilidadResidualId = porValor.id;
+          _probabilidadResidualValor = porValor.valor;
+        } else {
+          _probabilidadResidualId = null;
         }
       }
+    } else {
+      _probabilidadResidualId = null;
+    }
+
+    // ===========================================================
+    // SEVERIDAD RESIDUAL
+    // ===========================================================
+
+    if (_severidadResidualValor != null) {
+      final SeveridadModel? residualPorId =
+          catalogos.buscarSeveridadPorId(_severidadResidualId);
+
+      final bool residualIdConfiable =
+          residualPorId != null &&
+          residualPorId.valor == _severidadResidualValor;
+
+      if (residualIdConfiable) {
+        _severidadResidualId = residualPorId.id;
+        _severidadResidualValor = residualPorId.valor;
+      } else {
+        final SeveridadModel? porValor =
+            catalogos.buscarSeveridadPorValor(_severidadResidualValor!);
+
+        if (porValor != null) {
+          _severidadResidualId = porValor.id;
+          _severidadResidualValor = porValor.valor;
+        } else {
+          _severidadResidualId = null;
+        }
+      }
+    } else {
+      _severidadResidualId = null;
     }
   }
 
-  // =============================================================
-  // CÁLCULO INICIAL
-  // =============================================================
-
-  int get _valorRiesgoInicial {
-    return _severidadInicial * _frecuenciaInicial;
-  }
-
-  // =============================================================
-  // CÁLCULO RESIDUAL
-  // =============================================================
+  int get _valorRiesgoInicial =>
+      _probabilidadInicialValor * _severidadInicialValor;
 
   int? get _valorRiesgoResidual {
     if (!_registrarEvaluacionResidual ||
-        _severidadResidual == null ||
-        _frecuenciaResidual == null) {
+        _probabilidadResidualValor == null ||
+        _severidadResidualValor == null) {
       return null;
     }
 
-    return _severidadResidual! * _frecuenciaResidual!;
+    return _probabilidadResidualValor! * _severidadResidualValor!;
   }
-
-  // =============================================================
-  // NIVEL DE RIESGO
-  // =============================================================
 
   String _obtenerNivelRiesgo(int valor) {
     if (valor <= 4) {
@@ -394,10 +346,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     return 'CRÍTICO';
   }
 
-  // =============================================================
-  // COLOR DE RIESGO
-  // =============================================================
-
   Color _obtenerColorRiesgo(int valor) {
     if (valor <= 4) {
       return Colors.green.shade700;
@@ -414,20 +362,11 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     return Colors.red.shade700;
   }
 
-  // =============================================================
-  // ID LOCAL
-  // =============================================================
-
   String _crearIdLocal() {
-    return 'DET-'
-        '${DateTime.now().microsecondsSinceEpoch}';
+    return 'DET-${DateTime.now().microsecondsSinceEpoch}';
   }
 
-  // =============================================================
-  // VALIDACIONES
-  // =============================================================
-
-  String? _validarCampoObligatorio(String? value) {
+  String? _validarTextoObligatorio(String? value) {
     if (value == null || value.trim().isEmpty) {
       return 'Este campo es obligatorio.';
     }
@@ -436,11 +375,13 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   }
 
   String? _validarItem(String? value) {
-    if (value == null || value.trim().isEmpty) {
+    final String texto = value?.trim() ?? '';
+
+    if (texto.isEmpty) {
       return 'El número de ítem es obligatorio.';
     }
 
-    final int? item = int.tryParse(value.trim());
+    final int? item = int.tryParse(texto);
 
     if (item == null || item <= 0) {
       return 'Ingrese un número de ítem válido.';
@@ -449,33 +390,25 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     return null;
   }
 
-  String? _validarPeligro(int? value) {
+  String? _validarIdSeleccionado(int? value, String nombre) {
     if (value == null || value <= 0) {
-      return 'Seleccione un peligro.';
+      return 'Seleccione $nombre.';
     }
 
     return null;
   }
 
-  String? _validarConsecuencia(int? value) {
-    if (value == null || value <= 0) {
-      return 'Seleccione una consecuencia.';
+  String? _validarResponsable(String? value) {
+    final String texto = value?.trim() ?? '';
+
+    if (texto.isEmpty) {
+      return null;
     }
 
-    return null;
-  }
+    final int? id = int.tryParse(texto);
 
-  String? _validarProbabilidad(int? value) {
-    if (value == null || value <= 0) {
-      return 'Seleccione la probabilidad.';
-    }
-
-    return null;
-  }
-
-  String? _validarSeveridad(int? value) {
-    if (value == null || value <= 0) {
-      return 'Seleccione la severidad.';
+    if (id == null || id <= 0) {
+      return 'Ingrese un ID de responsable válido.';
     }
 
     return null;
@@ -483,13 +416,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
   String? _textoOpcional(String value) {
     final String texto = value.trim();
-
     return texto.isEmpty ? null : texto;
   }
-
-  // =============================================================
-  // FECHA COMPROMISO
-  // =============================================================
 
   Future<void> _seleccionarFechaCompromiso() async {
     final DateTime ahora = DateTime.now();
@@ -508,10 +436,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       });
     }
   }
-
-  // =============================================================
-  // FECHA IMPLEMENTACIÓN
-  // =============================================================
 
   Future<void> _seleccionarFechaImplementacion() async {
     final DateTime ahora = DateTime.now();
@@ -537,15 +461,10 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     }
 
     final String dia = fecha.day.toString().padLeft(2, '0');
-
     final String mes = fecha.month.toString().padLeft(2, '0');
 
     return '$dia/$mes/${fecha.year}';
   }
-
-  // =============================================================
-  // GUARDAR
-  // =============================================================
 
   Future<void> _guardar() async {
     FocusScope.of(context).unfocus();
@@ -554,80 +473,78 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return;
     }
 
-    final DetalleIpercCatalogosProvider catalogos = context
-        .read<DetalleIpercCatalogosProvider>();
+    final String matrizIdLocal = widget.matrizIdLocal.trim();
 
-    // -----------------------------------------------------------
-    // VALIDAR PELIGRO Y CONSECUENCIA
-    // -----------------------------------------------------------
-
-    if (_peligroIdSeleccionado == null || _consecuenciaIdSeleccionada == null) {
+    if (matrizIdLocal.isEmpty) {
       _mostrarMensaje(
-        'Seleccione el peligro y la consecuencia.',
+        'No se encontró el identificador local de la matriz.',
         esError: true,
       );
-
       return;
     }
 
-    // -----------------------------------------------------------
-    // VALIDAR EVALUACIÓN INICIAL
-    // -----------------------------------------------------------
-
-    if (_probabilidadInicialId == null || _severidadInicialId == null) {
+    if (widget.matrizIdServidor != null && widget.matrizIdServidor! <= 0) {
       _mostrarMensaje(
-        'Seleccione la probabilidad y la severidad inicial.',
+        'El identificador de la matriz en el servidor no es válido.',
         esError: true,
       );
-
       return;
     }
 
-    // -----------------------------------------------------------
-    // VALIDAR RESIDUAL
-    // -----------------------------------------------------------
+    final DetalleIpercCatalogosProvider catalogos =
+        context.read<DetalleIpercCatalogosProvider>();
+
+    if (!catalogos.tieneCatalogos) {
+      _mostrarMensaje(
+        'Los catálogos IPERC no están disponibles.',
+        esError: true,
+      );
+      return;
+    }
+
+    if (_peligroIdSeleccionado == null ||
+        _consecuenciaIdSeleccionada == null ||
+        _probabilidadInicialId == null ||
+        _severidadInicialId == null) {
+      _mostrarMensaje(
+        'Complete peligro, consecuencia, probabilidad y severidad.',
+        esError: true,
+      );
+      return;
+    }
 
     if (_registrarEvaluacionResidual &&
         (_probabilidadResidualId == null ||
             _severidadResidualId == null ||
-            _frecuenciaResidual == null ||
-            _severidadResidual == null)) {
+            _probabilidadResidualValor == null ||
+            _severidadResidualValor == null)) {
       _mostrarMensaje(
-        'Complete la probabilidad y la severidad residual.',
+        'Complete la evaluación de riesgo residual.',
         esError: true,
       );
-
       return;
     }
 
-    // -----------------------------------------------------------
-    // OBTENER OBJETOS DE CATÁLOGO
-    // -----------------------------------------------------------
+    final PeligroModel? peligro =
+        catalogos.buscarPeligroPorId(_peligroIdSeleccionado);
 
-    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
-      _peligroIdSeleccionado,
-    );
+    final ConsecuenciaModel? consecuencia =
+        catalogos.buscarConsecuenciaPorId(_consecuenciaIdSeleccionada);
 
-    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
-      _consecuenciaIdSeleccionada,
-    );
+    final ProbabilidadModel? probabilidadInicial =
+        catalogos.buscarProbabilidadPorId(_probabilidadInicialId);
 
-    final ProbabilidadModel? probabilidadInicial = catalogos
-        .buscarProbabilidadPorId(_probabilidadInicialId);
-
-    final SeveridadModel? severidadInicial = catalogos.buscarSeveridadPorId(
-      _severidadInicialId,
-    );
+    final SeveridadModel? severidadInicial =
+        catalogos.buscarSeveridadPorId(_severidadInicialId);
 
     if (peligro == null ||
         consecuencia == null ||
         probabilidadInicial == null ||
         severidadInicial == null) {
       _mostrarMensaje(
-        'No se pudo obtener toda la información de los catálogos IPERC.',
+        'No se pudo resolver la selección con los catálogos IPERC.',
         esError: true,
       );
-
       return;
     }
 
@@ -635,170 +552,119 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     SeveridadModel? severidadResidual;
 
     if (_registrarEvaluacionResidual) {
-      probabilidadResidual = catalogos.buscarProbabilidadPorId(
-        _probabilidadResidualId,
-      );
+      probabilidadResidual =
+          catalogos.buscarProbabilidadPorId(_probabilidadResidualId);
 
-      severidadResidual = catalogos.buscarSeveridadPorId(_severidadResidualId);
+      severidadResidual =
+          catalogos.buscarSeveridadPorId(_severidadResidualId);
 
       if (probabilidadResidual == null || severidadResidual == null) {
         _mostrarMensaje(
-          'No se pudo obtener la evaluación residual seleccionada.',
+          'No se pudo resolver la evaluación residual seleccionada.',
           esError: true,
         );
-
         return;
       }
     }
 
-    // -----------------------------------------------------------
-    // ACTUALIZAR VALORES DESDE LOS CATÁLOGOS
-    // -----------------------------------------------------------
-
-    _frecuenciaInicial = probabilidadInicial.valor;
-
-    _severidadInicial = severidadInicial.valor;
-
-    if (_registrarEvaluacionResidual) {
-      _frecuenciaResidual = probabilidadResidual!.valor;
-
-      _severidadResidual = severidadResidual!.valor;
-    }
-
-    final DetalleIpercOfflineProvider provider = context
-        .read<DetalleIpercOfflineProvider>();
-
-    final DateTime ahora = DateTime.now().toUtc();
+    final DetalleIpercOfflineProvider provider =
+        context.read<DetalleIpercOfflineProvider>();
 
     final DetalleIpercLocalModel? anterior = widget.detalle;
+    final DateTime ahora = DateTime.now().toUtc();
 
-    final int? valorResidual = _valorRiesgoResidual;
+    final int riesgoInicial =
+        probabilidadInicial.valor * severidadInicial.valor;
 
-    // ===========================================================
-    // CREAR MODELO LOCAL
-    // ===========================================================
+    final int? riesgoResidual = _registrarEvaluacionResidual
+        ? probabilidadResidual!.valor * severidadResidual!.valor
+        : null;
 
     final DetalleIpercLocalModel detalle = DetalleIpercLocalModel(
       idLocal: anterior?.idLocal ?? _crearIdLocal(),
-
       idServidor: anterior?.idServidor,
-
-      matrizIdLocal: widget.matrizIdLocal,
-
-      matrizIdServidor: anterior?.matrizIdServidor ?? widget.matrizIdServidor,
+      matrizIdLocal: matrizIdLocal,
+      matrizIdServidor:
+          anterior?.matrizIdServidor ?? widget.matrizIdServidor,
 
       item: int.parse(_itemController.text.trim()),
-
       tarea: _tareaController.text.trim(),
 
+      // La actividad continúa siendo descriptiva en esta pantalla.
+      // Si el registro ya tenía una relación real, se conserva.
       actividadId: anterior?.actividadId,
 
       peligroId: peligro.id.toString(),
-
       consecuenciaId: consecuencia.id.toString(),
 
       actividadDescripcion: _actividadController.text.trim(),
-
       peligroDescripcion: peligro.nombreCompleto,
-
       consecuenciaDescripcion: consecuencia.nombreCompleto,
 
-      // =========================================================
-      // EVALUACIÓN INICIAL
-      // =========================================================
       evaluacionInicialId: anterior?.evaluacionInicialId,
 
-      /// ID REAL DEL CATÁLOGO.
+      // IDs REALES de MySQL.
       probabilidadInicialId: probabilidadInicial.id,
-
-      /// ID REAL DEL CATÁLOGO.
       severidadInicialId: severidadInicial.id,
 
-      /// VALORES 1..5.
+      // Valores 1..5 para matriz 5x5.
       frecuenciaInicial: probabilidadInicial.valor,
-
       severidadInicial: severidadInicial.valor,
 
-      valorRiesgoInicial: probabilidadInicial.valor * severidadInicial.valor,
+      valorRiesgoInicial: riesgoInicial,
+      nivelRiesgoInicial: _obtenerNivelRiesgo(riesgoInicial),
 
-      nivelRiesgoInicial: _obtenerNivelRiesgo(
-        probabilidadInicial.valor * severidadInicial.valor,
-      ),
-
-      // =========================================================
-      // CONTROLES / EPP
-      // =========================================================
+      // Se conservan las relaciones previamente seleccionadas.
       controlIds: anterior?.controlIds ?? const <String>[],
-
-      equipoProteccionIds: anterior?.equipoProteccionIds ?? const <String>[],
+      equipoProteccionIds:
+          anterior?.equipoProteccionIds ?? const <String>[],
 
       controlDescripcion: _textoOpcional(_controlController.text),
 
-      // =========================================================
-      // EVALUACIÓN RESIDUAL
-      // =========================================================
-      evaluacionResidualId: anterior?.evaluacionResidualId,
-
-      probabilidadResidualId: _registrarEvaluacionResidual
-          ? probabilidadResidual!.id
+      // Si se desactiva el residual, se limpia también su evaluación.
+      evaluacionResidualId: _registrarEvaluacionResidual
+          ? anterior?.evaluacionResidualId
           : null,
 
-      severidadResidualId: _registrarEvaluacionResidual
-          ? severidadResidual!.id
-          : null,
+      probabilidadResidualId:
+          _registrarEvaluacionResidual ? probabilidadResidual!.id : null,
 
-      frecuenciaResidual: _registrarEvaluacionResidual
-          ? probabilidadResidual!.valor
-          : null,
+      severidadResidualId:
+          _registrarEvaluacionResidual ? severidadResidual!.id : null,
 
-      severidadResidual: _registrarEvaluacionResidual
-          ? severidadResidual!.valor
-          : null,
+      frecuenciaResidual:
+          _registrarEvaluacionResidual ? probabilidadResidual!.valor : null,
 
-      valorRiesgoResidual: valorResidual,
+      severidadResidual:
+          _registrarEvaluacionResidual ? severidadResidual!.valor : null,
 
-      nivelRiesgoResidual: valorResidual == null
+      valorRiesgoResidual: riesgoResidual,
+
+      nivelRiesgoResidual: riesgoResidual == null
           ? null
-          : _obtenerNivelRiesgo(valorResidual),
+          : _obtenerNivelRiesgo(riesgoResidual),
 
-      // =========================================================
-      // IMPLEMENTACIÓN
-      // =========================================================
-      responsableImplementacionId: _textoOpcional(_responsableController.text),
+      responsableImplementacionId:
+          _textoOpcional(_responsableController.text),
 
       fechaCompromiso: _fechaCompromiso,
-
       fechaImplementacion: _fechaImplementacion,
 
       estadoImplementacion: _estadoImplementacion,
 
       observaciones: _textoOpcional(_observacionesController.text),
 
-      // =========================================================
-      // SINCRONIZACIÓN
-      // =========================================================
       sincronizado: false,
-
       eliminado: false,
 
       fechaRegistro: anterior?.fechaRegistro ?? ahora,
-
       fechaActualizacion: widget.esEdicion ? ahora : null,
-
       fechaSincronizacion: anterior?.fechaSincronizacion,
     );
 
-    // ===========================================================
-    // GUARDAR SQLITE
-    // ===========================================================
-
-    final bool guardado;
-
-    if (widget.esEdicion) {
-      guardado = await provider.actualizar(detalle);
-    } else {
-      guardado = await provider.crear(detalle);
-    }
+    final bool guardado = widget.esEdicion
+        ? await provider.actualizar(detalle)
+        : await provider.crear(detalle);
 
     if (!mounted) {
       return;
@@ -809,7 +675,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
         provider.error ?? 'No se pudo guardar el detalle IPERC.',
         esError: true,
       );
-
       return;
     }
 
@@ -822,35 +687,30 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     Navigator.of(context).pop(true);
   }
 
-  // =============================================================
-  // MENSAJE
-  // =============================================================
-
-  void _mostrarMensaje(String mensaje, {bool esError = false}) {
+  void _mostrarMensaje(
+    String mensaje, {
+    bool esError = false,
+  }) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(mensaje),
-          backgroundColor: esError
-              ? Colors.red.shade700
-              : Colors.green.shade700,
+          backgroundColor:
+              esError ? Colors.red.shade700 : Colors.green.shade700,
         ),
       );
   }
 
-  // =============================================================
-  // BUILD
-  // =============================================================
-
   @override
   Widget build(BuildContext context) {
-    final bool guardando = context.select<DetalleIpercOfflineProvider, bool>(
+    final bool guardando =
+        context.select<DetalleIpercOfflineProvider, bool>(
       (DetalleIpercOfflineProvider provider) => provider.guardando,
     );
 
-    final DetalleIpercCatalogosProvider catalogos = context
-        .watch<DetalleIpercCatalogosProvider>();
+    final DetalleIpercCatalogosProvider catalogos =
+        context.watch<DetalleIpercCatalogosProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -860,22 +720,20 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
         actions: <Widget>[
           IconButton(
             tooltip: 'Actualizar catálogos',
-
             onPressed:
                 catalogos.cargando || catalogos.actualizandoRemoto || guardando
-                ? null
-                : () async {
-                    await catalogos.recargar();
+                    ? null
+                    : () async {
+                        await catalogos.recargar();
 
-                    if (!mounted) {
-                      return;
-                    }
+                        if (!mounted) {
+                          return;
+                        }
 
-                    _resolverEvaluacionesDesdeCatalogos(catalogos);
+                        _resolverIdsCatalogo(catalogos);
 
-                    setState(() {});
-                  },
-
+                        setState(() {});
+                      },
             icon: catalogos.actualizandoRemoto
                 ? const SizedBox(
                     width: 20,
@@ -886,18 +744,16 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           ),
         ],
       ),
-
       body: SafeArea(
         child: catalogos.cargando && !catalogos.cargado
             ? const Center(child: CircularProgressIndicator())
-            : _construirFormulario(catalogos: catalogos, guardando: guardando),
+            : _construirFormulario(
+                catalogos: catalogos,
+                guardando: guardando,
+              ),
       ),
     );
   }
-
-  // =============================================================
-  // FORMULARIO
-  // =============================================================
 
   Widget _construirFormulario({
     required DetalleIpercCatalogosProvider catalogos,
@@ -905,10 +761,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   }) {
     return Form(
       key: _formKey,
-
       child: ListView(
         padding: const EdgeInsets.all(16),
-
         children: <Widget>[
           _construirAvisoOffline(),
 
@@ -924,9 +778,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 20),
 
-          // =====================================================
-          // INFORMACIÓN DE LA TAREA
-          // =====================================================
           _construirTituloSeccion(
             'Información de la tarea',
             Icons.assignment_outlined,
@@ -936,17 +787,13 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           TextFormField(
             controller: _itemController,
-
             enabled: !guardando && !widget.esEdicion,
-
             keyboardType: TextInputType.number,
-
             decoration: const InputDecoration(
               labelText: 'Ítem *',
               prefixIcon: Icon(Icons.numbers),
               border: OutlineInputBorder(),
             ),
-
             validator: _validarItem,
           ),
 
@@ -954,45 +801,34 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           TextFormField(
             controller: _tareaController,
-
             enabled: !guardando,
-
             textCapitalization: TextCapitalization.sentences,
-
             decoration: const InputDecoration(
               labelText: 'Tarea *',
               hintText: 'Ejemplo: revisar instalaciones eléctricas',
               prefixIcon: Icon(Icons.task_alt_outlined),
               border: OutlineInputBorder(),
             ),
-
-            validator: _validarCampoObligatorio,
+            validator: _validarTextoObligatorio,
           ),
 
           const SizedBox(height: 12),
 
           TextFormField(
             controller: _actividadController,
-
             enabled: !guardando,
-
             textCapitalization: TextCapitalization.sentences,
-
             decoration: const InputDecoration(
               labelText: 'Actividad o proceso *',
               hintText: 'Ejemplo: mantenimiento preventivo',
               prefixIcon: Icon(Icons.work_outline),
               border: OutlineInputBorder(),
             ),
-
-            validator: _validarCampoObligatorio,
+            validator: _validarTextoObligatorio,
           ),
 
           const SizedBox(height: 24),
 
-          // =====================================================
-          // PELIGRO
-          // =====================================================
           _construirTituloSeccion(
             'Identificación del peligro',
             Icons.warning_amber_rounded,
@@ -1002,15 +838,12 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           DropdownButtonFormField<int>(
             initialValue: _valorPeligroValido(catalogos),
-
             isExpanded: true,
-
             decoration: const InputDecoration(
               labelText: 'Peligro identificado *',
               prefixIcon: Icon(Icons.warning_outlined),
               border: OutlineInputBorder(),
             ),
-
             items: catalogos.peligros.map((PeligroModel peligro) {
               return DropdownMenuItem<int>(
                 value: peligro.id,
@@ -1020,7 +853,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                 ),
               );
             }).toList(),
-
             onChanged: guardando
                 ? null
                 : (int? value) {
@@ -1028,8 +860,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                       _peligroIdSeleccionado = value;
                     });
                   },
-
-            validator: _validarPeligro,
+            validator: (int? value) =>
+                _validarIdSeleccionado(value, 'un peligro'),
           ),
 
           if (_peligroIdSeleccionado != null) ...<Widget>[
@@ -1039,32 +871,25 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 12),
 
-          // =====================================================
-          // CONSECUENCIA
-          // =====================================================
           DropdownButtonFormField<int>(
             initialValue: _valorConsecuenciaValido(catalogos),
-
             isExpanded: true,
-
             decoration: const InputDecoration(
               labelText: 'Consecuencia posible *',
               prefixIcon: Icon(Icons.report_problem_outlined),
               border: OutlineInputBorder(),
             ),
-
-            items: catalogos.consecuencias.map((
-              ConsecuenciaModel consecuencia,
-            ) {
-              return DropdownMenuItem<int>(
-                value: consecuencia.id,
-                child: Text(
-                  consecuencia.nombreCompleto,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
-
+            items: catalogos.consecuencias.map(
+              (ConsecuenciaModel consecuencia) {
+                return DropdownMenuItem<int>(
+                  value: consecuencia.id,
+                  child: Text(
+                    consecuencia.nombreCompleto,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+            ).toList(),
             onChanged: guardando
                 ? null
                 : (int? value) {
@@ -1072,8 +897,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                       _consecuenciaIdSeleccionada = value;
                     });
                   },
-
-            validator: _validarConsecuencia,
+            validator: (int? value) =>
+                _validarIdSeleccionado(value, 'una consecuencia'),
           ),
 
           if (_consecuenciaIdSeleccionada != null) ...<Widget>[
@@ -1083,9 +908,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 24),
 
-          // =====================================================
-          // EVALUACIÓN INICIAL
-          // =====================================================
           _construirTituloSeccion(
             'Evaluación inicial 5 × 5',
             Icons.grid_view_rounded,
@@ -1093,36 +915,27 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 12),
 
-          // -----------------------------------------------------
-          // PROBABILIDAD INICIAL
-          // -----------------------------------------------------
           DropdownButtonFormField<int>(
             initialValue: _valorProbabilidadInicialValido(catalogos),
-
             isExpanded: true,
-
             decoration: const InputDecoration(
               labelText: 'Probabilidad *',
               prefixIcon: Icon(Icons.trending_up),
               border: OutlineInputBorder(),
             ),
-
-            items: catalogos.probabilidades.map((ProbabilidadModel item) {
-              return DropdownMenuItem<int>(
-                value: item.id,
-                child: Text(item.textoSeleccion),
-              );
-            }).toList(),
-
+            items: catalogos.probabilidades.map(
+              (ProbabilidadModel item) {
+                return DropdownMenuItem<int>(
+                  value: item.id,
+                  child: Text(item.textoSeleccion),
+                );
+              },
+            ).toList(),
             onChanged: guardando
                 ? null
                 : (int? id) {
-                    if (id == null) {
-                      return;
-                    }
-
-                    final ProbabilidadModel? item = catalogos
-                        .buscarProbabilidadPorId(id);
+                    final ProbabilidadModel? item =
+                        catalogos.buscarProbabilidadPorId(id);
 
                     if (item == null) {
                       return;
@@ -1130,47 +943,36 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
                     setState(() {
                       _probabilidadInicialId = item.id;
-
-                      _frecuenciaInicial = item.valor;
+                      _probabilidadInicialValor = item.valor;
                     });
                   },
-
-            validator: _validarProbabilidad,
+            validator: (int? value) =>
+                _validarIdSeleccionado(value, 'la probabilidad'),
           ),
 
           const SizedBox(height: 12),
 
-          // -----------------------------------------------------
-          // SEVERIDAD INICIAL
-          // -----------------------------------------------------
           DropdownButtonFormField<int>(
             initialValue: _valorSeveridadInicialValido(catalogos),
-
             isExpanded: true,
-
             decoration: const InputDecoration(
               labelText: 'Severidad *',
               prefixIcon: Icon(Icons.priority_high),
               border: OutlineInputBorder(),
             ),
-
-            items: catalogos.severidades.map((SeveridadModel item) {
-              return DropdownMenuItem<int>(
-                value: item.id,
-                child: Text(item.textoSeleccion),
-              );
-            }).toList(),
-
+            items: catalogos.severidades.map(
+              (SeveridadModel item) {
+                return DropdownMenuItem<int>(
+                  value: item.id,
+                  child: Text(item.textoSeleccion),
+                );
+              },
+            ).toList(),
             onChanged: guardando
                 ? null
                 : (int? id) {
-                    if (id == null) {
-                      return;
-                    }
-
-                    final SeveridadModel? item = catalogos.buscarSeveridadPorId(
-                      id,
-                    );
+                    final SeveridadModel? item =
+                        catalogos.buscarSeveridadPorId(id);
 
                     if (item == null) {
                       return;
@@ -1178,18 +980,16 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
                     setState(() {
                       _severidadInicialId = item.id;
-
-                      _severidadInicial = item.valor;
+                      _severidadInicialValor = item.valor;
                     });
                   },
-
-            validator: _validarSeveridad,
+            validator: (int? value) =>
+                _validarIdSeleccionado(value, 'la severidad'),
           ),
 
           if (_probabilidadInicialId != null &&
               _severidadInicialId != null) ...<Widget>[
             const SizedBox(height: 12),
-
             _construirResultadoRiesgo(
               titulo: 'Riesgo inicial',
               valor: _valorRiesgoInicial,
@@ -1198,9 +998,6 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 24),
 
-          // =====================================================
-          // CONTROLES
-          // =====================================================
           _construirTituloSeccion(
             'Medidas de control',
             Icons.health_and_safety_outlined,
@@ -1210,13 +1007,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           TextFormField(
             controller: _controlController,
-
             enabled: !guardando,
-
             maxLines: 3,
-
             textCapitalization: TextCapitalization.sentences,
-
             decoration: const InputDecoration(
               labelText: 'Controles por implementar',
               hintText: 'Describa los controles necesarios',
@@ -1228,20 +1021,13 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 16),
 
-          // =====================================================
-          // ACTIVAR RESIDUAL
-          // =====================================================
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-
             title: const Text('Registrar riesgo residual'),
-
             subtitle: const Text(
               'Evaluar el riesgo después de aplicar los controles.',
             ),
-
             value: _registrarEvaluacionResidual,
-
             onChanged: guardando
                 ? null
                 : (bool value) {
@@ -1250,74 +1036,61 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
                       if (value) {
                         final ProbabilidadModel? primeraProbabilidad =
-                            catalogos.probabilidades.isNotEmpty
-                            ? catalogos.probabilidades.first
-                            : null;
+                            catalogos.probabilidades.isEmpty
+                                ? null
+                                : catalogos.probabilidades.first;
 
                         final SeveridadModel? primeraSeveridad =
-                            catalogos.severidades.isNotEmpty
-                            ? catalogos.severidades.first
-                            : null;
+                            catalogos.severidades.isEmpty
+                                ? null
+                                : catalogos.severidades.first;
 
                         if (_probabilidadResidualId == null &&
                             primeraProbabilidad != null) {
                           _probabilidadResidualId = primeraProbabilidad.id;
-
-                          _frecuenciaResidual = primeraProbabilidad.valor;
+                          _probabilidadResidualValor =
+                              primeraProbabilidad.valor;
                         }
 
                         if (_severidadResidualId == null &&
                             primeraSeveridad != null) {
                           _severidadResidualId = primeraSeveridad.id;
-
-                          _severidadResidual = primeraSeveridad.valor;
+                          _severidadResidualValor = primeraSeveridad.valor;
                         }
                       } else {
                         _probabilidadResidualId = null;
-
                         _severidadResidualId = null;
-
-                        _frecuenciaResidual = null;
-
-                        _severidadResidual = null;
+                        _probabilidadResidualValor = null;
+                        _severidadResidualValor = null;
                       }
                     });
                   },
           ),
 
-          // =====================================================
-          // RESIDUAL
-          // =====================================================
           if (_registrarEvaluacionResidual) ...<Widget>[
             const SizedBox(height: 12),
 
             DropdownButtonFormField<int>(
               initialValue: _valorProbabilidadResidualValido(catalogos),
-
               isExpanded: true,
-
               decoration: const InputDecoration(
                 labelText: 'Probabilidad residual *',
                 prefixIcon: Icon(Icons.trending_down),
                 border: OutlineInputBorder(),
               ),
-
-              items: catalogos.probabilidades.map((ProbabilidadModel item) {
-                return DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(item.textoSeleccion),
-                );
-              }).toList(),
-
+              items: catalogos.probabilidades.map(
+                (ProbabilidadModel item) {
+                  return DropdownMenuItem<int>(
+                    value: item.id,
+                    child: Text(item.textoSeleccion),
+                  );
+                },
+              ).toList(),
               onChanged: guardando
                   ? null
                   : (int? id) {
-                      if (id == null) {
-                        return;
-                      }
-
-                      final ProbabilidadModel? item = catalogos
-                          .buscarProbabilidadPorId(id);
+                      final ProbabilidadModel? item =
+                          catalogos.buscarProbabilidadPorId(id);
 
                       if (item == null) {
                         return;
@@ -1325,45 +1098,36 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
                       setState(() {
                         _probabilidadResidualId = item.id;
-
-                        _frecuenciaResidual = item.valor;
+                        _probabilidadResidualValor = item.valor;
                       });
                     },
-
-              validator: _registrarEvaluacionResidual
-                  ? _validarProbabilidad
-                  : null,
+              validator: (int? value) =>
+                  _validarIdSeleccionado(value, 'la probabilidad residual'),
             ),
 
             const SizedBox(height: 12),
 
             DropdownButtonFormField<int>(
               initialValue: _valorSeveridadResidualValido(catalogos),
-
               isExpanded: true,
-
               decoration: const InputDecoration(
                 labelText: 'Severidad residual *',
                 prefixIcon: Icon(Icons.priority_high),
                 border: OutlineInputBorder(),
               ),
-
-              items: catalogos.severidades.map((SeveridadModel item) {
-                return DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(item.textoSeleccion),
-                );
-              }).toList(),
-
+              items: catalogos.severidades.map(
+                (SeveridadModel item) {
+                  return DropdownMenuItem<int>(
+                    value: item.id,
+                    child: Text(item.textoSeleccion),
+                  );
+                },
+              ).toList(),
               onChanged: guardando
                   ? null
                   : (int? id) {
-                      if (id == null) {
-                        return;
-                      }
-
-                      final SeveridadModel? item = catalogos
-                          .buscarSeveridadPorId(id);
+                      final SeveridadModel? item =
+                          catalogos.buscarSeveridadPorId(id);
 
                       if (item == null) {
                         return;
@@ -1371,19 +1135,15 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
                       setState(() {
                         _severidadResidualId = item.id;
-
-                        _severidadResidual = item.valor;
+                        _severidadResidualValor = item.valor;
                       });
                     },
-
-              validator: _registrarEvaluacionResidual
-                  ? _validarSeveridad
-                  : null,
+              validator: (int? value) =>
+                  _validarIdSeleccionado(value, 'la severidad residual'),
             ),
 
             if (_valorRiesgoResidual != null) ...<Widget>[
               const SizedBox(height: 12),
-
               _construirResultadoRiesgo(
                 titulo: 'Riesgo residual',
                 valor: _valorRiesgoResidual!,
@@ -1393,45 +1153,40 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 24),
 
-          // =====================================================
-          // IMPLEMENTACIÓN
-          // =====================================================
-          _construirTituloSeccion('Implementación', Icons.engineering_outlined),
+          _construirTituloSeccion(
+            'Implementación',
+            Icons.engineering_outlined,
+          ),
 
           const SizedBox(height: 12),
 
           TextFormField(
             controller: _responsableController,
-
             enabled: !guardando,
-
             keyboardType: TextInputType.number,
-
             decoration: const InputDecoration(
               labelText: 'ID del responsable',
               prefixIcon: Icon(Icons.person_outline),
               border: OutlineInputBorder(),
             ),
+            validator: _validarResponsable,
           ),
 
           const SizedBox(height: 12),
 
           DropdownButtonFormField<String>(
             initialValue: _estadoImplementacion,
-
             decoration: const InputDecoration(
               labelText: 'Estado de implementación',
               prefixIcon: Icon(Icons.check_circle_outline),
               border: OutlineInputBorder(),
             ),
-
             items: _estadosImplementacion.map((String estado) {
               return DropdownMenuItem<String>(
                 value: estado,
                 child: Text(estado.replaceAll('_', ' ')),
               );
             }).toList(),
-
             onChanged: guardando
                 ? null
                 : (String? value) {
@@ -1449,15 +1204,10 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           _construirSelectorFecha(
             titulo: 'Fecha de compromiso',
-
             fecha: _fechaCompromiso,
-
             icono: Icons.event_outlined,
-
             habilitado: !guardando,
-
             onPressed: _seleccionarFechaCompromiso,
-
             onLimpiar: () {
               setState(() {
                 _fechaCompromiso = null;
@@ -1469,15 +1219,10 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           _construirSelectorFecha(
             titulo: 'Fecha de implementación',
-
             fecha: _fechaImplementacion,
-
             icono: Icons.event_available,
-
             habilitado: !guardando,
-
             onPressed: _seleccionarFechaImplementacion,
-
             onLimpiar: () {
               setState(() {
                 _fechaImplementacion = null;
@@ -1489,13 +1234,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           TextFormField(
             controller: _observacionesController,
-
             enabled: !guardando,
-
             maxLines: 3,
-
             textCapitalization: TextCapitalization.sentences,
-
             decoration: const InputDecoration(
               labelText: 'Observaciones',
               prefixIcon: Icon(Icons.notes_outlined),
@@ -1506,12 +1247,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 24),
 
-          // =====================================================
-          // GUARDAR
-          // =====================================================
           FilledButton.icon(
-            onPressed: guardando || !catalogos.tieneCatalogos ? null : _guardar,
-
+            onPressed:
+                guardando || !catalogos.tieneCatalogos ? null : _guardar,
             icon: guardando
                 ? const SizedBox(
                     width: 20,
@@ -1519,13 +1257,12 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_outlined),
-
             label: Text(
               guardando
                   ? 'Guardando...'
                   : widget.esEdicion
-                  ? 'Actualizar detalle'
-                  : 'Guardar detalle',
+                      ? 'Actualizar detalle'
+                      : 'Guardar detalle',
             ),
           ),
 
@@ -1535,93 +1272,87 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  // =============================================================
-  // VALORES VÁLIDOS PARA DROPDOWN
-  // =============================================================
-
-  int? _valorPeligroValido(DetalleIpercCatalogosProvider catalogos) {
-    final bool existe = catalogos.peligros.any(
-      (PeligroModel peligro) => peligro.id == _peligroIdSeleccionado,
-    );
-
-    return existe ? _peligroIdSeleccionado : null;
+  int? _valorPeligroValido(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    return catalogos.peligros.any(
+      (PeligroModel item) => item.id == _peligroIdSeleccionado,
+    )
+        ? _peligroIdSeleccionado
+        : null;
   }
 
-  int? _valorConsecuenciaValido(DetalleIpercCatalogosProvider catalogos) {
-    final bool existe = catalogos.consecuencias.any(
-      (ConsecuenciaModel consecuencia) =>
-          consecuencia.id == _consecuenciaIdSeleccionada,
-    );
-
-    return existe ? _consecuenciaIdSeleccionada : null;
+  int? _valorConsecuenciaValido(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    return catalogos.consecuencias.any(
+      (ConsecuenciaModel item) => item.id == _consecuenciaIdSeleccionada,
+    )
+        ? _consecuenciaIdSeleccionada
+        : null;
   }
 
   int? _valorProbabilidadInicialValido(
     DetalleIpercCatalogosProvider catalogos,
   ) {
-    final bool existe = catalogos.probabilidades.any(
+    return catalogos.probabilidades.any(
       (ProbabilidadModel item) => item.id == _probabilidadInicialId,
-    );
-
-    return existe ? _probabilidadInicialId : null;
+    )
+        ? _probabilidadInicialId
+        : null;
   }
 
-  int? _valorSeveridadInicialValido(DetalleIpercCatalogosProvider catalogos) {
-    final bool existe = catalogos.severidades.any(
+  int? _valorSeveridadInicialValido(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    return catalogos.severidades.any(
       (SeveridadModel item) => item.id == _severidadInicialId,
-    );
-
-    return existe ? _severidadInicialId : null;
+    )
+        ? _severidadInicialId
+        : null;
   }
 
   int? _valorProbabilidadResidualValido(
     DetalleIpercCatalogosProvider catalogos,
   ) {
-    final bool existe = catalogos.probabilidades.any(
+    return catalogos.probabilidades.any(
       (ProbabilidadModel item) => item.id == _probabilidadResidualId,
-    );
-
-    return existe ? _probabilidadResidualId : null;
+    )
+        ? _probabilidadResidualId
+        : null;
   }
 
-  int? _valorSeveridadResidualValido(DetalleIpercCatalogosProvider catalogos) {
-    final bool existe = catalogos.severidades.any(
+  int? _valorSeveridadResidualValido(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    return catalogos.severidades.any(
       (SeveridadModel item) => item.id == _severidadResidualId,
-    );
-
-    return existe ? _severidadResidualId : null;
+    )
+        ? _severidadResidualId
+        : null;
   }
 
-  // =============================================================
-  // DESCRIPCIÓN PELIGRO
-  // =============================================================
-
-  Widget _construirDescripcionPeligro(DetalleIpercCatalogosProvider catalogos) {
-    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
-      _peligroIdSeleccionado,
-    );
+  Widget _construirDescripcionPeligro(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
+    final PeligroModel? peligro =
+        catalogos.buscarPeligroPorId(_peligroIdSeleccionado);
 
     if (peligro == null) {
       return const SizedBox.shrink();
     }
 
     return Text(
-      '${peligro.tipoVisible} · '
-      '${peligro.categoriaVisible}',
+      '${peligro.tipoVisible} · ${peligro.categoriaVisible}',
       style: Theme.of(context).textTheme.bodySmall,
     );
   }
 
-  // =============================================================
-  // DESCRIPCIÓN CONSECUENCIA
-  // =============================================================
-
   Widget _construirDescripcionConsecuencia(
     DetalleIpercCatalogosProvider catalogos,
   ) {
-    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
-      _consecuenciaIdSeleccionada,
-    );
+    final ConsecuenciaModel? consecuencia =
+        catalogos.buscarConsecuenciaPorId(_consecuenciaIdSeleccionada);
 
     if (consecuencia == null) {
       return const SizedBox.shrink();
@@ -1634,34 +1365,25 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  // =============================================================
-  // ERROR CATÁLOGOS
-  // =============================================================
-
-  Widget _construirErrorCatalogos(DetalleIpercCatalogosProvider catalogos) {
+  Widget _construirErrorCatalogos(
+    DetalleIpercCatalogosProvider catalogos,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
-
       decoration: BoxDecoration(
         color: Colors.red.shade50,
-
         borderRadius: BorderRadius.circular(12),
-
         border: Border.all(color: Colors.red.shade200),
       ),
-
       child: Row(
         children: <Widget>[
           Icon(Icons.error_outline, color: Colors.red.shade700),
-
           const SizedBox(width: 10),
-
           Expanded(
             child: Text(
               catalogos.error ?? 'No se pudieron cargar los catálogos.',
             ),
           ),
-
           IconButton(
             tooltip: 'Reintentar',
             onPressed: () async {
@@ -1671,7 +1393,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                 return;
               }
 
-              _resolverEvaluacionesDesdeCatalogos(catalogos);
+              _resolverIdsCatalogo(catalogos);
 
               setState(() {});
             },
@@ -1682,30 +1404,19 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  // =============================================================
-  // AVISO OFFLINE
-  // =============================================================
-
   Widget _construirAvisoOffline() {
     return Container(
       padding: const EdgeInsets.all(12),
-
       decoration: BoxDecoration(
         color: Colors.blue.shade50,
-
         borderRadius: BorderRadius.circular(12),
-
         border: Border.all(color: Colors.blue.shade200),
       ),
-
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: <Widget>[
           Icon(Icons.cloud_off_outlined, color: Colors.blue.shade700),
-
           const SizedBox(width: 12),
-
           const Expanded(
             child: Text(
               'El detalle se guardará localmente y se sincronizará '
@@ -1717,72 +1428,57 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  // =============================================================
-  // TÍTULO SECCIÓN
-  // =============================================================
-
-  Widget _construirTituloSeccion(String titulo, IconData icono) {
+  Widget _construirTituloSeccion(
+    String titulo,
+    IconData icono,
+  ) {
     return Row(
       children: <Widget>[
         Icon(icono, color: Theme.of(context).colorScheme.primary),
-
         const SizedBox(width: 8),
-
         Expanded(
           child: Text(
             titulo,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
           ),
         ),
       ],
     );
   }
 
-  // =============================================================
-  // RESULTADO RIESGO
-  // =============================================================
-
   Widget _construirResultadoRiesgo({
     required String titulo,
     required int valor,
   }) {
     final String nivel = _obtenerNivelRiesgo(valor);
-
     final Color color = _obtenerColorRiesgo(valor);
 
     return Container(
       padding: const EdgeInsets.all(16),
-
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-
         borderRadius: BorderRadius.circular(12),
-
         border: Border.all(color: color),
       ),
-
       child: Row(
         children: <Widget>[
           Icon(Icons.shield_outlined, color: color),
-
           const SizedBox(width: 12),
-
           Expanded(
             child: Text(
               '$titulo: $valor - $nivel',
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  // =============================================================
-  // SELECTOR FECHA
-  // =============================================================
 
   Widget _construirSelectorFecha({
     required String titulo,
@@ -1795,23 +1491,20 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: titulo,
-
         prefixIcon: Icon(icono),
-
         border: const OutlineInputBorder(),
       ),
-
       child: Row(
         children: <Widget>[
-          Expanded(child: Text(_formatearFecha(fecha))),
-
+          Expanded(
+            child: Text(_formatearFecha(fecha)),
+          ),
           if (fecha != null)
             IconButton(
               tooltip: 'Limpiar fecha',
               onPressed: habilitado ? onLimpiar : null,
               icon: const Icon(Icons.clear),
             ),
-
           IconButton(
             tooltip: 'Seleccionar fecha',
             onPressed: habilitado ? onPressed : null,
@@ -1822,35 +1515,25 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  // =============================================================
-  // ADVERTENCIA CATÁLOGOS
-  // =============================================================
-
   Widget _construirAdvertenciaCatalogos(
     DetalleIpercCatalogosProvider catalogos,
   ) {
     return Container(
       padding: const EdgeInsets.all(12),
-
       decoration: BoxDecoration(
         color: Colors.orange.shade50,
-
         borderRadius: BorderRadius.circular(12),
-
         border: Border.all(color: Colors.orange.shade300),
       ),
-
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: <Widget>[
           Icon(Icons.storage_outlined, color: Colors.orange.shade800),
-
           const SizedBox(width: 10),
-
           Expanded(
             child: Text(
-              catalogos.advertencia ?? 'Se están utilizando catálogos locales.',
+              catalogos.advertencia ??
+                  'Se están utilizando catálogos locales.',
             ),
           ),
         ],

@@ -18,22 +18,19 @@ class SyncProvider extends ChangeNotifier {
        _queueDatasource = queueDatasource ?? SyncQueueLocalDatasource();
 
   final NetworkInfo _networkInfo;
-
   final SyncService _syncService;
-
   final SyncQueueLocalDatasource _queueDatasource;
 
   StreamSubscription<bool>? _connectionSubscription;
 
   SyncStatus _status = SyncStatus.idle;
-
   bool _isConnected = false;
-
   int _pendingCount = 0;
-
   String? _message;
-
   String? _lastError;
+
+  /// Evita recuperar operaciones interrumpidas más de una vez.
+  bool _initialized = false;
 
   // =============================================================
   // GETTERS
@@ -60,6 +57,13 @@ class SyncProvider extends ChangeNotifier {
   // =============================================================
 
   Future<void> initialize() async {
+    // Recuperar únicamente al iniciar una nueva sesión.
+    if (!_initialized) {
+      await _queueDatasource.recoverInterruptedSynchronizations();
+
+      _initialized = true;
+    }
+
     await refreshStatus();
 
     await _connectionSubscription?.cancel();
@@ -89,17 +93,21 @@ class SyncProvider extends ChangeNotifier {
         _status = SyncStatus.offline;
 
         _message =
-            'Sin conexión. Los datos permanecen guardados en el dispositivo.';
+            'Sin conexión. Los datos permanecen '
+            'guardados en el dispositivo.';
       } else if (_status != SyncStatus.synchronizing) {
         if (_lastError != null) {
           _status = SyncStatus.error;
 
-          _message = 'Hay un error de sincronización:\n$_lastError';
+          _message =
+              'Hay un error de sincronización:\n'
+              '$_lastError';
         } else {
           _status = SyncStatus.idle;
 
           _message = _pendingCount > 0
-              ? 'Hay $_pendingCount registro(s) pendiente(s) de sincronización.'
+              ? 'Hay $_pendingCount registro(s) '
+                    'pendiente(s) de sincronización.'
               : 'Todos los registros están sincronizados.';
         }
       }
@@ -108,7 +116,9 @@ class SyncProvider extends ChangeNotifier {
     } catch (error) {
       _status = SyncStatus.error;
 
-      _message = 'No se pudo consultar el estado de sincronización: $error';
+      _message =
+          'No se pudo consultar el estado '
+          'de sincronización: $error';
 
       notifyListeners();
     }
@@ -124,7 +134,9 @@ class SyncProvider extends ChangeNotifier {
     if (!connected) {
       _status = SyncStatus.offline;
 
-      _message = 'Se perdió la conexión. Se continuará en modo offline.';
+      _message =
+          'Se perdió la conexión. '
+          'Se continuará en modo offline.';
 
       notifyListeners();
 
@@ -135,9 +147,10 @@ class SyncProvider extends ChangeNotifier {
 
     notifyListeners();
 
+    // No recuperar SINCRONIZANDO aquí.
     await refreshStatus();
 
-    if (_pendingCount > 0) {
+    if (_pendingCount > 0 && !isSynchronizing) {
       await synchronize();
     }
   }
@@ -147,7 +160,7 @@ class SyncProvider extends ChangeNotifier {
   // =============================================================
 
   Future<void> synchronize() async {
-    if (_status == SyncStatus.synchronizing) {
+    if (isSynchronizing) {
       return;
     }
 
@@ -156,24 +169,33 @@ class SyncProvider extends ChangeNotifier {
     if (!_isConnected) {
       _status = SyncStatus.offline;
 
-      _message = 'No hay conexión. Los registros siguen guardados localmente.';
+      _message =
+          'No hay conexión. Los registros '
+          'siguen guardados localmente.';
 
       notifyListeners();
 
       return;
     }
 
-    // -----------------------------------------------------------
-    // Los registros que anteriormente fallaron vuelven a
-    // PENDIENTE para permitir un nuevo intento.
-    // -----------------------------------------------------------
-
+    // Reintentar únicamente ERROR -> PENDIENTE.
+    // No tocar SINCRONIZANDO.
     await _queueDatasource.resetErrorsToPending();
 
+    _pendingCount = await _queueDatasource.countPending();
+
+    if (_pendingCount <= 0) {
+      _status = SyncStatus.completed;
+      _lastError = null;
+      _message = 'No hay registros pendientes.';
+
+      notifyListeners();
+
+      return;
+    }
+
     _status = SyncStatus.synchronizing;
-
     _lastError = null;
-
     _message = 'Sincronizando registros pendientes...';
 
     notifyListeners();
@@ -188,7 +210,9 @@ class SyncProvider extends ChangeNotifier {
       if (result.withoutConnection) {
         _status = SyncStatus.offline;
 
-        _message = 'La conexión se perdió durante la sincronización.';
+        _message =
+            'La conexión se perdió durante '
+            'la sincronización.';
 
         notifyListeners();
 
@@ -199,7 +223,9 @@ class SyncProvider extends ChangeNotifier {
         _status = SyncStatus.error;
 
         if (_lastError != null) {
-          _message = 'Error de sincronización:\n$_lastError';
+          _message =
+              'Error de sincronización:\n'
+              '$_lastError';
         } else {
           _message =
               'Sincronizados: ${result.synchronized}. '
@@ -212,12 +238,12 @@ class SyncProvider extends ChangeNotifier {
       }
 
       _status = SyncStatus.completed;
-
       _lastError = null;
 
       _message = result.total == 0
           ? 'No hay registros pendientes.'
-          : '${result.synchronized} registro(s) sincronizado(s) correctamente.';
+          : '${result.synchronized} '
+                'registro(s) sincronizado(s) correctamente.';
     } catch (error) {
       _status = SyncStatus.error;
 
@@ -238,7 +264,7 @@ class SyncProvider extends ChangeNotifier {
 
     notifyListeners();
 
-    if (_isConnected && _pendingCount > 0) {
+    if (_isConnected && _pendingCount > 0 && !isSynchronizing) {
       await synchronize();
     }
   }
@@ -248,9 +274,38 @@ class SyncProvider extends ChangeNotifier {
   // =============================================================
 
   Future<void> retrySynchronization() async {
+    if (isSynchronizing) {
+      return;
+    }
+
     await _queueDatasource.resetErrorsToPending();
 
     await synchronize();
+  }
+
+  // =============================================================
+  // LIMPIAR ERROR
+  // =============================================================
+
+  void clearError() {
+    _lastError = null;
+
+    if (_status == SyncStatus.error) {
+      _status = _isConnected ? SyncStatus.idle : SyncStatus.offline;
+    }
+
+    if (_isConnected) {
+      _message = _pendingCount > 0
+          ? 'Hay $_pendingCount registro(s) '
+                'pendiente(s) de sincronización.'
+          : 'Todos los registros están sincronizados.';
+    } else {
+      _message =
+          'Sin conexión. Los datos permanecen '
+          'guardados en el dispositivo.';
+    }
+
+    notifyListeners();
   }
 
   // =============================================================

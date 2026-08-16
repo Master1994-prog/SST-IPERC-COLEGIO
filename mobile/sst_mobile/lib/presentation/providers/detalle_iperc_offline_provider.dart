@@ -1,37 +1,41 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/services/sync_service.dart';
 import '../../data/models/detalle_iperc_local_model.dart';
 import '../../data/repositories/detalle_iperc_local_repository.dart';
 import '../../data/services/detalle_iperc_sync_service.dart';
 
+/// ===============================================================
+/// PROVIDER OFFLINE - DETALLE IPERC
+/// ===============================================================
+///
 /// Administra los detalles IPERC almacenados localmente.
 ///
-/// Permite trabajar sin conexión y mantiene informado a Flutter sobre:
+/// IMPORTANTE:
 ///
-/// - carga de registros;
-/// - creación y actualización local;
-/// - eliminación lógica;
-/// - errores;
-/// - detalles de la matriz seleccionada;
-/// - cantidad de registros pendientes;
-/// - sincronización con el backend.
+/// La sincronización manual ya NO utiliza directamente
+/// DetalleIpercSyncService.
+///
+/// Toda sincronización pasa por SyncService para respetar siempre:
+///
+/// MATRIZ_IPERC
+///      ↓
+/// DETALLE_IPERC
+///
+/// De esta forma un detalle nunca intenta llegar al backend antes
+/// de que su matriz padre tenga un ID válido del servidor.
+/// ===============================================================
 class DetalleIpercOfflineProvider extends ChangeNotifier {
-  /// Crea el provider utilizando una única instancia del
-  /// repositorio local.
-  ///
-  /// Esa misma instancia se comparte con el servicio de
-  /// sincronización para mantener consistencia en SQLite.
   factory DetalleIpercOfflineProvider({
     DetalleIpercLocalRepository? repository,
-    DetalleIpercSyncService? syncService,
+    SyncService? syncService,
   }) {
     final DetalleIpercLocalRepository repositorio =
         repository ?? DetalleIpercLocalRepository();
 
     return DetalleIpercOfflineProvider._(
       repository: repositorio,
-      syncService:
-          syncService ?? DetalleIpercSyncService(localRepository: repositorio),
+      syncService: syncService ?? SyncService(),
     );
   }
 
@@ -41,7 +45,12 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   });
 
   final DetalleIpercLocalRepository _repository;
-  final DetalleIpercSyncService _syncService;
+
+  /// Servicio GENERAL de sincronización.
+  ///
+  /// No utilizar aquí DetalleIpercSyncService para sincronización
+  /// manual porque se perdería el orden Matriz -> Detalle.
+  final SyncService _syncService;
 
   final List<DetalleIpercLocalModel> _detalles = <DetalleIpercLocalModel>[];
 
@@ -64,7 +73,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // GETTERS
   // ============================================================
 
-  /// Lista inmutable de detalles cargados para la matriz actual.
   List<DetalleIpercLocalModel> get detalles {
     return List<DetalleIpercLocalModel>.unmodifiable(_detalles);
   }
@@ -85,7 +93,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     return _sincronizando;
   }
 
-  /// Indica que el provider está ejecutando alguna operación.
   bool get procesando {
     return _cargando || _guardando || _sincronizando;
   }
@@ -131,7 +138,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // CARGA DE DETALLES
   // ============================================================
 
-  /// Carga los detalles activos de una matriz IPERC.
   Future<void> cargarPorMatriz(
     String matrizIdLocal, {
     bool mostrarCarga = true,
@@ -170,7 +176,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Recarga la matriz actualmente seleccionada.
   Future<void> recargar() async {
     final String? matrizId = _matrizIdLocal;
 
@@ -182,7 +187,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     await cargarPorMatriz(matrizId, mostrarCarga: false);
   }
 
-  /// Obtiene un detalle mediante su identificador local.
   Future<DetalleIpercLocalModel?> obtenerPorIdLocal(String idLocal) async {
     _error = null;
 
@@ -202,14 +206,12 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Selecciona un detalle que ya se encuentra cargado.
   void seleccionarDetalle(DetalleIpercLocalModel? detalle) {
     _detalleSeleccionado = detalle;
 
     notifyListeners();
   }
 
-  /// Limpia el detalle seleccionado.
   void limpiarSeleccion() {
     if (_detalleSeleccionado == null) {
       return;
@@ -224,10 +226,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // CREACIÓN
   // ============================================================
 
-  /// Registra una evaluación IPERC localmente.
-  ///
-  /// El datasource agrega automáticamente la operación
-  /// correspondiente a la cola de sincronización.
   Future<bool> crear(DetalleIpercLocalModel detalle) async {
     if (_guardando || _sincronizando) {
       return false;
@@ -275,7 +273,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // ACTUALIZACIÓN
   // ============================================================
 
-  /// Actualiza una evaluación IPERC almacenada localmente.
   Future<bool> actualizar(DetalleIpercLocalModel detalle) async {
     if (_guardando || _sincronizando) {
       return false;
@@ -324,10 +321,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // ELIMINACIÓN
   // ============================================================
 
-  /// Elimina lógicamente un detalle.
-  ///
-  /// El registro desaparece de la lista, pero permanece en SQLite
-  /// hasta que su eliminación sea sincronizada con el backend.
   Future<bool> eliminar(String idLocal) async {
     if (_guardando || _sincronizando) {
       return false;
@@ -362,7 +355,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // PENDIENTES
   // ============================================================
 
-  /// Consulta y actualiza la cantidad de registros pendientes.
   Future<void> actualizarCantidadPendientes() async {
     try {
       await _actualizarCantidadPendientesInternamente();
@@ -374,18 +366,14 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // SINCRONIZACIÓN
+  // SINCRONIZACIÓN GLOBAL
   // ============================================================
 
-  /// Envía al backend todos los detalles IPERC pendientes.
+  /// Mantiene la firma histórica del provider, pero internamente
+  /// utiliza SyncService GENERAL.
   ///
-  /// El servicio ejecuta:
-  ///
-  /// - creación de evaluaciones;
-  /// - creación de detalles;
-  /// - actualización de detalles;
-  /// - eliminación de detalles;
-  /// - confirmación de registros sincronizados en SQLite.
+  /// Esto garantiza que primero se procesen las matrices y después
+  /// los detalles.
   Future<DetalleIpercSyncResult?> sincronizarPendientes() async {
     if (_sincronizando || _guardando || _cargando) {
       return null;
@@ -413,19 +401,33 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final DetalleIpercSyncResult resultado = await _syncService
-          .sincronizarPendientes();
+      final SyncResult resultadoGlobal = await _syncService
+          .synchronizePending();
+
+      final List<String> errores = <String>[];
+
+      if (resultadoGlobal.withoutConnection) {
+        errores.add('No hay conexión con el servidor.');
+      } else if (resultadoGlobal.failed > 0) {
+        errores.add(
+          'No se pudieron sincronizar '
+          '${resultadoGlobal.failed} operación(es).',
+        );
+      }
+
+      final DetalleIpercSyncResult resultado = DetalleIpercSyncResult(
+        total: resultadoGlobal.total,
+        sincronizados: resultadoGlobal.synchronized,
+        fallidos: resultadoGlobal.withoutConnection
+            ? resultadoGlobal.total
+            : resultadoGlobal.failed,
+        errores: errores,
+      );
 
       _ultimoResultadoSincronizacion = resultado;
 
-      if (resultado.fallidos > 0) {
-        if (resultado.errores.isNotEmpty) {
-          _errorSincronizacion = resultado.errores.join('\n');
-        } else {
-          _errorSincronizacion =
-              'No se pudieron sincronizar '
-              '${resultado.fallidos} registros.';
-        }
+      if (errores.isNotEmpty) {
+        _errorSincronizacion = errores.join('\n');
       }
 
       await _recargarDetallesActuales();
@@ -444,10 +446,10 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Marca un detalle como sincronizado con el backend.
-  ///
-  /// Este método también puede utilizarse desde otros servicios
-  /// o procesos de sincronización.
+  // ============================================================
+  // CONFIRMACIONES LOCALES
+  // ============================================================
+
   Future<bool> marcarComoSincronizado({
     required String idLocal,
     required String idServidor,
@@ -472,8 +474,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Confirma una eliminación realizada correctamente
-  /// en el backend.
   Future<bool> confirmarEliminacionSincronizada(String idLocal) async {
     try {
       await _repository.confirmarEliminacionSincronizada(idLocal);
@@ -498,7 +498,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Guarda un detalle recibido desde el servidor.
   Future<bool> guardarDesdeServidor(DetalleIpercLocalModel detalle) async {
     try {
       await _repository.guardarDesdeServidor(detalle);
@@ -519,8 +518,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
   }
 
-  /// Limpia el mensaje de error producido durante
-  /// la sincronización.
   void limpiarErrorSincronizacion() {
     if (_errorSincronizacion == null) {
       return;
@@ -535,7 +532,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // LIMPIEZA
   // ============================================================
 
-  /// Elimina el mensaje de error general.
   void limpiarError() {
     if (_error == null) {
       return;
@@ -546,7 +542,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Limpia toda la información al salir de una matriz.
   void limpiar() {
     _detalles.clear();
 
@@ -571,7 +566,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
   // MÉTODOS INTERNOS
   // ============================================================
 
-  /// Recarga desde SQLite los detalles de la matriz seleccionada.
   Future<void> _recargarDetallesActuales() async {
     final String? matrizId = _matrizIdLocal;
 
@@ -606,7 +600,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     _detalleSeleccionado = detalleActualizado;
   }
 
-  /// Reemplaza en la lista un detalle recuperado desde SQLite.
   Future<void> _reemplazarDetalleDesdeBase(String idLocal) async {
     final DetalleIpercLocalModel? actualizado = await _repository
         .obtenerPorIdLocal(idLocal);
@@ -640,14 +633,10 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     _ordenarDetalles();
   }
 
-  /// Actualiza el total de registros que todavía
-  /// no han sido sincronizados.
   Future<void> _actualizarCantidadPendientesInternamente() async {
     _cantidadPendientes = await _repository.contarPendientes();
   }
 
-  /// Ordena primero por número de ítem y después
-  /// por fecha de registro.
   void _ordenarDetalles() {
     _detalles.sort((
       DetalleIpercLocalModel primero,
@@ -682,8 +671,6 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Obtiene un mensaje entendible a partir
-  /// de diferentes tipos de error.
   String _obtenerMensajeError(Object error) {
     if (error is ArgumentError) {
       return error.message?.toString() ??
@@ -714,7 +701,8 @@ class DetalleIpercOfflineProvider extends ChangeNotifier {
     }
 
     if (mensaje.isEmpty) {
-      return 'Ocurrió un error inesperado al administrar el detalle IPERC.';
+      return 'Ocurrió un error inesperado al administrar '
+          'el detalle IPERC.';
     }
 
     return mensaje;

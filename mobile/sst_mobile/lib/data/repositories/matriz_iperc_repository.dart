@@ -43,13 +43,10 @@ class MatrizIpercRepository {
   // ELIMINAR
   // =============================================================
 
-  Future<void> eliminar(
-  int id, {
-  required int usuarioEliminacionId,
-}) {
-  return _remoteDatasource.eliminar(
-    id,
-    usuarioEliminacionId: usuarioEliminacionId,
-  );
-}
+  Future<void> eliminar(int id, {required int usuarioEliminacionId}) {
+    return _remoteDatasource.eliminar(
+      id,
+      usuarioEliminacionId: usuarioEliminacionId,
+    );
+  }
 }

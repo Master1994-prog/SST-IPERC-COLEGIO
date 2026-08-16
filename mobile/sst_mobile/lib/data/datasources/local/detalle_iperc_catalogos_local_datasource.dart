@@ -19,9 +19,13 @@ import '../../models/severidad_model.dart';
 /// - Probabilidades.
 /// - Severidades.
 ///
-/// Cada catálogo se guarda independientemente. Así, si por ejemplo
-/// falla el endpoint de severidades, los peligros y consecuencias
-/// que sí fueron descargados no se pierden.
+/// Cada catálogo se guarda independientemente.
+///
+/// IMPORTANTE:
+///
+/// Antes de reemplazar una tabla local se valida primero la lista
+/// recibida. Así evitamos borrar un catálogo offline válido cuando
+/// el backend devuelve elementos inválidos o incompletos.
 /// ===============================================================
 class DetalleIpercCatalogosLocalDatasource {
   DetalleIpercCatalogosLocalDatasource({AppDatabase? appDatabase})
@@ -41,119 +45,117 @@ class DetalleIpercCatalogosLocalDatasource {
 
   static const String _tablaMetadata = 'catalogos_iperc_metadata';
 
-  // =============================================================
-  // PREPARAR TABLAS
-  // =============================================================
-
   Future<void> prepararTablas() async {
     final Database db = await _appDatabase.database;
 
     await db.transaction((Transaction txn) async {
       await txn.execute('''
-          CREATE TABLE IF NOT EXISTS $_tablaPeligros (
-            id INTEGER PRIMARY KEY,
-            codigo TEXT NOT NULL,
-            nombre TEXT NOT NULL,
-            descripcion TEXT,
-            tipo_peligro_id INTEGER NOT NULL,
-            tipo_peligro_nombre TEXT,
-            categoria_peligro_id INTEGER,
-            categoria_peligro_nombre TEXT,
-            fuente TEXT,
-            medio TEXT,
-            receptor TEXT,
-            requisito_legal TEXT,
-            recomendaciones TEXT,
-            activo INTEGER NOT NULL DEFAULT 1,
-            estado INTEGER NOT NULL DEFAULT 1,
-            datos_json TEXT NOT NULL,
-            fecha_actualizacion_local TEXT NOT NULL
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS $_tablaPeligros (
+          id INTEGER PRIMARY KEY,
+          codigo TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          descripcion TEXT,
+          tipo_peligro_id INTEGER NOT NULL,
+          tipo_peligro_nombre TEXT,
+          categoria_peligro_id INTEGER,
+          categoria_peligro_nombre TEXT,
+          fuente TEXT,
+          medio TEXT,
+          receptor TEXT,
+          requisito_legal TEXT,
+          recomendaciones TEXT,
+          activo INTEGER NOT NULL DEFAULT 1,
+          estado INTEGER NOT NULL DEFAULT 1,
+          datos_json TEXT NOT NULL,
+          fecha_actualizacion_local TEXT NOT NULL
+        )
+      ''');
 
       await txn.execute('''
-          CREATE TABLE IF NOT EXISTS $_tablaConsecuencias (
-            id INTEGER PRIMARY KEY,
-            codigo TEXT NOT NULL,
-            nombre TEXT NOT NULL,
-            descripcion TEXT,
-            clasificacion TEXT,
-            incapacidad_permanente INTEGER NOT NULL DEFAULT 0,
-            fatalidad INTEGER NOT NULL DEFAULT 0,
-            activo INTEGER NOT NULL DEFAULT 1,
-            estado INTEGER NOT NULL DEFAULT 1,
-            datos_json TEXT NOT NULL,
-            fecha_actualizacion_local TEXT NOT NULL
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS $_tablaConsecuencias (
+          id INTEGER PRIMARY KEY,
+          codigo TEXT NOT NULL,
+          nombre TEXT NOT NULL,
+          descripcion TEXT,
+          clasificacion TEXT,
+          incapacidad_permanente INTEGER NOT NULL DEFAULT 0,
+          fatalidad INTEGER NOT NULL DEFAULT 0,
+          activo INTEGER NOT NULL DEFAULT 1,
+          estado INTEGER NOT NULL DEFAULT 1,
+          datos_json TEXT NOT NULL,
+          fecha_actualizacion_local TEXT NOT NULL
+        )
+      ''');
 
       await txn.execute('''
-          CREATE TABLE IF NOT EXISTS $_tablaProbabilidades (
-            id INTEGER PRIMARY KEY,
-            valor INTEGER NOT NULL,
-            nombre TEXT NOT NULL,
-            descripcion TEXT NOT NULL DEFAULT '',
-            fecha_actualizacion_local TEXT NOT NULL
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS $_tablaProbabilidades (
+          id INTEGER PRIMARY KEY,
+          valor INTEGER NOT NULL,
+          nombre TEXT NOT NULL,
+          descripcion TEXT NOT NULL DEFAULT '',
+          fecha_actualizacion_local TEXT NOT NULL
+        )
+      ''');
 
       await txn.execute('''
-          CREATE TABLE IF NOT EXISTS $_tablaSeveridades (
-            id INTEGER PRIMARY KEY,
-            valor INTEGER NOT NULL,
-            nombre TEXT NOT NULL,
-            descripcion TEXT NOT NULL DEFAULT '',
-            fecha_actualizacion_local TEXT NOT NULL
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS $_tablaSeveridades (
+          id INTEGER PRIMARY KEY,
+          valor INTEGER NOT NULL,
+          nombre TEXT NOT NULL,
+          descripcion TEXT NOT NULL DEFAULT '',
+          fecha_actualizacion_local TEXT NOT NULL
+        )
+      ''');
 
       await txn.execute('''
-          CREATE TABLE IF NOT EXISTS $_tablaMetadata (
-            catalogo TEXT PRIMARY KEY,
-            fecha_actualizacion TEXT NOT NULL,
-            cantidad_registros INTEGER NOT NULL DEFAULT 0
-          )
-        ''');
+        CREATE TABLE IF NOT EXISTS $_tablaMetadata (
+          catalogo TEXT PRIMARY KEY,
+          fecha_actualizacion TEXT NOT NULL,
+          cantidad_registros INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
 
       await txn.execute('''
-          CREATE INDEX IF NOT EXISTS
-          idx_catalogo_peligros_nombre
-          ON $_tablaPeligros(nombre)
-        ''');
+        CREATE INDEX IF NOT EXISTS idx_catalogo_peligros_nombre
+        ON $_tablaPeligros(nombre)
+      ''');
 
       await txn.execute('''
-          CREATE INDEX IF NOT EXISTS
-          idx_catalogo_consecuencias_nombre
-          ON $_tablaConsecuencias(nombre)
-        ''');
+        CREATE INDEX IF NOT EXISTS idx_catalogo_consecuencias_nombre
+        ON $_tablaConsecuencias(nombre)
+      ''');
 
       await txn.execute('''
-          CREATE INDEX IF NOT EXISTS
-          idx_catalogo_probabilidades_valor
-          ON $_tablaProbabilidades(valor)
-        ''');
+        CREATE INDEX IF NOT EXISTS idx_catalogo_probabilidades_valor
+        ON $_tablaProbabilidades(valor)
+      ''');
 
       await txn.execute('''
-          CREATE INDEX IF NOT EXISTS
-          idx_catalogo_severidades_valor
-          ON $_tablaSeveridades(valor)
-        ''');
+        CREATE INDEX IF NOT EXISTS idx_catalogo_severidades_valor
+        ON $_tablaSeveridades(valor)
+      ''');
     });
   }
 
-  // =============================================================
-  // GUARDAR PELIGROS
-  // =============================================================
-
   Future<void> guardarPeligros(List<PeligroModel> peligros) async {
-    if (peligros.isEmpty) {
+    final List<PeligroModel> validos = peligros
+        .where(
+          (PeligroModel item) =>
+              item.id > 0 &&
+              item.estaDisponible &&
+              item.codigo.trim().isNotEmpty &&
+              item.nombre.trim().isNotEmpty &&
+              item.tipoPeligroId > 0,
+        )
+        .toList(growable: false);
+
+    if (validos.isEmpty) {
       return;
     }
 
     await prepararTablas();
 
     final Database db = await _appDatabase.database;
-
     final String ahora = DateTime.now().toUtc().toIso8601String();
 
     await db.transaction((Transaction txn) async {
@@ -161,17 +163,11 @@ class DetalleIpercCatalogosLocalDatasource {
 
       final Batch batch = txn.batch();
 
-      int cantidad = 0;
-
-      for (final PeligroModel peligro in peligros) {
-        if (peligro.id <= 0 || !peligro.estaDisponible) {
-          continue;
-        }
-
+      for (final PeligroModel peligro in validos) {
         batch.insert(_tablaPeligros, <String, Object?>{
           'id': peligro.id,
-          'codigo': peligro.codigo,
-          'nombre': peligro.nombre,
+          'codigo': peligro.codigo.trim(),
+          'nombre': peligro.nombre.trim(),
           'descripcion': peligro.descripcion,
           'tipo_peligro_id': peligro.tipoPeligroId,
           'tipo_peligro_nombre': peligro.tipoPeligroNombre,
@@ -187,8 +183,6 @@ class DetalleIpercCatalogosLocalDatasource {
           'datos_json': jsonEncode(peligro.toJson()),
           'fecha_actualizacion_local': ahora,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-        cantidad++;
       }
 
       await batch.commit(noResult: true);
@@ -196,27 +190,32 @@ class DetalleIpercCatalogosLocalDatasource {
       await _guardarMetadata(
         txn,
         catalogo: 'PELIGROS',
-        cantidad: cantidad,
+        cantidad: validos.length,
         fecha: ahora,
       );
     });
   }
 
-  // =============================================================
-  // GUARDAR CONSECUENCIAS
-  // =============================================================
-
   Future<void> guardarConsecuencias(
     List<ConsecuenciaModel> consecuencias,
   ) async {
-    if (consecuencias.isEmpty) {
+    final List<ConsecuenciaModel> validos = consecuencias
+        .where(
+          (ConsecuenciaModel item) =>
+              item.id > 0 &&
+              item.estaDisponible &&
+              item.codigo.trim().isNotEmpty &&
+              item.nombre.trim().isNotEmpty,
+        )
+        .toList(growable: false);
+
+    if (validos.isEmpty) {
       return;
     }
 
     await prepararTablas();
 
     final Database db = await _appDatabase.database;
-
     final String ahora = DateTime.now().toUtc().toIso8601String();
 
     await db.transaction((Transaction txn) async {
@@ -224,17 +223,11 @@ class DetalleIpercCatalogosLocalDatasource {
 
       final Batch batch = txn.batch();
 
-      int cantidad = 0;
-
-      for (final ConsecuenciaModel consecuencia in consecuencias) {
-        if (consecuencia.id <= 0 || !consecuencia.estaDisponible) {
-          continue;
-        }
-
+      for (final ConsecuenciaModel consecuencia in validos) {
         batch.insert(_tablaConsecuencias, <String, Object?>{
           'id': consecuencia.id,
-          'codigo': consecuencia.codigo,
-          'nombre': consecuencia.nombre,
+          'codigo': consecuencia.codigo.trim(),
+          'nombre': consecuencia.nombre.trim(),
           'descripcion': consecuencia.descripcion,
           'clasificacion': consecuencia.clasificacion,
           'incapacidad_permanente': consecuencia.incapacidadPermanente ? 1 : 0,
@@ -244,8 +237,6 @@ class DetalleIpercCatalogosLocalDatasource {
           'datos_json': jsonEncode(consecuencia.toJson()),
           'fecha_actualizacion_local': ahora,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-        cantidad++;
       }
 
       await batch.commit(noResult: true);
@@ -253,27 +244,32 @@ class DetalleIpercCatalogosLocalDatasource {
       await _guardarMetadata(
         txn,
         catalogo: 'CONSECUENCIAS',
-        cantidad: cantidad,
+        cantidad: validos.length,
         fecha: ahora,
       );
     });
   }
 
-  // =============================================================
-  // GUARDAR PROBABILIDADES
-  // =============================================================
-
   Future<void> guardarProbabilidades(
     List<ProbabilidadModel> probabilidades,
   ) async {
-    if (probabilidades.isEmpty) {
+    final List<ProbabilidadModel> validos = probabilidades
+        .where(
+          (ProbabilidadModel item) =>
+              item.id > 0 &&
+              item.valor >= 1 &&
+              item.valor <= 5 &&
+              item.nombre.trim().isNotEmpty,
+        )
+        .toList(growable: false);
+
+    if (validos.isEmpty) {
       return;
     }
 
     await prepararTablas();
 
     final Database db = await _appDatabase.database;
-
     final String ahora = DateTime.now().toUtc().toIso8601String();
 
     await db.transaction((Transaction txn) async {
@@ -281,22 +277,14 @@ class DetalleIpercCatalogosLocalDatasource {
 
       final Batch batch = txn.batch();
 
-      int cantidad = 0;
-
-      for (final ProbabilidadModel item in probabilidades) {
-        if (item.id <= 0 || item.valor < 1 || item.valor > 5) {
-          continue;
-        }
-
+      for (final ProbabilidadModel item in validos) {
         batch.insert(_tablaProbabilidades, <String, Object?>{
           'id': item.id,
           'valor': item.valor,
-          'nombre': item.nombre,
+          'nombre': item.nombre.trim(),
           'descripcion': item.descripcion,
           'fecha_actualizacion_local': ahora,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-        cantidad++;
       }
 
       await batch.commit(noResult: true);
@@ -304,25 +292,30 @@ class DetalleIpercCatalogosLocalDatasource {
       await _guardarMetadata(
         txn,
         catalogo: 'PROBABILIDADES',
-        cantidad: cantidad,
+        cantidad: validos.length,
         fecha: ahora,
       );
     });
   }
 
-  // =============================================================
-  // GUARDAR SEVERIDADES
-  // =============================================================
-
   Future<void> guardarSeveridades(List<SeveridadModel> severidades) async {
-    if (severidades.isEmpty) {
+    final List<SeveridadModel> validos = severidades
+        .where(
+          (SeveridadModel item) =>
+              item.id > 0 &&
+              item.valor >= 1 &&
+              item.valor <= 5 &&
+              item.nombre.trim().isNotEmpty,
+        )
+        .toList(growable: false);
+
+    if (validos.isEmpty) {
       return;
     }
 
     await prepararTablas();
 
     final Database db = await _appDatabase.database;
-
     final String ahora = DateTime.now().toUtc().toIso8601String();
 
     await db.transaction((Transaction txn) async {
@@ -330,22 +323,14 @@ class DetalleIpercCatalogosLocalDatasource {
 
       final Batch batch = txn.batch();
 
-      int cantidad = 0;
-
-      for (final SeveridadModel item in severidades) {
-        if (item.id <= 0 || item.valor < 1 || item.valor > 5) {
-          continue;
-        }
-
+      for (final SeveridadModel item in validos) {
         batch.insert(_tablaSeveridades, <String, Object?>{
           'id': item.id,
           'valor': item.valor,
-          'nombre': item.nombre,
+          'nombre': item.nombre.trim(),
           'descripcion': item.descripcion,
           'fecha_actualizacion_local': ahora,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-        cantidad++;
       }
 
       await batch.commit(noResult: true);
@@ -353,15 +338,11 @@ class DetalleIpercCatalogosLocalDatasource {
       await _guardarMetadata(
         txn,
         catalogo: 'SEVERIDADES',
-        cantidad: cantidad,
+        cantidad: validos.length,
         fecha: ahora,
       );
     });
   }
-
-  // =============================================================
-  // GUARDAR TODOS
-  // =============================================================
 
   Future<void> guardarCatalogos({
     required List<PeligroModel> peligros,
@@ -369,26 +350,11 @@ class DetalleIpercCatalogosLocalDatasource {
     required List<ProbabilidadModel> probabilidades,
     required List<SeveridadModel> severidades,
   }) async {
-    if (peligros.isNotEmpty) {
-      await guardarPeligros(peligros);
-    }
-
-    if (consecuencias.isNotEmpty) {
-      await guardarConsecuencias(consecuencias);
-    }
-
-    if (probabilidades.isNotEmpty) {
-      await guardarProbabilidades(probabilidades);
-    }
-
-    if (severidades.isNotEmpty) {
-      await guardarSeveridades(severidades);
-    }
+    await guardarPeligros(peligros);
+    await guardarConsecuencias(consecuencias);
+    await guardarProbabilidades(probabilidades);
+    await guardarSeveridades(severidades);
   }
-
-  // =============================================================
-  // OBTENER PELIGROS
-  // =============================================================
 
   Future<List<PeligroModel>> obtenerPeligros() async {
     await prepararTablas();
@@ -420,16 +386,12 @@ class DetalleIpercCatalogosLocalDatasource {
           resultado.add(item);
         }
       } catch (_) {
-        // Ignorar únicamente el registro dañado.
+        // Se ignora solamente el registro local dañado.
       }
     }
 
     return resultado;
   }
-
-  // =============================================================
-  // OBTENER CONSECUENCIAS
-  // =============================================================
 
   Future<List<ConsecuenciaModel>> obtenerConsecuencias() async {
     await prepararTablas();
@@ -461,16 +423,12 @@ class DetalleIpercCatalogosLocalDatasource {
           resultado.add(item);
         }
       } catch (_) {
-        // Ignorar únicamente el registro dañado.
+        // Se ignora solamente el registro local dañado.
       }
     }
 
     return resultado;
   }
-
-  // =============================================================
-  // OBTENER PROBABILIDADES
-  // =============================================================
 
   Future<List<ProbabilidadModel>> obtenerProbabilidades() async {
     await prepararTablas();
@@ -493,14 +451,13 @@ class DetalleIpercCatalogosLocalDatasource {
         )
         .where(
           (ProbabilidadModel item) =>
-              item.id > 0 && item.valor >= 1 && item.valor <= 5,
+              item.id > 0 &&
+              item.valor >= 1 &&
+              item.valor <= 5 &&
+              item.nombre.trim().isNotEmpty,
         )
-        .toList();
+        .toList(growable: false);
   }
-
-  // =============================================================
-  // OBTENER SEVERIDADES
-  // =============================================================
 
   Future<List<SeveridadModel>> obtenerSeveridades() async {
     await prepararTablas();
@@ -523,14 +480,13 @@ class DetalleIpercCatalogosLocalDatasource {
         )
         .where(
           (SeveridadModel item) =>
-              item.id > 0 && item.valor >= 1 && item.valor <= 5,
+              item.id > 0 &&
+              item.valor >= 1 &&
+              item.valor <= 5 &&
+              item.nombre.trim().isNotEmpty,
         )
-        .toList();
+        .toList(growable: false);
   }
-
-  // =============================================================
-  // METADATA
-  // =============================================================
 
   Future<DateTime?> obtenerFechaActualizacion(String catalogo) async {
     await prepararTablas();
@@ -571,15 +527,16 @@ class DetalleIpercCatalogosLocalDatasource {
   }
 
   Future<bool> tieneCatalogosCompletos() async {
-    return await contarPeligros() > 0 &&
-        await contarConsecuencias() > 0 &&
-        await contarProbabilidades() > 0 &&
-        await contarSeveridades() > 0;
-  }
+    final int peligros = await contarPeligros();
+    final int consecuencias = await contarConsecuencias();
+    final int probabilidades = await contarProbabilidades();
+    final int severidades = await contarSeveridades();
 
-  // =============================================================
-  // LIMPIAR
-  // =============================================================
+    return peligros > 0 &&
+        consecuencias > 0 &&
+        probabilidades > 0 &&
+        severidades > 0;
+  }
 
   Future<void> limpiarCatalogos() async {
     await prepararTablas();
@@ -588,20 +545,12 @@ class DetalleIpercCatalogosLocalDatasource {
 
     await db.transaction((Transaction txn) async {
       await txn.delete(_tablaPeligros);
-
       await txn.delete(_tablaConsecuencias);
-
       await txn.delete(_tablaProbabilidades);
-
       await txn.delete(_tablaSeveridades);
-
       await txn.delete(_tablaMetadata);
     });
   }
-
-  // =============================================================
-  // AUXILIARES
-  // =============================================================
 
   Future<void> _guardarMetadata(
     Transaction txn, {
@@ -610,7 +559,7 @@ class DetalleIpercCatalogosLocalDatasource {
     required String fecha,
   }) async {
     await txn.insert(_tablaMetadata, <String, Object?>{
-      'catalogo': catalogo,
+      'catalogo': catalogo.trim().toUpperCase(),
       'fecha_actualizacion': fecha,
       'cantidad_registros': cantidad,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -621,10 +570,11 @@ class DetalleIpercCatalogosLocalDatasource {
 
     final Database db = await _appDatabase.database;
 
-    return Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM $tabla'),
-        ) ??
-        0;
+    final List<Map<String, Object?>> resultado = await db.rawQuery(
+      'SELECT COUNT(*) FROM $tabla',
+    );
+
+    return Sqflite.firstIntValue(resultado) ?? 0;
   }
 
   int _intValue(Object? value) {

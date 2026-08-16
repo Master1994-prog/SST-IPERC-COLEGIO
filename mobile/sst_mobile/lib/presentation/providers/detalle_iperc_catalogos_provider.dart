@@ -28,6 +28,16 @@ import '../../data/repositories/severidad_repository.dart';
 /// 3. Consultar cada endpoint por separado.
 /// 4. Guardar inmediatamente cada catálogo exitoso.
 /// 5. Si uno falla, los demás continúan funcionando.
+///
+/// IMPORTANTE:
+///
+/// Probabilidades y Severidades solamente se consideran utilizables
+/// cuando contienen la escala IPERC completa:
+///
+/// 1, 2, 3, 4, 5
+///
+/// Una respuesta parcial del backend nunca reemplaza una escala local
+/// completa almacenada previamente.
 /// ===============================================================
 class DetalleIpercCatalogosProvider extends ChangeNotifier {
   DetalleIpercCatalogosProvider({
@@ -131,9 +141,16 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
 
   bool get tieneConsecuencias => _consecuencias.isNotEmpty;
 
-  bool get tieneProbabilidades => _probabilidades.isNotEmpty;
+  /// Solo existe un catálogo utilizable cuando están presentes
+  /// exactamente los valores requeridos por la matriz IPERC 5x5:
+  /// 1, 2, 3, 4 y 5.
+  bool get tieneProbabilidades =>
+      _escalaProbabilidadesCompleta(_probabilidades);
 
-  bool get tieneSeveridades => _severidades.isNotEmpty;
+  /// Solo existe un catálogo utilizable cuando están presentes
+  /// exactamente los valores requeridos por la matriz IPERC 5x5:
+  /// 1, 2, 3, 4 y 5.
+  bool get tieneSeveridades => _escalaSeveridadesCompleta(_severidades);
 
   bool get tieneCatalogos =>
       tienePeligros &&
@@ -246,6 +263,10 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
         _consecuencias = consecuencias;
       }
 
+      // Se conserva lo leído localmente aunque sea parcial para
+      // poder diagnosticarlo correctamente. Los getters
+      // tieneProbabilidades / tieneSeveridades determinarán si
+      // realmente es una escala utilizable.
       if (probabilidades.isNotEmpty) {
         _probabilidades = probabilidades;
       }
@@ -275,7 +296,8 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
           _severidades.isNotEmpty;
     } catch (error) {
       _advertencia =
-          'No se pudieron leer completamente los catálogos locales: '
+          'No se pudieron leer completamente los '
+          'catálogos locales: '
           '${_limpiarError(error)}';
     } finally {
       _cargandoLocal = false;
@@ -360,14 +382,24 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
           )
           .toList();
 
-      if (validos.isNotEmpty) {
+      // ---------------------------------------------------------
+      // SOLO REEMPLAZAR SI LA ESCALA ESTÁ COMPLETA
+      // ---------------------------------------------------------
+
+      if (_escalaProbabilidadesCompleta(validos)) {
         _probabilidades = validos;
 
         await _localDatasource.guardarProbabilidades(validos);
 
         _ultimaActualizacionProbabilidades = DateTime.now().toUtc();
       } else {
-        errores.add('Probabilidades: no existen valores válidos del 1 al 5.');
+        errores.add(
+          'Probabilidades: el backend no devolvió '
+          'la escala completa 1, 2, 3, 4, 5.',
+        );
+
+        // No modificamos _probabilidades.
+        // Si SQLite tenía una escala completa, se conserva.
       }
     } catch (error) {
       errores.add('Probabilidades: ${_limpiarError(error)}');
@@ -388,14 +420,24 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
           )
           .toList();
 
-      if (validos.isNotEmpty) {
+      // ---------------------------------------------------------
+      // SOLO REEMPLAZAR SI LA ESCALA ESTÁ COMPLETA
+      // ---------------------------------------------------------
+
+      if (_escalaSeveridadesCompleta(validos)) {
         _severidades = validos;
 
         await _localDatasource.guardarSeveridades(validos);
 
         _ultimaActualizacionSeveridades = DateTime.now().toUtc();
       } else {
-        errores.add('Severidades: no existen valores válidos del 1 al 5.');
+        errores.add(
+          'Severidades: el backend no devolvió '
+          'la escala completa 1, 2, 3, 4, 5.',
+        );
+
+        // No modificamos _severidades.
+        // Si SQLite tenía una escala completa, se conserva.
       }
     } catch (error) {
       errores.add('Severidades: ${_limpiarError(error)}');
@@ -430,7 +472,8 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
       _usandoDatosLocales = true;
     } else {
       _error =
-          'No se pudieron cargar todos los catálogos IPERC:\n'
+          'No se pudieron cargar todos los '
+          'catálogos IPERC:\n'
           '${errores.join('\n')}';
     }
 
@@ -518,6 +561,40 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
   }
 
   // =============================================================
+  // VALIDAR ESCALA DE PROBABILIDADES
+  // =============================================================
+
+  bool _escalaProbabilidadesCompleta(List<ProbabilidadModel> items) {
+    final Set<int> valores = items
+        .where(
+          (ProbabilidadModel item) =>
+              item.id > 0 && item.valor >= 1 && item.valor <= 5,
+        )
+        .map((ProbabilidadModel item) => item.valor)
+        .toSet();
+
+    return valores.length == 5 &&
+        valores.containsAll(const <int>{1, 2, 3, 4, 5});
+  }
+
+  // =============================================================
+  // VALIDAR ESCALA DE SEVERIDADES
+  // =============================================================
+
+  bool _escalaSeveridadesCompleta(List<SeveridadModel> items) {
+    final Set<int> valores = items
+        .where(
+          (SeveridadModel item) =>
+              item.id > 0 && item.valor >= 1 && item.valor <= 5,
+        )
+        .map((SeveridadModel item) => item.valor)
+        .toSet();
+
+    return valores.length == 5 &&
+        valores.containsAll(const <int>{1, 2, 3, 4, 5});
+  }
+
+  // =============================================================
   // ORDENAR
   // =============================================================
 
@@ -563,11 +640,11 @@ class DetalleIpercCatalogosProvider extends ChangeNotifier {
     }
 
     if (!tieneProbabilidades) {
-      faltantes.add('Probabilidades');
+      faltantes.add('Probabilidades (escala 1-5)');
     }
 
     if (!tieneSeveridades) {
-      faltantes.add('Severidades');
+      faltantes.add('Severidades (escala 1-5)');
     }
 
     _error =

@@ -4,8 +4,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants/sync_constants.dart';
 import '../../core/services/secure_storage_service.dart';
+import '../datasources/local/detalle_iperc_local_datasource.dart';
 import '../datasources/local/matriz_iperc_local_datasource.dart';
 import '../datasources/local/sync_queue_local_datasource.dart';
+import '../models/detalle_iperc_local_model.dart';
 import '../models/matriz_iperc_local_model.dart';
 import '../models/sync_queue_model.dart';
 
@@ -24,15 +26,19 @@ import '../models/sync_queue_model.dart';
 /// - Consultar matrices pendientes.
 /// - Registrar operaciones en la cola de sincronización.
 ///
-/// Cuando el dispositivo recupera conexión, SyncService procesa
-/// las operaciones pendientes y las envía al backend.
+/// Cuando una matriz fue creada completamente offline y se elimina
+/// antes de haber obtenido un ID del servidor, sus operaciones
+/// pendientes y las de sus detalles se cancelan para evitar crear
+/// datos en MySQL que el usuario ya eliminó.
 /// ===============================================================
 class MatrizIpercOfflineRepository {
   MatrizIpercOfflineRepository({
     MatrizIpercLocalDatasource? matrizDatasource,
+    DetalleIpercLocalDatasource? detalleDatasource,
     SyncQueueLocalDatasource? syncQueueDatasource,
     SecureStorageService? secureStorageService,
   }) : _matrizDatasource = matrizDatasource ?? MatrizIpercLocalDatasource(),
+       _detalleDatasource = detalleDatasource ?? DetalleIpercLocalDatasource(),
        _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource(),
        _secureStorageService =
            secureStorageService ?? SecureStorageService.instance;
@@ -42,6 +48,8 @@ class MatrizIpercOfflineRepository {
   // =============================================================
 
   final MatrizIpercLocalDatasource _matrizDatasource;
+
+  final DetalleIpercLocalDatasource _detalleDatasource;
 
   final SyncQueueLocalDatasource _syncQueueDatasource;
 
@@ -53,10 +61,6 @@ class MatrizIpercOfflineRepository {
   // CREAR MATRIZ OFFLINE
   // =============================================================
 
-  /// Crea una nueva matriz IPERC en SQLite.
-  ///
-  /// La matriz queda marcada como no sincronizada y se agrega
-  /// automáticamente una operación CREAR a la cola.
   Future<MatrizIpercLocalModel> createOffline({
     required String institucionId,
     required String sedeId,
@@ -113,39 +117,22 @@ class MatrizIpercOfflineRepository {
 
     final MatrizIpercLocalModel matriz = MatrizIpercLocalModel(
       idLocal: _uuid.v4(),
-
       idServidor: null,
-
       institucionId: institucion,
-
       sedeId: sede,
-
       areaId: area,
-
       procesoId: proceso,
-
       actividadId: actividad,
-
       puestoTrabajoId: puesto,
-
       codigo: _textoOpcional(codigo),
-
       nombre: nombreLimpio,
-
       descripcion: _textoOpcional(descripcion),
-
       fechaEvaluacion: fechaEvaluacion.toUtc(),
-
       estadoMatriz: 'BORRADOR',
-
       sincronizado: false,
-
       eliminado: false,
-
       fechaRegistro: ahora,
-
       fechaActualizacion: null,
-
       fechaSincronizacion: null,
     );
 
@@ -163,8 +150,6 @@ class MatrizIpercOfflineRepository {
       matriz.toMap(),
     );
 
-    // El usuario que realmente creó la matriz queda almacenado
-    // junto con la operación.
     datosCola['usuarioRegistroId'] = usuarioRegistroId;
 
     // -----------------------------------------------------------
@@ -184,14 +169,6 @@ class MatrizIpercOfflineRepository {
   // ACTUALIZAR MATRIZ OFFLINE
   // =============================================================
 
-  /// Actualiza una matriz almacenada localmente.
-  ///
-  /// Puede tratarse de:
-  ///
-  /// - una matriz creada completamente offline;
-  /// - una matriz que anteriormente ya fue sincronizada.
-  ///
-  /// Después de modificarla queda nuevamente como pendiente.
   Future<MatrizIpercLocalModel> updateOffline({
     required String idLocal,
     required String institucionId,
@@ -278,42 +255,24 @@ class MatrizIpercOfflineRepository {
 
     final MatrizIpercLocalModel actualizada = MatrizIpercLocalModel(
       idLocal: existente.idLocal,
-
       idServidor: existente.idServidor,
-
       institucionId: institucion,
-
       sedeId: sede,
-
       areaId: area,
-
       procesoId: proceso,
-
       actividadId: actividad,
-
       puestoTrabajoId: puesto,
-
       codigo: _textoOpcional(codigo) ?? existente.codigo,
-
       nombre: nombreLimpio,
-
       descripcion: _textoOpcional(descripcion),
-
       fechaEvaluacion: fechaEvaluacion?.toUtc() ?? existente.fechaEvaluacion,
-
       estadoMatriz: estadoMatriz.trim().isEmpty
           ? existente.estadoMatriz
           : estadoMatriz.trim(),
-
-      // Cualquier modificación vuelve a dejarla pendiente.
       sincronizado: false,
-
       eliminado: false,
-
       fechaRegistro: existente.fechaRegistro,
-
       fechaActualizacion: ahora,
-
       fechaSincronizacion: existente.fechaSincronizacion,
     );
 
@@ -350,12 +309,22 @@ class MatrizIpercOfflineRepository {
   // ELIMINAR MATRIZ OFFLINE
   // =============================================================
 
-  /// Realiza eliminación lógica de la matriz en SQLite.
+  /// Elimina lógicamente una matriz.
   ///
-  /// Si la matriz ya existe en MySQL, SyncService enviará DELETE.
+  /// CASO A:
   ///
-  /// Si fue creada y eliminada sin haberse sincronizado nunca,
-  /// no existe registro remoto que eliminar.
+  /// La matriz ya tiene idServidor:
+  /// - se marca eliminada localmente;
+  /// - se agrega ELIMINAR a la cola;
+  /// - SyncService eliminará la matriz en el backend.
+  ///
+  /// CASO B:
+  ///
+  /// La matriz nunca obtuvo idServidor:
+  /// - nunca existió de forma confirmada en MySQL;
+  /// - se cancelan sus operaciones PENDIENTE/ERROR;
+  /// - se cancelan operaciones PENDIENTE/ERROR de sus detalles;
+  /// - NO se agrega ELIMINAR al backend.
   Future<void> deleteOffline({required String idLocal}) async {
     final String localId = idLocal.trim();
 
@@ -382,14 +351,28 @@ class MatrizIpercOfflineRepository {
     }
 
     // -----------------------------------------------------------
-    // OBTENER USUARIO AUTENTICADO
+    // VALIDAR SI EXISTE EN EL SERVIDOR
     // -----------------------------------------------------------
+
+    final int? idServidor = _parseIdServidor(matriz.idServidor);
+
+    final bool existeEnServidor = idServidor != null;
+
+    // ===========================================================
+    // MATRIZ QUE NUNCA SE SINCRONIZÓ
+    // ===========================================================
+
+    if (!existeEnServidor) {
+      await _cancelarMatrizNuncaSincronizada(matriz);
+
+      return;
+    }
+
+    // ===========================================================
+    // MATRIZ QUE SÍ EXISTE EN MYSQL
+    // ===========================================================
 
     final int usuarioEliminacionId = await _obtenerUsuarioAutenticadoId();
-
-    // -----------------------------------------------------------
-    // PREPARAR DATOS ANTES DE ELIMINAR
-    // -----------------------------------------------------------
 
     final Map<String, dynamic> datosCola = Map<String, dynamic>.from(
       matriz.toMap(),
@@ -412,6 +395,101 @@ class MatrizIpercOfflineRepository {
       operacion: SyncConstants.eliminar,
       datosPersonalizados: datosCola,
     );
+  }
+
+  // =============================================================
+  // CANCELAR MATRIZ NUNCA SINCRONIZADA
+  // =============================================================
+
+  Future<void> _cancelarMatrizNuncaSincronizada(
+    MatrizIpercLocalModel matriz,
+  ) async {
+    final String localId = matriz.idLocal.trim();
+
+    // -----------------------------------------------------------
+    // NO CANCELAR UNA PETICIÓN EN CURSO
+    // -----------------------------------------------------------
+
+    final bool matrizSincronizando = await _syncQueueDatasource
+        .hasSynchronizingOperation(
+          entidad: SyncConstants.matrizIperc,
+          entidadIdLocal: localId,
+        );
+
+    if (matrizSincronizando) {
+      throw StateError(
+        'La matriz se está sincronizando en este momento. '
+        'Espere a que termine la sincronización antes de eliminarla.',
+      );
+    }
+
+    // -----------------------------------------------------------
+    // OBTENER DETALLES PENDIENTES DE LA MATRIZ
+    // -----------------------------------------------------------
+
+    final List<DetalleIpercLocalModel> detallesPendientes =
+        await _detalleDatasource.listarPendientes();
+
+    final List<DetalleIpercLocalModel> detallesDeMatriz = detallesPendientes
+        .where(
+          (DetalleIpercLocalModel detalle) =>
+              detalle.matrizIdLocal.trim() == localId,
+        )
+        .toList(growable: false);
+
+    // -----------------------------------------------------------
+    // VERIFICAR QUE NINGÚN DETALLE ESTÉ SINCRONIZANDO
+    // -----------------------------------------------------------
+
+    for (final DetalleIpercLocalModel detalle in detallesDeMatriz) {
+      final bool detalleSincronizando = await _syncQueueDatasource
+          .hasSynchronizingOperation(
+            entidad: SyncConstants.detalleIperc,
+            entidadIdLocal: detalle.idLocal,
+          );
+
+      if (detalleSincronizando) {
+        throw StateError(
+          'Uno de los detalles de la matriz se está '
+          'sincronizando en este momento. '
+          'Espere a que termine la sincronización '
+          'antes de eliminar la matriz.',
+        );
+      }
+    }
+
+    // -----------------------------------------------------------
+    // MARCAR MATRIZ ELIMINADA LOCALMENTE
+    // -----------------------------------------------------------
+
+    await _matrizDatasource.deleteLogical(localId);
+
+    // -----------------------------------------------------------
+    // CANCELAR OPERACIONES DE LA MATRIZ
+    // -----------------------------------------------------------
+
+    await _syncQueueDatasource.deletePendingByEntityAndLocalId(
+      entidad: SyncConstants.matrizIperc,
+      entidadIdLocal: localId,
+    );
+
+    // -----------------------------------------------------------
+    // CANCELAR OPERACIONES DE SUS DETALLES
+    // -----------------------------------------------------------
+
+    final List<String> idsDetalles = detallesDeMatriz
+        .map((DetalleIpercLocalModel detalle) => detalle.idLocal)
+        .toList(growable: false);
+
+    if (idsDetalles.isNotEmpty) {
+      await _syncQueueDatasource.deletePendingByEntityAndLocalIds(
+        entidad: SyncConstants.detalleIperc,
+        entidadIdsLocales: idsDetalles,
+      );
+    }
+
+    // No se agrega DELETE:
+    // la matriz nunca tuvo un ID confirmado del servidor.
   }
 
   // =============================================================
@@ -493,13 +571,9 @@ class MatrizIpercOfflineRepository {
 
     final SyncQueueModel queueItem = SyncQueueModel(
       entidad: SyncConstants.matrizIperc,
-
       entidadIdLocal: matriz.idLocal,
-
       operacion: operacionLimpia,
-
       datosJson: jsonEncode(datos),
-
       fechaCreacion: ahora,
     );
 
@@ -510,10 +584,6 @@ class MatrizIpercOfflineRepository {
   // OBTENER USUARIO AUTENTICADO
   // =============================================================
 
-  /// Obtiene desde FlutterSecureStorage el ID del usuario que
-  /// inició sesión.
-  ///
-  /// Nunca utiliza un ID fijo como 1.
   Future<int> _obtenerUsuarioAutenticadoId() async {
     final String texto =
         (await _secureStorageService.getUsuarioId())?.trim() ?? '';
@@ -558,6 +628,26 @@ class MatrizIpercOfflineRepository {
     }
 
     return id.toString();
+  }
+
+  // =============================================================
+  // PARSEAR ID SERVIDOR
+  // =============================================================
+
+  int? _parseIdServidor(String? value) {
+    final String texto = value?.trim() ?? '';
+
+    if (texto.isEmpty) {
+      return null;
+    }
+
+    final int? id = int.tryParse(texto);
+
+    if (id == null || id <= 0) {
+      return null;
+    }
+
+    return id;
   }
 
   // =============================================================
