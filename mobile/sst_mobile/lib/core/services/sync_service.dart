@@ -214,16 +214,12 @@ class SyncService {
         return;
 
       case SyncConstants.actualizar:
-        throw UnsupportedError(
-          'La actualización offline de matrices IPERC '
-          'todavía no está implementada.',
-        );
+        await _updateMatrix(item, data);
+        return;
 
       case SyncConstants.eliminar:
-        throw UnsupportedError(
-          'La eliminación offline de matrices IPERC '
-          'todavía no está implementada.',
-        );
+        await _deleteMatrix(item, data);
+        return;
 
       default:
         throw UnsupportedError(
@@ -254,6 +250,196 @@ class SyncService {
     await _matrizLocalDatasource.markAsSynchronized(
       idLocal: item.entidadIdLocal,
       idServidor: idServidor,
+    );
+  }
+
+  // ============================================================
+  // ACTUALIZAR MATRIZ IPERC
+  // ============================================================
+
+  Future<void> _updateMatrix(
+    SyncQueueModel item,
+    Map<String, dynamic> localData,
+  ) async {
+    final String idLocal = item.entidadIdLocal.trim();
+
+    if (idLocal.isEmpty) {
+      throw ArgumentError(
+        'La actualización de la matriz no contiene '
+        'un identificador local.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // OBTENER ID REAL DEL BACKEND
+    // ----------------------------------------------------------
+
+    int? idServidor = await _matrizLocalDatasource.getServerId(idLocal);
+
+    // ----------------------------------------------------------
+    // FALLBACK:
+    // también intentamos obtenerlo del JSON de la cola.
+    // ----------------------------------------------------------
+
+    idServidor ??= _intOptional(localData['id_servidor']);
+
+    if (idServidor == null || idServidor <= 0) {
+      // ========================================================
+      // CASO IMPORTANTE
+      // ========================================================
+      //
+      // Si la matriz fue creada offline y todavía no existe
+      // en el backend, no podemos ejecutar PUT.
+      //
+      // Primero debe sincronizarse su operación CREAR.
+      // ========================================================
+
+      throw StateError(
+        'La matriz todavía no tiene un ID del servidor. '
+        'Primero debe sincronizarse su creación.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // USUARIO QUE ACTUALIZA
+    // ----------------------------------------------------------
+
+    final int usuarioActualizacionId =
+        _intOptional(localData['usuarioActualizacionId']) ?? 1;
+
+    if (usuarioActualizacionId <= 0) {
+      throw ArgumentError(
+        'El usuario que actualiza la matriz '
+        'es obligatorio.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // CONSTRUIR PAYLOAD DEL BACKEND
+    // ----------------------------------------------------------
+
+    final Map<String, dynamic> apiData = <String, dynamic>{
+      'nombre': localData['nombre']?.toString().trim(),
+
+      'objetivo': _textoOpcional(localData['descripcion']),
+
+      'institucionId': _intFromLocal(
+        localData['institucion_id'],
+        nombre: 'institución',
+        obligatorio: true,
+      ),
+
+      'sedeId': _intFromLocal(
+        localData['sede_id'],
+        nombre: 'sede',
+        obligatorio: true,
+      ),
+
+      'areaId': _intFromLocal(
+        localData['area_id'],
+        nombre: 'área',
+        obligatorio: true,
+      ),
+
+      'puestoTrabajoId': _intFromLocal(
+        localData['puesto_trabajo_id'],
+        nombre: 'puesto de trabajo',
+        obligatorio: true,
+      ),
+
+      'procesoId': _intFromLocal(
+        localData['proceso_id'],
+        nombre: 'proceso',
+        obligatorio: true,
+      ),
+
+      'actividadId': _intFromLocal(
+        localData['actividad_id'],
+        nombre: 'actividad',
+        obligatorio: true,
+      ),
+
+      'estado': !_boolFromLocal(localData['eliminado']),
+
+      'usuarioActualizacionId': usuarioActualizacionId,
+    };
+
+    // ----------------------------------------------------------
+    // PUT AL BACKEND
+    // ----------------------------------------------------------
+
+    await _matrizRemoteDatasource.actualizar(idServidor, apiData);
+
+    // ----------------------------------------------------------
+    // MARCAR LOCAL COMO SINCRONIZADA
+    // ----------------------------------------------------------
+
+    await _matrizLocalDatasource.markAsSynchronized(
+      idLocal: idLocal,
+      idServidor: idServidor.toString(),
+    );
+  }
+
+  // ============================================================
+  // ELIMINAR MATRIZ IPERC
+  // ============================================================
+
+  Future<void> _deleteMatrix(
+    SyncQueueModel item,
+    Map<String, dynamic> localData,
+  ) async {
+    final String idLocal = item.entidadIdLocal.trim();
+
+    if (idLocal.isEmpty) {
+      throw ArgumentError(
+        'La eliminación de la matriz no contiene '
+        'un identificador local.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // OBTENER ID DEL BACKEND
+    // ----------------------------------------------------------
+
+    int? idServidor = await _matrizLocalDatasource.getServerId(idLocal);
+
+    idServidor ??= _intOptional(localData['id_servidor']);
+
+    // ==========================================================
+    // MATRIZ QUE NUNCA LLEGÓ AL SERVIDOR
+    // ==========================================================
+    //
+    // Si se creó offline y se eliminó antes de sincronizarse,
+    // no existe nada que borrar en MySQL.
+    //
+    // La operación puede considerarse terminada.
+    // ==========================================================
+
+    if (idServidor == null || idServidor <= 0) {
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // USUARIO QUE ELIMINA
+    // ----------------------------------------------------------
+
+    final int usuarioEliminacionId =
+        _intOptional(localData['usuarioEliminacionId']) ?? 1;
+
+    if (usuarioEliminacionId <= 0) {
+      throw ArgumentError(
+        'El usuario que elimina la matriz '
+        'es obligatorio.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // DELETE AL BACKEND
+    // ----------------------------------------------------------
+
+    await _matrizRemoteDatasource.eliminar(
+      idServidor,
+      usuarioEliminacionId: usuarioEliminacionId,
     );
   }
 
@@ -395,6 +581,48 @@ class SyncService {
     }
 
     return id;
+  }
+
+  // =============================================================
+  // ENTERO OPCIONAL
+  // =============================================================
+
+  int? _intOptional(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    final String texto = value.toString().trim();
+
+    if (texto.isEmpty) {
+      return null;
+    }
+
+    final int? resultado = int.tryParse(texto);
+
+    if (resultado == null || resultado <= 0) {
+      return null;
+    }
+
+    return resultado;
+  }
+
+  // =============================================================
+  // BOOL DESDE SQLITE / JSON
+  // =============================================================
+
+  bool _boolFromLocal(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt() == 1;
+    }
+
+    final String texto = value?.toString().trim().toLowerCase() ?? '';
+
+    return texto == '1' || texto == 'true' || texto == 'si' || texto == 'sí';
   }
 
   // =============================================================

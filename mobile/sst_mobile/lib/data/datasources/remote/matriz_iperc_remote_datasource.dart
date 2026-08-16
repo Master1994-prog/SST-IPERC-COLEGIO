@@ -26,6 +26,21 @@ class MatrizIpercRemoteDatasource {
         .toList();
   }
 
+  Future<void> eliminar(int id, {required int usuarioEliminacionId}) async {
+    if (id <= 0) {
+      throw ArgumentError('El identificador de la matriz no es válido.');
+    }
+
+    if (usuarioEliminacionId <= 0) {
+      throw ArgumentError('El usuario que elimina la matriz es obligatorio.');
+    }
+
+    await _apiClient.delete(
+      '${ApiConfig.matricesIpercEndpoint}/$id'
+      '?usuarioId=$usuarioEliminacionId',
+    );
+  }
+
   Future<MatrizIpercModel> obtenerMatrizPorId(int id) async {
     final Response<dynamic> response = await _apiClient.get(
       '${ApiConfig.matricesIpercEndpoint}/$id',

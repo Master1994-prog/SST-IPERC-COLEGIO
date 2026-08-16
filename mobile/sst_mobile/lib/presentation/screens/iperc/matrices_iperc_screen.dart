@@ -8,7 +8,10 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_offline_repository.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../../providers/detalle_iperc_offline_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../matriz_iperc/detalles_iperc_offline_screen.dart';
+import 'editar_matriz_iperc_offline_screen.dart';
+import 'editar_matriz_iperc_screen.dart';
 import 'matriz_iperc_detail_screen.dart';
 import 'nueva_matriz_iperc_screen.dart';
 
@@ -16,15 +19,30 @@ import 'nueva_matriz_iperc_screen.dart';
 /// MATRICES IPERC
 /// ===============================================================
 ///
-/// Lista las matrices disponibles tanto en:
+/// Pantalla principal del módulo de matrices IPERC.
 ///
-/// - Backend.
-/// - SQLite.
+/// Permite trabajar con:
 ///
-/// Esto permite continuar trabajando cuando no existe conexión.
+/// - Matrices almacenadas en el servidor.
+/// - Matrices almacenadas en SQLite.
+/// - Creación online/offline.
+/// - Edición online.
+/// - Eliminación online.
+/// - Edición offline.
+/// - Eliminación offline.
+/// - Sincronización automática.
 ///
-/// Las matrices creadas localmente se abren utilizando su idLocal.
-/// Las matrices provenientes del backend utilizan su idServidor.
+/// PERMISOS:
+///
+/// Gestionar matrices:
+/// - SUPER_ADMIN
+/// - ADMIN
+/// - COORDINADOR
+/// - SUP_TITULAR
+/// - SUP_SUPLENTE
+///
+/// Eliminar matrices:
+/// - SOLO SUPER_ADMIN
 /// ===============================================================
 class MatricesIpercScreen extends StatefulWidget {
   const MatricesIpercScreen({required this.rol, super.key});
@@ -32,14 +50,26 @@ class MatricesIpercScreen extends StatefulWidget {
   final String rol;
 
   @override
-  State<MatricesIpercScreen> createState() => _MatricesIpercScreenState();
+  State<MatricesIpercScreen> createState() {
+    return _MatricesIpercScreenState();
+  }
 }
 
 class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
-  bool get _puedeGestionarMatrices =>
-      RolePermissions.puedeGestionarMatrices(widget.rol);
   // =============================================================
-  // REPOSITORIES
+  // PERMISOS
+  // =============================================================
+
+  bool get _puedeGestionarMatrices {
+    return RolePermissions.puedeGestionarMatrices(widget.rol);
+  }
+
+  bool get _puedeEliminarMatrices {
+    return RolePermissions.puedeEliminarRegistros(widget.rol);
+  }
+
+  // =============================================================
+  // REPOSITORIOS
   // =============================================================
 
   final MatrizIpercRepository _repository = MatrizIpercRepository();
@@ -71,7 +101,7 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   }
 
   // =============================================================
-  // CARGAR TODOS
+  // CARGAR MATRICES
   // =============================================================
 
   Future<void> _cargarMatrices() async {
@@ -82,9 +112,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       });
     }
 
-    // -----------------------------------------------------------
-    // 1. SIEMPRE CARGAMOS SQLITE
-    // -----------------------------------------------------------
+    // ===========================================================
+    // 1. SQLITE
+    // ===========================================================
 
     try {
       final List<MatrizIpercLocalModel> locales = await _offlineRepository
@@ -99,9 +129,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       debugPrint('Error cargando matrices locales: $error');
     }
 
-    // -----------------------------------------------------------
-    // 2. INTENTAMOS CARGAR EL BACKEND
-    // -----------------------------------------------------------
+    // ===========================================================
+    // 2. BACKEND
+    // ===========================================================
 
     try {
       final List<MatrizIpercModel> remotas = await _repository
@@ -121,7 +151,8 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       }
 
       String mensaje =
-          'No se pudieron actualizar las matrices desde el servidor.';
+          'No se pudieron actualizar las matrices '
+          'desde el servidor.';
 
       if (error.response?.statusCode == 401) {
         mensaje = 'La sesión venció. Inicie sesión nuevamente.';
@@ -137,15 +168,6 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
       setState(() {
         _mensajeErrorServidor = mensaje;
-
-        // -------------------------------------------------------
-        // IMPORTANTE
-        // -------------------------------------------------------
-        //
-        // No borramos _matricesServidor.
-        //
-        // Si ya existían datos cargados anteriormente durante
-        // esta sesión, los conservamos.
       });
     } catch (error) {
       if (!mounted) {
@@ -180,6 +202,10 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   // =============================================================
 
   Future<void> _abrirNuevaMatriz() async {
+    if (!_puedeGestionarMatrices) {
+      return;
+    }
+
     final bool? creada = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) {
@@ -189,6 +215,12 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     );
 
     if (!mounted || creada != true) {
+      return;
+    }
+
+    await _notificarCambioLocal();
+
+    if (!mounted) {
       return;
     }
 
@@ -208,8 +240,140 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       ),
     );
 
-    if (mounted) {
+    if (!mounted) {
+      return;
+    }
+
+    await _cargarMatrices();
+  }
+
+  // =============================================================
+  // EDITAR MATRIZ SERVIDOR
+  // =============================================================
+
+  Future<void> _editarMatrizServidor(MatrizIpercModel matriz) async {
+    if (!_puedeGestionarMatrices) {
+      _mostrarMensaje(
+        'No tiene permisos para editar matrices IPERC.',
+        esError: true,
+      );
+
+      return;
+    }
+
+    final bool? actualizada = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) {
+          return EditarMatrizIpercScreen(matriz: matriz);
+        },
+      ),
+    );
+
+    if (!mounted || actualizada != true) {
+      return;
+    }
+
+    await _cargarMatrices();
+  }
+
+  // =============================================================
+  // ELIMINAR MATRIZ SERVIDOR
+  // =============================================================
+
+  Future<void> _eliminarMatrizServidor(MatrizIpercModel matriz) async {
+    if (!_puedeEliminarMatrices) {
+      _mostrarMensaje(
+        'Solo el Super Administrador '
+        'puede eliminar matrices IPERC.',
+        esError: true,
+      );
+
+      return;
+    }
+
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Eliminar matriz IPERC'),
+          content: Text(
+            '¿Deseas eliminar esta matriz?\n\n'
+            '${matriz.codigo}\n'
+            '${matriz.nombre}\n\n'
+            'La eliminación será lógica y '
+            'la matriz quedará inactiva.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmar != true) {
+      return;
+    }
+
+    setState(() {
+      _cargando = true;
+    });
+
+    try {
+      await _repository.eliminar(
+        matriz.id,
+
+        // =====================================================
+        // TEMPORAL
+        // =====================================================
+        //
+        // Después reemplazaremos este 1 por el ID real
+        // del usuario autenticado.
+        usuarioEliminacionId: 1,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje('Matriz IPERC eliminada correctamente.');
+
       await _cargarMatrices();
+    } on DioException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        _obtenerMensajeDio(
+          error,
+          predeterminado: 'No se pudo eliminar la matriz IPERC.',
+        ),
+        esError: true,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(_limpiarMensaje(error), esError: true);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+        });
+      }
     }
   }
 
@@ -223,18 +387,13 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) {
-          // -----------------------------------------------------
-          // Creamos el provider específicamente para la pantalla
-          // offline.
-          // -----------------------------------------------------
-
           return ChangeNotifierProvider<DetalleIpercOfflineProvider>(
-            create: (_) => DetalleIpercOfflineProvider(),
+            create: (_) {
+              return DetalleIpercOfflineProvider();
+            },
             child: DetallesIpercOfflineScreen(
               matrizIdLocal: matriz.idLocal,
-
               matrizIdServidor: matrizIdServidor,
-
               nombreMatriz: matriz.nombre,
             ),
           );
@@ -242,8 +401,157 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       ),
     );
 
-    if (mounted) {
+    if (!mounted) {
+      return;
+    }
+
+    await _cargarMatrices();
+  }
+
+  // =============================================================
+  // EDITAR MATRIZ LOCAL
+  // =============================================================
+
+  Future<void> _editarMatrizLocal(MatrizIpercLocalModel matriz) async {
+    if (!_puedeGestionarMatrices) {
+      _mostrarMensaje(
+        'No tiene permisos para editar matrices IPERC.',
+        esError: true,
+      );
+
+      return;
+    }
+
+    final bool? actualizada = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) {
+          return EditarMatrizIpercOfflineScreen(matriz: matriz);
+        },
+      ),
+    );
+
+    if (!mounted || actualizada != true) {
+      return;
+    }
+
+    await _notificarCambioLocal();
+
+    if (!mounted) {
+      return;
+    }
+
+    await _cargarMatrices();
+  }
+
+  // =============================================================
+  // ELIMINAR MATRIZ LOCAL
+  // =============================================================
+
+  Future<void> _eliminarMatrizLocal(MatrizIpercLocalModel matriz) async {
+    if (!_puedeEliminarMatrices) {
+      _mostrarMensaje(
+        'Solo el Super Administrador '
+        'puede eliminar matrices IPERC.',
+        esError: true,
+      );
+
+      return;
+    }
+
+    final String codigo = matriz.codigo?.trim().isNotEmpty == true
+        ? matriz.codigo!.trim()
+        : 'SIN CÓDIGO';
+
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Eliminar matriz offline'),
+          content: Text(
+            '¿Deseas eliminar esta matriz '
+            'del dispositivo?\n\n'
+            '$codigo\n'
+            '${matriz.nombre}\n\n'
+            'La operación quedará pendiente '
+            'de sincronización.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmar != true) {
+      return;
+    }
+
+    try {
+      await _offlineRepository.deleteOffline(
+        idLocal: matriz.idLocal,
+
+        // =====================================================
+        // TEMPORAL
+        // =====================================================
+        //
+        // Después reemplazaremos este valor por
+        // el ID del usuario autenticado.
+        usuarioEliminacionId: 1,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await _notificarCambioLocal();
+
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(
+        'Matriz eliminada del dispositivo. '
+        'Se sincronizará cuando exista conexión.',
+      );
+
       await _cargarMatrices();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _mostrarMensaje(_limpiarMensaje(error), esError: true);
+    }
+  }
+
+  // =============================================================
+  // NOTIFICAR CAMBIO LOCAL
+  // =============================================================
+
+  Future<void> _notificarCambioLocal() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      await context.read<SyncProvider>().notifyLocalChange();
+    } catch (error) {
+      debugPrint(
+        'No se pudo actualizar el estado '
+        'de sincronización: $error',
+      );
     }
   }
 
@@ -271,10 +579,6 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   // EVITAR DUPLICADOS
   // =============================================================
 
-  /// Una matriz local sincronizada puede existir también en
-  /// la respuesta del backend.
-  ///
-  /// En ese caso no debemos mostrar dos tarjetas iguales.
   bool _existeEnServidor(MatrizIpercLocalModel matrizLocal) {
     final int? idServidor = _convertirIdServidor(matrizLocal.idServidor);
 
@@ -282,9 +586,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       return false;
     }
 
-    return _matricesServidor.any(
-      (MatrizIpercModel matriz) => matriz.id == idServidor,
-    );
+    return _matricesServidor.any((MatrizIpercModel matriz) {
+      return matriz.id == idServidor;
+    });
   }
 
   // =============================================================
@@ -293,16 +597,21 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
   List<MatrizIpercLocalModel> get _matricesLocalesVisibles {
     return _matricesLocales.where((MatrizIpercLocalModel matriz) {
+      if (matriz.eliminado) {
+        return false;
+      }
+
       // -------------------------------------------------------
-      // Si ya está sincronizada Y ya viene desde el backend,
-      // usamos solamente la versión del servidor.
+      // Si una matriz local ya está sincronizada y también
+      // aparece en el servidor, mostramos solamente
+      // la versión del servidor.
       // -------------------------------------------------------
 
       if (matriz.sincronizado && _existeEnServidor(matriz)) {
         return false;
       }
 
-      return !matriz.eliminado;
+      return true;
     }).toList();
   }
 
@@ -354,17 +663,17 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
     final bool noHayMatrices = locales.isEmpty && _matricesServidor.isEmpty;
 
-    // -----------------------------------------------------------
+    // ===========================================================
     // CARGA INICIAL
-    // -----------------------------------------------------------
+    // ===========================================================
 
     if (_cargando && noHayMatrices) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // -----------------------------------------------------------
+    // ===========================================================
     // SIN DATOS
-    // -----------------------------------------------------------
+    // ===========================================================
 
     if (noHayMatrices) {
       return ListView(
@@ -392,7 +701,8 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
           const SizedBox(height: 10),
 
           const Text(
-            'Presione “Nueva matriz” para registrar una matriz IPERC.',
+            'Presione “Nueva matriz” para '
+            'registrar una matriz IPERC.',
             textAlign: TextAlign.center,
           ),
 
@@ -409,19 +719,20 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       );
     }
 
-    // -----------------------------------------------------------
+    // ===========================================================
     // LISTADO
-    // -----------------------------------------------------------
+    // ===========================================================
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       children: <Widget>[
         // =======================================================
-        // MENSAJE OFFLINE
+        // MENSAJE OFFLINE / SERVIDOR
         // =======================================================
         if (_mensajeErrorServidor != null) ...<Widget>[
           _construirAvisoServidor(),
+
           const SizedBox(height: 16),
         ],
 
@@ -429,42 +740,46 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         // MATRICES LOCALES
         // =======================================================
         if (locales.isNotEmpty) ...<Widget>[
-          _TituloSeccion(
+          const _TituloSeccion(
             titulo: 'Matrices del dispositivo',
-            subtitulo: 'Disponibles para trabajar sin conexión.',
+            subtitulo:
+                'Disponibles para trabajar '
+                'sin conexión.',
             icono: Icons.phone_android_outlined,
           ),
 
           const SizedBox(height: 10),
 
-          ...locales.map(
-            (MatrizIpercLocalModel matriz) => Padding(
+          ...locales.map((MatrizIpercLocalModel matriz) {
+            return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: _construirMatrizLocal(matriz),
-            ),
-          ),
+            );
+          }),
 
           if (_matricesServidor.isNotEmpty) const SizedBox(height: 8),
         ],
 
         // =======================================================
-        // MATRICES DEL SERVIDOR
+        // MATRICES SERVIDOR
         // =======================================================
         if (_matricesServidor.isNotEmpty) ...<Widget>[
-          _TituloSeccion(
+          const _TituloSeccion(
             titulo: 'Matrices del servidor',
-            subtitulo: 'Matrices registradas y sincronizadas.',
+            subtitulo:
+                'Matrices registradas '
+                'y sincronizadas.',
             icono: Icons.cloud_done_outlined,
           ),
 
           const SizedBox(height: 10),
 
-          ..._matricesServidor.map(
-            (MatrizIpercModel matriz) => Padding(
+          ..._matricesServidor.map((MatrizIpercModel matriz) {
+            return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: _construirMatrizServidor(matriz),
-            ),
-          ),
+            );
+          }),
         ],
       ],
     );
@@ -513,7 +828,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _abrirMatrizLocal(matriz),
+        onTap: () {
+          _abrirMatrizLocal(matriz);
+        },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -556,6 +873,7 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
                     if (matriz.descripcion?.trim().isNotEmpty ==
                         true) ...<Widget>[
                       const SizedBox(height: 6),
+
                       Text(
                         matriz.descripcion!,
                         maxLines: 2,
@@ -578,10 +896,16 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
                               : 'Sincronizada',
                         ),
 
-                        _EstadoChip(
+                        const _EstadoChip(
                           icono: Icons.phone_android_outlined,
                           texto: 'Disponible offline',
                         ),
+
+                        if (matriz.idServidor?.trim().isNotEmpty == true)
+                          _EstadoChip(
+                            icono: Icons.link_outlined,
+                            texto: 'Servidor #${matriz.idServidor}',
+                          ),
                       ],
                     ),
                   ],
@@ -590,7 +914,49 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
               const SizedBox(width: 8),
 
-              const Icon(Icons.chevron_right),
+              // =================================================
+              // MENÚ LOCAL
+              // =================================================
+              if (_puedeGestionarMatrices || _puedeEliminarMatrices)
+                PopupMenuButton<String>(
+                  tooltip: 'Opciones de matriz',
+                  onSelected: (String opcion) {
+                    switch (opcion) {
+                      case 'editar':
+                        _editarMatrizLocal(matriz);
+                        break;
+
+                      case 'eliminar':
+                        _eliminarMatrizLocal(matriz);
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return <PopupMenuEntry<String>>[
+                      if (_puedeGestionarMatrices)
+                        const PopupMenuItem<String>(
+                          value: 'editar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Editar offline'),
+                          ),
+                        ),
+
+                      if (_puedeEliminarMatrices)
+                        const PopupMenuItem<String>(
+                          value: 'eliminar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Eliminar offline'),
+                          ),
+                        ),
+                    ];
+                  },
+                )
+              else
+                const Icon(Icons.chevron_right),
             ],
           ),
         ),
@@ -606,7 +972,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _abrirMatrizServidor(matriz),
+        onTap: () {
+          _abrirMatrizServidor(matriz);
+        },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -647,6 +1015,7 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
                     if (matriz.objetivo != null &&
                         matriz.objetivo!.trim().isNotEmpty) ...<Widget>[
                       const SizedBox(height: 6),
+
                       Text(
                         matriz.objetivo!,
                         maxLines: 2,
@@ -679,18 +1048,156 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
               const SizedBox(width: 8),
 
-              const Icon(Icons.chevron_right),
+              // =================================================
+              // MENÚ SERVIDOR
+              // =================================================
+              if (_puedeGestionarMatrices || _puedeEliminarMatrices)
+                PopupMenuButton<String>(
+                  tooltip: 'Opciones de matriz',
+                  onSelected: (String opcion) {
+                    switch (opcion) {
+                      case 'editar':
+                        _editarMatrizServidor(matriz);
+                        break;
+
+                      case 'eliminar':
+                        _eliminarMatrizServidor(matriz);
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) {
+                    return <PopupMenuEntry<String>>[
+                      if (_puedeGestionarMatrices)
+                        const PopupMenuItem<String>(
+                          value: 'editar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Editar'),
+                          ),
+                        ),
+
+                      if (_puedeEliminarMatrices)
+                        const PopupMenuItem<String>(
+                          value: 'eliminar',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline),
+                            title: Text('Eliminar'),
+                          ),
+                        ),
+                    ];
+                  },
+                )
+              else
+                const Icon(Icons.chevron_right),
             ],
           ),
         ),
       ),
     );
   }
+
+  // =============================================================
+  // MENSAJE DIO
+  // =============================================================
+
+  String _obtenerMensajeDio(
+    DioException error, {
+    required String predeterminado,
+  }) {
+    final dynamic contenido = error.response?.data;
+
+    if (contenido is Map) {
+      final Map<String, dynamic> respuesta = Map<String, dynamic>.from(
+        contenido,
+      );
+
+      final dynamic mensaje =
+          respuesta['mensaje'] ??
+          respuesta['message'] ??
+          respuesta['title'] ??
+          respuesta['detail'];
+
+      if (mensaje != null && mensaje.toString().trim().isNotEmpty) {
+        return mensaje.toString().trim();
+      }
+
+      final dynamic errores = respuesta['errors'];
+
+      if (errores is Map && errores.isNotEmpty) {
+        final List<String> mensajes = <String>[];
+
+        for (final dynamic valor in errores.values) {
+          if (valor is List) {
+            mensajes.addAll(
+              valor.map((dynamic item) {
+                return item.toString();
+              }),
+            );
+          } else if (valor != null) {
+            mensajes.add(valor.toString());
+          }
+        }
+
+        if (mensajes.isNotEmpty) {
+          return mensajes.join('\n');
+        }
+      }
+    }
+
+    if (_esErrorConexion(error)) {
+      return 'No se pudo conectar con el servidor.';
+    }
+
+    return error.message ?? predeterminado;
+  }
+
+  // =============================================================
+  // LIMPIAR ERROR
+  // =============================================================
+
+  String _limpiarMensaje(Object error) {
+    String mensaje = error.toString().trim();
+
+    const List<String> prefijos = <String>[
+      'Exception: ',
+      'FormatException: ',
+      'StateError: ',
+      'Bad state: ',
+      'ArgumentError: ',
+      'Unsupported operation: ',
+    ];
+
+    for (final String prefijo in prefijos) {
+      if (mensaje.startsWith(prefijo)) {
+        mensaje = mensaje.substring(prefijo.length);
+      }
+    }
+
+    return mensaje.isEmpty ? 'Ocurrió un error inesperado.' : mensaje;
+  }
+
+  // =============================================================
+  // MOSTRAR MENSAJE
+  // =============================================================
+
+  void _mostrarMensaje(String mensaje, {bool esError = false}) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(mensaje),
+          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
+        ),
+      );
+  }
 }
 
 /// ===============================================================
 /// TÍTULO DE SECCIÓN
 /// ===============================================================
+
 class _TituloSeccion extends StatelessWidget {
   const _TituloSeccion({
     required this.titulo,
@@ -736,6 +1243,7 @@ class _TituloSeccion extends StatelessWidget {
 /// ===============================================================
 /// CHIP DE ESTADO
 /// ===============================================================
+
 class _EstadoChip extends StatelessWidget {
   const _EstadoChip({required this.icono, required this.texto});
 
