@@ -42,8 +42,7 @@ class DetalleIpercFormScreen extends StatefulWidget {
   bool get esEdicion => detalle != null;
 
   @override
-  State<DetalleIpercFormScreen> createState() =>
-      _DetalleIpercFormScreenState();
+  State<DetalleIpercFormScreen> createState() => _DetalleIpercFormScreenState();
 }
 
 class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
@@ -116,11 +115,11 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       text: detalle?.responsableImplementacionId ?? '',
     );
 
-    _peligroIdSeleccionado =
-        int.tryParse(detalle?.peligroId?.trim() ?? '');
+    _peligroIdSeleccionado = int.tryParse(detalle?.peligroId?.trim() ?? '');
 
-    _consecuenciaIdSeleccionada =
-        int.tryParse(detalle?.consecuenciaId?.trim() ?? '');
+    _consecuenciaIdSeleccionada = int.tryParse(
+      detalle?.consecuenciaId?.trim() ?? '',
+    );
 
     if (detalle != null) {
       _probabilidadInicialId = detalle.probabilidadInicialId;
@@ -167,8 +166,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   }
 
   Future<void> _cargarCatalogos() async {
-    final DetalleIpercCatalogosProvider catalogos =
-        context.read<DetalleIpercCatalogosProvider>();
+    final DetalleIpercCatalogosProvider catalogos = context
+        .read<DetalleIpercCatalogosProvider>();
 
     await catalogos.cargar();
 
@@ -181,9 +180,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     setState(() {});
   }
 
-  void _resolverIdsCatalogo(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  void _resolverIdsCatalogo(DetalleIpercCatalogosProvider catalogos) {
     // ===========================================================
     // PROBABILIDAD INICIAL
     // ===========================================================
@@ -196,8 +193,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     // encontrado por ese ID tiene también el mismo valor 1..5
     // que estaba almacenado localmente.
 
-    final ProbabilidadModel? probabilidadPorId =
-        catalogos.buscarProbabilidadPorId(_probabilidadInicialId);
+    final ProbabilidadModel? probabilidadPorId = catalogos
+        .buscarProbabilidadPorId(_probabilidadInicialId);
 
     final bool probabilidadIdConfiable =
         probabilidadPorId != null &&
@@ -207,8 +204,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       _probabilidadInicialId = probabilidadPorId.id;
       _probabilidadInicialValor = probabilidadPorId.valor;
     } else {
-      final ProbabilidadModel? porValor =
-          catalogos.buscarProbabilidadPorValor(_probabilidadInicialValor);
+      final ProbabilidadModel? porValor = catalogos.buscarProbabilidadPorValor(
+        _probabilidadInicialValor,
+      );
 
       if (porValor != null) {
         _probabilidadInicialId = porValor.id;
@@ -222,8 +220,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     // SEVERIDAD INICIAL
     // ===========================================================
 
-    final SeveridadModel? severidadPorId =
-        catalogos.buscarSeveridadPorId(_severidadInicialId);
+    final SeveridadModel? severidadPorId = catalogos.buscarSeveridadPorId(
+      _severidadInicialId,
+    );
 
     final bool severidadIdConfiable =
         severidadPorId != null &&
@@ -233,8 +232,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       _severidadInicialId = severidadPorId.id;
       _severidadInicialValor = severidadPorId.valor;
     } else {
-      final SeveridadModel? porValor =
-          catalogos.buscarSeveridadPorValor(_severidadInicialValor);
+      final SeveridadModel? porValor = catalogos.buscarSeveridadPorValor(
+        _severidadInicialValor,
+      );
 
       if (porValor != null) {
         _severidadInicialId = porValor.id;
@@ -259,8 +259,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     // ===========================================================
 
     if (_probabilidadResidualValor != null) {
-      final ProbabilidadModel? residualPorId =
-          catalogos.buscarProbabilidadPorId(_probabilidadResidualId);
+      final ProbabilidadModel? residualPorId = catalogos
+          .buscarProbabilidadPorId(_probabilidadResidualId);
 
       final bool residualIdConfiable =
           residualPorId != null &&
@@ -270,10 +270,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
         _probabilidadResidualId = residualPorId.id;
         _probabilidadResidualValor = residualPorId.valor;
       } else {
-        final ProbabilidadModel? porValor =
-            catalogos.buscarProbabilidadPorValor(
-          _probabilidadResidualValor!,
-        );
+        final ProbabilidadModel? porValor = catalogos
+            .buscarProbabilidadPorValor(_probabilidadResidualValor!);
 
         if (porValor != null) {
           _probabilidadResidualId = porValor.id;
@@ -291,8 +289,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     // ===========================================================
 
     if (_severidadResidualValor != null) {
-      final SeveridadModel? residualPorId =
-          catalogos.buscarSeveridadPorId(_severidadResidualId);
+      final SeveridadModel? residualPorId = catalogos.buscarSeveridadPorId(
+        _severidadResidualId,
+      );
 
       final bool residualIdConfiable =
           residualPorId != null &&
@@ -302,8 +301,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
         _severidadResidualId = residualPorId.id;
         _severidadResidualValor = residualPorId.valor;
       } else {
-        final SeveridadModel? porValor =
-            catalogos.buscarSeveridadPorValor(_severidadResidualValor!);
+        final SeveridadModel? porValor = catalogos.buscarSeveridadPorValor(
+          _severidadResidualValor!,
+        );
 
         if (porValor != null) {
           _severidadResidualId = porValor.id;
@@ -491,8 +491,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return;
     }
 
-    final DetalleIpercCatalogosProvider catalogos =
-        context.read<DetalleIpercCatalogosProvider>();
+    final DetalleIpercCatalogosProvider catalogos = context
+        .read<DetalleIpercCatalogosProvider>();
 
     if (!catalogos.tieneCatalogos) {
       _mostrarMensaje(
@@ -525,17 +525,20 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       return;
     }
 
-    final PeligroModel? peligro =
-        catalogos.buscarPeligroPorId(_peligroIdSeleccionado);
+    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
+      _peligroIdSeleccionado,
+    );
 
-    final ConsecuenciaModel? consecuencia =
-        catalogos.buscarConsecuenciaPorId(_consecuenciaIdSeleccionada);
+    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
+      _consecuenciaIdSeleccionada,
+    );
 
-    final ProbabilidadModel? probabilidadInicial =
-        catalogos.buscarProbabilidadPorId(_probabilidadInicialId);
+    final ProbabilidadModel? probabilidadInicial = catalogos
+        .buscarProbabilidadPorId(_probabilidadInicialId);
 
-    final SeveridadModel? severidadInicial =
-        catalogos.buscarSeveridadPorId(_severidadInicialId);
+    final SeveridadModel? severidadInicial = catalogos.buscarSeveridadPorId(
+      _severidadInicialId,
+    );
 
     if (peligro == null ||
         consecuencia == null ||
@@ -552,11 +555,11 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     SeveridadModel? severidadResidual;
 
     if (_registrarEvaluacionResidual) {
-      probabilidadResidual =
-          catalogos.buscarProbabilidadPorId(_probabilidadResidualId);
+      probabilidadResidual = catalogos.buscarProbabilidadPorId(
+        _probabilidadResidualId,
+      );
 
-      severidadResidual =
-          catalogos.buscarSeveridadPorId(_severidadResidualId);
+      severidadResidual = catalogos.buscarSeveridadPorId(_severidadResidualId);
 
       if (probabilidadResidual == null || severidadResidual == null) {
         _mostrarMensaje(
@@ -567,8 +570,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       }
     }
 
-    final DetalleIpercOfflineProvider provider =
-        context.read<DetalleIpercOfflineProvider>();
+    final DetalleIpercOfflineProvider provider = context
+        .read<DetalleIpercOfflineProvider>();
 
     final DetalleIpercLocalModel? anterior = widget.detalle;
     final DateTime ahora = DateTime.now().toUtc();
@@ -584,8 +587,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       idLocal: anterior?.idLocal ?? _crearIdLocal(),
       idServidor: anterior?.idServidor,
       matrizIdLocal: matrizIdLocal,
-      matrizIdServidor:
-          anterior?.matrizIdServidor ?? widget.matrizIdServidor,
+      matrizIdServidor: anterior?.matrizIdServidor ?? widget.matrizIdServidor,
 
       item: int.parse(_itemController.text.trim()),
       tarea: _tareaController.text.trim(),
@@ -616,8 +618,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
       // Se conservan las relaciones previamente seleccionadas.
       controlIds: anterior?.controlIds ?? const <String>[],
-      equipoProteccionIds:
-          anterior?.equipoProteccionIds ?? const <String>[],
+      equipoProteccionIds: anterior?.equipoProteccionIds ?? const <String>[],
 
       controlDescripcion: _textoOpcional(_controlController.text),
 
@@ -626,17 +627,21 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           ? anterior?.evaluacionResidualId
           : null,
 
-      probabilidadResidualId:
-          _registrarEvaluacionResidual ? probabilidadResidual!.id : null,
+      probabilidadResidualId: _registrarEvaluacionResidual
+          ? probabilidadResidual!.id
+          : null,
 
-      severidadResidualId:
-          _registrarEvaluacionResidual ? severidadResidual!.id : null,
+      severidadResidualId: _registrarEvaluacionResidual
+          ? severidadResidual!.id
+          : null,
 
-      frecuenciaResidual:
-          _registrarEvaluacionResidual ? probabilidadResidual!.valor : null,
+      frecuenciaResidual: _registrarEvaluacionResidual
+          ? probabilidadResidual!.valor
+          : null,
 
-      severidadResidual:
-          _registrarEvaluacionResidual ? severidadResidual!.valor : null,
+      severidadResidual: _registrarEvaluacionResidual
+          ? severidadResidual!.valor
+          : null,
 
       valorRiesgoResidual: riesgoResidual,
 
@@ -644,8 +649,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           ? null
           : _obtenerNivelRiesgo(riesgoResidual),
 
-      responsableImplementacionId:
-          _textoOpcional(_responsableController.text),
+      responsableImplementacionId: _textoOpcional(_responsableController.text),
 
       fechaCompromiso: _fechaCompromiso,
       fechaImplementacion: _fechaImplementacion,
@@ -687,30 +691,27 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     Navigator.of(context).pop(true);
   }
 
-  void _mostrarMensaje(
-    String mensaje, {
-    bool esError = false,
-  }) {
+  void _mostrarMensaje(String mensaje, {bool esError = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(mensaje),
-          backgroundColor:
-              esError ? Colors.red.shade700 : Colors.green.shade700,
+          backgroundColor: esError
+              ? Colors.red.shade700
+              : Colors.green.shade700,
         ),
       );
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool guardando =
-        context.select<DetalleIpercOfflineProvider, bool>(
+    final bool guardando = context.select<DetalleIpercOfflineProvider, bool>(
       (DetalleIpercOfflineProvider provider) => provider.guardando,
     );
 
-    final DetalleIpercCatalogosProvider catalogos =
-        context.watch<DetalleIpercCatalogosProvider>();
+    final DetalleIpercCatalogosProvider catalogos = context
+        .watch<DetalleIpercCatalogosProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -722,18 +723,18 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
             tooltip: 'Actualizar catálogos',
             onPressed:
                 catalogos.cargando || catalogos.actualizandoRemoto || guardando
-                    ? null
-                    : () async {
-                        await catalogos.recargar();
+                ? null
+                : () async {
+                    await catalogos.recargar();
 
-                        if (!mounted) {
-                          return;
-                        }
+                    if (!mounted) {
+                      return;
+                    }
 
-                        _resolverIdsCatalogo(catalogos);
+                    _resolverIdsCatalogo(catalogos);
 
-                        setState(() {});
-                      },
+                    setState(() {});
+                  },
             icon: catalogos.actualizandoRemoto
                 ? const SizedBox(
                     width: 20,
@@ -747,10 +748,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       body: SafeArea(
         child: catalogos.cargando && !catalogos.cargado
             ? const Center(child: CircularProgressIndicator())
-            : _construirFormulario(
-                catalogos: catalogos,
-                guardando: guardando,
-              ),
+            : _construirFormulario(catalogos: catalogos, guardando: guardando),
       ),
     );
   }
@@ -879,17 +877,17 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
               prefixIcon: Icon(Icons.report_problem_outlined),
               border: OutlineInputBorder(),
             ),
-            items: catalogos.consecuencias.map(
-              (ConsecuenciaModel consecuencia) {
-                return DropdownMenuItem<int>(
-                  value: consecuencia.id,
-                  child: Text(
-                    consecuencia.nombreCompleto,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              },
-            ).toList(),
+            items: catalogos.consecuencias.map((
+              ConsecuenciaModel consecuencia,
+            ) {
+              return DropdownMenuItem<int>(
+                value: consecuencia.id,
+                child: Text(
+                  consecuencia.nombreCompleto,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              );
+            }).toList(),
             onChanged: guardando
                 ? null
                 : (int? value) {
@@ -923,19 +921,17 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
               prefixIcon: Icon(Icons.trending_up),
               border: OutlineInputBorder(),
             ),
-            items: catalogos.probabilidades.map(
-              (ProbabilidadModel item) {
-                return DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(item.textoSeleccion),
-                );
-              },
-            ).toList(),
+            items: catalogos.probabilidades.map((ProbabilidadModel item) {
+              return DropdownMenuItem<int>(
+                value: item.id,
+                child: Text(item.textoSeleccion),
+              );
+            }).toList(),
             onChanged: guardando
                 ? null
                 : (int? id) {
-                    final ProbabilidadModel? item =
-                        catalogos.buscarProbabilidadPorId(id);
+                    final ProbabilidadModel? item = catalogos
+                        .buscarProbabilidadPorId(id);
 
                     if (item == null) {
                       return;
@@ -960,19 +956,18 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
               prefixIcon: Icon(Icons.priority_high),
               border: OutlineInputBorder(),
             ),
-            items: catalogos.severidades.map(
-              (SeveridadModel item) {
-                return DropdownMenuItem<int>(
-                  value: item.id,
-                  child: Text(item.textoSeleccion),
-                );
-              },
-            ).toList(),
+            items: catalogos.severidades.map((SeveridadModel item) {
+              return DropdownMenuItem<int>(
+                value: item.id,
+                child: Text(item.textoSeleccion),
+              );
+            }).toList(),
             onChanged: guardando
                 ? null
                 : (int? id) {
-                    final SeveridadModel? item =
-                        catalogos.buscarSeveridadPorId(id);
+                    final SeveridadModel? item = catalogos.buscarSeveridadPorId(
+                      id,
+                    );
 
                     if (item == null) {
                       return;
@@ -1037,13 +1032,13 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                       if (value) {
                         final ProbabilidadModel? primeraProbabilidad =
                             catalogos.probabilidades.isEmpty
-                                ? null
-                                : catalogos.probabilidades.first;
+                            ? null
+                            : catalogos.probabilidades.first;
 
                         final SeveridadModel? primeraSeveridad =
                             catalogos.severidades.isEmpty
-                                ? null
-                                : catalogos.severidades.first;
+                            ? null
+                            : catalogos.severidades.first;
 
                         if (_probabilidadResidualId == null &&
                             primeraProbabilidad != null) {
@@ -1078,19 +1073,17 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                 prefixIcon: Icon(Icons.trending_down),
                 border: OutlineInputBorder(),
               ),
-              items: catalogos.probabilidades.map(
-                (ProbabilidadModel item) {
-                  return DropdownMenuItem<int>(
-                    value: item.id,
-                    child: Text(item.textoSeleccion),
-                  );
-                },
-              ).toList(),
+              items: catalogos.probabilidades.map((ProbabilidadModel item) {
+                return DropdownMenuItem<int>(
+                  value: item.id,
+                  child: Text(item.textoSeleccion),
+                );
+              }).toList(),
               onChanged: guardando
                   ? null
                   : (int? id) {
-                      final ProbabilidadModel? item =
-                          catalogos.buscarProbabilidadPorId(id);
+                      final ProbabilidadModel? item = catalogos
+                          .buscarProbabilidadPorId(id);
 
                       if (item == null) {
                         return;
@@ -1115,19 +1108,17 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
                 prefixIcon: Icon(Icons.priority_high),
                 border: OutlineInputBorder(),
               ),
-              items: catalogos.severidades.map(
-                (SeveridadModel item) {
-                  return DropdownMenuItem<int>(
-                    value: item.id,
-                    child: Text(item.textoSeleccion),
-                  );
-                },
-              ).toList(),
+              items: catalogos.severidades.map((SeveridadModel item) {
+                return DropdownMenuItem<int>(
+                  value: item.id,
+                  child: Text(item.textoSeleccion),
+                );
+              }).toList(),
               onChanged: guardando
                   ? null
                   : (int? id) {
-                      final SeveridadModel? item =
-                          catalogos.buscarSeveridadPorId(id);
+                      final SeveridadModel? item = catalogos
+                          .buscarSeveridadPorId(id);
 
                       if (item == null) {
                         return;
@@ -1153,10 +1144,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
 
           const SizedBox(height: 24),
 
-          _construirTituloSeccion(
-            'Implementación',
-            Icons.engineering_outlined,
-          ),
+          _construirTituloSeccion('Implementación', Icons.engineering_outlined),
 
           const SizedBox(height: 12),
 
@@ -1248,8 +1236,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           const SizedBox(height: 24),
 
           FilledButton.icon(
-            onPressed:
-                guardando || !catalogos.tieneCatalogos ? null : _guardar,
+            onPressed: guardando || !catalogos.tieneCatalogos ? null : _guardar,
             icon: guardando
                 ? const SizedBox(
                     width: 20,
@@ -1261,8 +1248,8 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
               guardando
                   ? 'Guardando...'
                   : widget.esEdicion
-                      ? 'Actualizar detalle'
-                      : 'Guardar detalle',
+                  ? 'Actualizar detalle'
+                  : 'Guardar detalle',
             ),
           ),
 
@@ -1272,22 +1259,18 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  int? _valorPeligroValido(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  int? _valorPeligroValido(DetalleIpercCatalogosProvider catalogos) {
     return catalogos.peligros.any(
-      (PeligroModel item) => item.id == _peligroIdSeleccionado,
-    )
+          (PeligroModel item) => item.id == _peligroIdSeleccionado,
+        )
         ? _peligroIdSeleccionado
         : null;
   }
 
-  int? _valorConsecuenciaValido(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  int? _valorConsecuenciaValido(DetalleIpercCatalogosProvider catalogos) {
     return catalogos.consecuencias.any(
-      (ConsecuenciaModel item) => item.id == _consecuenciaIdSeleccionada,
-    )
+          (ConsecuenciaModel item) => item.id == _consecuenciaIdSeleccionada,
+        )
         ? _consecuenciaIdSeleccionada
         : null;
   }
@@ -1296,18 +1279,16 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     DetalleIpercCatalogosProvider catalogos,
   ) {
     return catalogos.probabilidades.any(
-      (ProbabilidadModel item) => item.id == _probabilidadInicialId,
-    )
+          (ProbabilidadModel item) => item.id == _probabilidadInicialId,
+        )
         ? _probabilidadInicialId
         : null;
   }
 
-  int? _valorSeveridadInicialValido(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  int? _valorSeveridadInicialValido(DetalleIpercCatalogosProvider catalogos) {
     return catalogos.severidades.any(
-      (SeveridadModel item) => item.id == _severidadInicialId,
-    )
+          (SeveridadModel item) => item.id == _severidadInicialId,
+        )
         ? _severidadInicialId
         : null;
   }
@@ -1316,27 +1297,24 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     DetalleIpercCatalogosProvider catalogos,
   ) {
     return catalogos.probabilidades.any(
-      (ProbabilidadModel item) => item.id == _probabilidadResidualId,
-    )
+          (ProbabilidadModel item) => item.id == _probabilidadResidualId,
+        )
         ? _probabilidadResidualId
         : null;
   }
 
-  int? _valorSeveridadResidualValido(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  int? _valorSeveridadResidualValido(DetalleIpercCatalogosProvider catalogos) {
     return catalogos.severidades.any(
-      (SeveridadModel item) => item.id == _severidadResidualId,
-    )
+          (SeveridadModel item) => item.id == _severidadResidualId,
+        )
         ? _severidadResidualId
         : null;
   }
 
-  Widget _construirDescripcionPeligro(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
-    final PeligroModel? peligro =
-        catalogos.buscarPeligroPorId(_peligroIdSeleccionado);
+  Widget _construirDescripcionPeligro(DetalleIpercCatalogosProvider catalogos) {
+    final PeligroModel? peligro = catalogos.buscarPeligroPorId(
+      _peligroIdSeleccionado,
+    );
 
     if (peligro == null) {
       return const SizedBox.shrink();
@@ -1351,8 +1329,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
   Widget _construirDescripcionConsecuencia(
     DetalleIpercCatalogosProvider catalogos,
   ) {
-    final ConsecuenciaModel? consecuencia =
-        catalogos.buscarConsecuenciaPorId(_consecuenciaIdSeleccionada);
+    final ConsecuenciaModel? consecuencia = catalogos.buscarConsecuenciaPorId(
+      _consecuenciaIdSeleccionada,
+    );
 
     if (consecuencia == null) {
       return const SizedBox.shrink();
@@ -1365,9 +1344,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  Widget _construirErrorCatalogos(
-    DetalleIpercCatalogosProvider catalogos,
-  ) {
+  Widget _construirErrorCatalogos(DetalleIpercCatalogosProvider catalogos) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1428,10 +1405,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
     );
   }
 
-  Widget _construirTituloSeccion(
-    String titulo,
-    IconData icono,
-  ) {
+  Widget _construirTituloSeccion(String titulo, IconData icono) {
     return Row(
       children: <Widget>[
         Icon(icono, color: Theme.of(context).colorScheme.primary),
@@ -1439,9 +1413,9 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
         Expanded(
           child: Text(
             titulo,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
       ],
@@ -1469,10 +1443,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           Expanded(
             child: Text(
               '$titulo: $valor - $nivel',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -1496,9 +1467,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
       ),
       child: Row(
         children: <Widget>[
-          Expanded(
-            child: Text(_formatearFecha(fecha)),
-          ),
+          Expanded(child: Text(_formatearFecha(fecha))),
           if (fecha != null)
             IconButton(
               tooltip: 'Limpiar fecha',
@@ -1532,8 +1501,7 @@ class _DetalleIpercFormScreenState extends State<DetalleIpercFormScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              catalogos.advertencia ??
-                  'Se están utilizando catálogos locales.',
+              catalogos.advertencia ?? 'Se están utilizando catálogos locales.',
             ),
           ),
         ],

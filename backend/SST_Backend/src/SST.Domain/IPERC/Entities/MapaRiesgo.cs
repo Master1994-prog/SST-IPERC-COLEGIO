@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using SST.Domain.Common;
 
@@ -6,8 +6,8 @@ namespace SST.Domain.IPERC.Entities;
 
 /// <summary>
 /// Representa un mapa de riesgo asociado a una Matriz IPERC.
-/// El mapa de riesgo permite ubicar visualmente los peligros identificados
-/// dentro de un área, ambiente o zona del colegio.
+/// El mapa permite ubicar visualmente los peligros identificados
+/// dentro de un área, ambiente o zona.
 /// </summary>
 [Table("MapasRiesgo")]
 public class MapaRiesgo : BaseAuditableEntity
@@ -30,14 +30,13 @@ public class MapaRiesgo : BaseAuditableEntity
     public string Nombre { get; set; } = string.Empty;
 
     /// <summary>
-    /// Descripción del mapa de riesgo.
+    /// Descripción del mapa.
     /// </summary>
     [MaxLength(1500)]
     public string? Descripcion { get; set; }
 
     /// <summary>
-    /// Ubicación o ambiente representado en el mapa.
-    /// Ejemplo: Área administrativa, laboratorio, patio, biblioteca.
+    /// Ubicación o ambiente representado.
     /// </summary>
     [MaxLength(300)]
     public string? Ubicacion { get; set; }
@@ -47,58 +46,55 @@ public class MapaRiesgo : BaseAuditableEntity
     #region Archivo / Imagen
 
     /// <summary>
-    /// Ruta o nombre del archivo del mapa de riesgo.
-    /// Puede ser una imagen, PDF o plano.
+    /// URL relativa o absoluta del plano almacenado en el servidor.
+    /// Ejemplo:
+    /// /uploads/mapas-riesgo/9aa7....png
     /// </summary>
     [MaxLength(500)]
     public string? ArchivoUrl { get; set; }
 
     /// <summary>
-    /// Tipo de archivo.
-    /// Ejemplo: image/png, image/jpeg, application/pdf.
+    /// Tipo MIME del archivo.
+    /// Ejemplo: image/png, image/jpeg.
     /// </summary>
     [MaxLength(100)]
     public string? TipoArchivo { get; set; }
+
+    /// <summary>
+    /// Coordenadas normalizadas de los marcadores del plano.
+    ///
+    /// Ejemplo:
+    /// {
+    ///   "Administración":{"x":0.25,"y":0.40},
+    ///   "Laboratorio":{"x":0.72,"y":0.61}
+    /// }
+    ///
+    /// Se almacena como LONGTEXT para permitir que el mapa
+    /// crezca sin limitar la cantidad de ambientes.
+    /// </summary>
+    [Column(TypeName = "longtext")]
+    public string? MarcadoresJson { get; set; }
 
     #endregion
 
     #region Fechas y Estado
 
-    /// <summary>
-    /// Fecha de elaboración del mapa.
-    /// </summary>
     public DateTime FechaElaboracion { get; set; }
 
-    /// <summary>
-    /// Fecha de revisión del mapa.
-    /// </summary>
     public DateTime? FechaRevision { get; set; }
 
-    /// <summary>
-    /// Versión del mapa de riesgo.
-    /// </summary>
     public int Version { get; set; } = 1;
 
-    /// <summary>
-    /// Estado del mapa.
-    /// Ejemplo: Borrador, Vigente, Actualizado, Cerrado.
-    /// </summary>
     [Required]
     [MaxLength(30)]
     public string EstadoMapa { get; set; } = "Borrador";
 
-    /// <summary>
-    /// Estado del registro.
-    /// </summary>
     public bool Activo { get; set; } = true;
 
     #endregion
 
     #region Relación IPERC
 
-    /// <summary>
-    /// Matriz IPERC relacionada con el mapa de riesgo.
-    /// </summary>
     [Required]
     public long MatrizIPERCId { get; set; }
 

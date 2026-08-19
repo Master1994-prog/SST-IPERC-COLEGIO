@@ -1,11 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace SST.Application.SST.Dtos;
 
 /// <summary>
-/// DTO utilizado para actualizar un mapa de riesgo.
-/// No contiene Código porque se genera automáticamente.
-/// No contiene Id porque el Id llega desde la ruta.
+/// DTO para actualizar un mapa de riesgo.
+/// El Id llega en la ruta y el código no se modifica.
 /// </summary>
 public class UpdateMapaRiesgoDto
 {
@@ -24,6 +23,11 @@ public class UpdateMapaRiesgoDto
 
     [MaxLength(100)]
     public string? TipoArchivo { get; set; }
+
+    /// <summary>
+    /// Posiciones normalizadas de los marcadores en formato JSON.
+    /// </summary>
+    public string? MarcadoresJson { get; set; }
 
     public DateTime FechaElaboracion { get; set; }
 

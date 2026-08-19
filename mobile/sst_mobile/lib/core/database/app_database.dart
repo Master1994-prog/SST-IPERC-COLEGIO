@@ -37,6 +37,9 @@ import 'package:sqflite/sqflite.dart';
 ///
 /// Versión 6:
 /// - seguimientos_iperc_local.
+///
+/// Versión 7:
+/// - mapas_riesgo_local.
 /// ===============================================================
 class AppDatabase {
   AppDatabase._();
@@ -49,7 +52,7 @@ class AppDatabase {
   // VERSIÓN ACTUAL
   // =============================================================
 
-  static const int databaseVersion = 6;
+  static const int databaseVersion = 7;
 
   Database? _database;
 
@@ -106,6 +109,8 @@ class AppDatabase {
       await _createDetallesIpercTable(txn);
 
       await _createSeguimientosIpercTable(txn);
+
+      await _createMapasRiesgoTable(txn);
 
       await _createSyncQueueTable(txn);
 
@@ -409,6 +414,38 @@ class AppDatabase {
   }
 
   // =============================================================
+  // MAPAS DE RIESGO LOCAL
+  // =============================================================
+
+  Future<void> _createMapasRiesgoTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS mapas_riesgo_local (
+        id_local TEXT PRIMARY KEY,
+        id_servidor INTEGER,
+        matriz_iperc_id_servidor INTEGER NOT NULL,
+        codigo TEXT,
+        nombre TEXT NOT NULL,
+        descripcion TEXT,
+        ubicacion TEXT,
+        archivo_url_servidor TEXT,
+        archivo_local TEXT,
+        tipo_archivo TEXT,
+        marcadores_json TEXT,
+        fecha_elaboracion TEXT NOT NULL,
+        fecha_revision TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
+        estado_mapa TEXT NOT NULL DEFAULT 'Borrador',
+        activo INTEGER NOT NULL DEFAULT 1,
+        sincronizado INTEGER NOT NULL DEFAULT 0,
+        eliminado INTEGER NOT NULL DEFAULT 0,
+        fecha_registro TEXT NOT NULL,
+        fecha_actualizacion TEXT,
+        fecha_sincronizacion TEXT
+      )
+    ''');
+  }
+
+  // =============================================================
   // COLA DE SINCRONIZACIÓN
   // =============================================================
 
@@ -604,6 +641,10 @@ class AppDatabase {
 
       if (oldVersion < 6) {
         await _upgradeToVersion6(txn);
+      }
+
+      if (oldVersion < 7) {
+        await _upgradeToVersion7(txn);
       }
 
       await _createIndexes(txn);
@@ -814,5 +855,13 @@ class AppDatabase {
     await db.close();
 
     _database = null;
+  }
+
+  // =============================================================
+  // MIGRACIÓN V6 → V7
+  // =============================================================
+
+  Future<void> _upgradeToVersion7(DatabaseExecutor db) async {
+    await _createMapasRiesgoTable(db);
   }
 }

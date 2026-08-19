@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SST.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using SST.Infrastructure.Persistence;
 namespace SST.Infrastructure.Migrations
 {
     [DbContext(typeof(SSTDbContext))]
-    partial class SSTDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260816224400_AgregarMarcadoresMapaRiesgo")]
+    partial class AgregarMarcadoresMapaRiesgo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -257,9 +260,6 @@ namespace SST.Infrastructure.Migrations
 
                     b.Property<DateTime?>("FechaRevision")
                         .HasColumnType("datetime(6)");
-
-                    b.Property<string>("MarcadoresJson")
-                        .HasColumnType("longtext");
 
                     b.Property<long>("MatrizIPERCId")
                         .HasColumnType("bigint");

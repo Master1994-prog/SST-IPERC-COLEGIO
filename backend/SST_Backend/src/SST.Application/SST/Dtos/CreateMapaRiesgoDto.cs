@@ -1,10 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace SST.Application.SST.Dtos;
 
 /// <summary>
-/// DTO utilizado para registrar un mapa de riesgo.
-/// El código se genera automáticamente desde el backend.
+/// DTO para registrar un mapa de riesgo.
+/// El código se genera automáticamente en el backend.
 /// </summary>
 public class CreateMapaRiesgoDto
 {
@@ -18,11 +18,19 @@ public class CreateMapaRiesgoDto
     [MaxLength(300)]
     public string? Ubicacion { get; set; }
 
+    /// <summary>
+    /// URL del plano devuelta por POST /api/mapas-riesgo/upload-plano.
+    /// </summary>
     [MaxLength(500)]
     public string? ArchivoUrl { get; set; }
 
     [MaxLength(100)]
     public string? TipoArchivo { get; set; }
+
+    /// <summary>
+    /// Posiciones normalizadas de los marcadores en formato JSON.
+    /// </summary>
+    public string? MarcadoresJson { get; set; }
 
     public DateTime FechaElaboracion { get; set; }
 

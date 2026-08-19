@@ -1,7 +1,7 @@
-﻿namespace SST.Application.SST.Dtos;
+namespace SST.Application.SST.Dtos;
 
 /// <summary>
-/// DTO utilizado para mostrar información de un mapa de riesgo.
+/// DTO de salida del mapa de riesgo.
 /// </summary>
 public class MapaRiesgoDto
 {
@@ -15,9 +15,17 @@ public class MapaRiesgoDto
 
     public string? Ubicacion { get; set; }
 
+    /// <summary>
+    /// URL del plano almacenado en el backend.
+    /// </summary>
     public string? ArchivoUrl { get; set; }
 
     public string? TipoArchivo { get; set; }
+
+    /// <summary>
+    /// Coordenadas normalizadas de marcadores.
+    /// </summary>
+    public string? MarcadoresJson { get; set; }
 
     public DateTime FechaElaboracion { get; set; }
 

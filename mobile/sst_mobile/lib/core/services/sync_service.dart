@@ -8,6 +8,7 @@ import '../../data/datasources/remote/matriz_iperc_remote_datasource.dart';
 import '../../data/models/sync_queue_model.dart';
 import '../../data/services/detalle_iperc_sync_service.dart';
 import '../../data/services/seguimiento_iperc_sync_service.dart';
+import '../../data/services/mapa_riesgo_sync_service.dart';
 import '../constants/sync_constants.dart';
 import '../network/network_info.dart';
 import 'secure_storage_service.dart';
@@ -72,6 +73,7 @@ class SyncService {
     MatrizIpercRemoteDatasource? matrizRemoteDatasource,
     DetalleIpercSyncService? detalleIpercSyncService,
     SeguimientoIpercSyncService? seguimientoIpercSyncService,
+    MapaRiesgoSyncService? mapaRiesgoSyncService,
     SecureStorageService? secureStorageService,
   }) : _networkInfo = networkInfo ?? NetworkInfo.instance,
        _syncQueueDatasource = syncQueueDatasource ?? SyncQueueLocalDatasource(),
@@ -83,6 +85,8 @@ class SyncService {
            detalleIpercSyncService ?? DetalleIpercSyncService(),
        _seguimientoIpercSyncService =
            seguimientoIpercSyncService ?? SeguimientoIpercSyncService(),
+       _mapaRiesgoSyncService =
+           mapaRiesgoSyncService ?? MapaRiesgoSyncService(),
        _secureStorageService =
            secureStorageService ?? SecureStorageService.instance;
 
@@ -101,6 +105,8 @@ class SyncService {
   final DetalleIpercSyncService _detalleIpercSyncService;
 
   final SeguimientoIpercSyncService _seguimientoIpercSyncService;
+
+  final MapaRiesgoSyncService _mapaRiesgoSyncService;
 
   final SecureStorageService _secureStorageService;
 
@@ -323,6 +329,12 @@ class SyncService {
       return 40;
     }
 
+    // El mapa depende de una Matriz IPERC ya sincronizada.
+    // Se procesa antes de una eventual eliminación de la matriz.
+    if (entidad == SyncConstants.mapaRiesgo) {
+      return 45;
+    }
+
     if (entidad == SyncConstants.matrizIperc &&
         operacion == SyncConstants.eliminar) {
       return 50;
@@ -363,7 +375,8 @@ class SyncService {
     final bool entidadValida =
         entidad == SyncConstants.matrizIperc ||
         entidad == SyncConstants.detalleIperc ||
-        entidad == SyncConstants.seguimientoIperc;
+        entidad == SyncConstants.seguimientoIperc ||
+        entidad == SyncConstants.mapaRiesgo;
 
     if (!entidadValida) {
       throw UnsupportedError(
@@ -404,6 +417,11 @@ class SyncService {
 
     if (entidad == SyncConstants.seguimientoIperc) {
       await _processSeguimiento(item, operacion);
+      return;
+    }
+
+    if (entidad == SyncConstants.mapaRiesgo) {
+      await _mapaRiesgoSyncService.synchronizeQueueItem(item);
       return;
     }
 

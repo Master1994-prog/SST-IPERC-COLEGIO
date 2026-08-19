@@ -17,35 +17,39 @@ namespace SST.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-
             builder.Services.AddControllers();
-            // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
             builder.Services.AddOpenApi();
 
-            builder.Services.AddInfrastructure(builder.Configuration);
+            builder.Services.AddInfrastructure(
+                builder.Configuration);
 
-            // Habilita Swagger para documentar y probar la API.
             builder.Services.AddEndpointsApiExplorer();
-
             builder.Services.AddSwaggerGen();
 
             builder.Services.AddScoped<
                 IPasswordHasher<Usuario>,
                 PasswordHasher<Usuario>>();
 
-            builder.Services.AddScoped<IJwtService, JwtService>();
-            builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<
+                IJwtService,
+                JwtService>();
 
-            string jwtKey = builder.Configuration["Jwt:Key"]
+            builder.Services.AddScoped<
+                IAuthService,
+                AuthService>();
+
+            string jwtKey =
+                builder.Configuration["Jwt:Key"]
                 ?? throw new InvalidOperationException(
                     "No se configuró Jwt:Key.");
 
-            string jwtIssuer = builder.Configuration["Jwt:Issuer"]
+            string jwtIssuer =
+                builder.Configuration["Jwt:Issuer"]
                 ?? throw new InvalidOperationException(
                     "No se configuró Jwt:Issuer.");
 
-            string jwtAudience = builder.Configuration["Jwt:Audience"]
+            string jwtAudience =
+                builder.Configuration["Jwt:Audience"]
                 ?? throw new InvalidOperationException(
                     "No se configuró Jwt:Audience.");
 
@@ -73,7 +77,8 @@ namespace SST.Api
 
                             IssuerSigningKey =
                                 new SymmetricSecurityKey(
-                                    Encoding.UTF8.GetBytes(jwtKey)),
+                                    Encoding.UTF8.GetBytes(
+                                        jwtKey)),
 
                             ClockSkew = TimeSpan.Zero
                         };
@@ -83,28 +88,29 @@ namespace SST.Api
 
             var app = builder.Build();
 
-            using (var scope = app.Services.CreateScope())
+            using (var scope =
+                app.Services.CreateScope())
             {
                 var context =
-                    scope.ServiceProvider.GetRequiredService<SSTDbContext>();
+                    scope.ServiceProvider
+                        .GetRequiredService<SSTDbContext>();
 
                 SSTSeedData.SeedAsync(context)
                     .GetAwaiter()
                     .GetResult();
 
-                SuperAdminBootstrap.EjecutarAsync(context)
+                SuperAdminBootstrap
+                    .EjecutarAsync(context)
                     .GetAwaiter()
                     .GetResult();
             }
 
-            // Activa Swagger solo en entorno de desarrollo.
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
                 app.MapOpenApi();
@@ -112,10 +118,15 @@ namespace SST.Api
 
             app.UseHttpsRedirection();
 
+            // Permite servir:
+            // /uploads/mapas-riesgo/archivo.png
+            //
+            // Los planos cargados por el controlador quedan dentro
+            // de wwwroot y podrán ser consultados por otros celulares.
+            app.UseStaticFiles();
+
             app.UseAuthentication();
-
             app.UseAuthorization();
-
 
             app.MapControllers();
 
