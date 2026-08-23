@@ -11,6 +11,7 @@ class SecureStorageService {
   static const String _rolKey = 'rol';
   static const String _expiraEnKey = 'expira_en';
   static const String _sesionOfflineKey = 'sesion_offline';
+  static const String _debeCambiarPasswordKey = 'debe_cambiar_password';
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
@@ -19,6 +20,7 @@ class SecureStorageService {
     required String usuarioId,
     required String nombreUsuario,
     required String rol,
+    required bool debeCambiarPassword,
     DateTime? expiraEn,
   }) async {
     await Future.wait(<Future<void>>[
@@ -55,6 +57,19 @@ class SecureStorageService {
     }
 
     return DateTime.tryParse(value);
+  }
+
+  Future<bool> getDebeCambiarPassword() async {
+    final String? value = await _storage.read(key: _debeCambiarPasswordKey);
+
+    return value == 'true';
+  }
+
+  Future<void> setDebeCambiarPassword(bool value) {
+    return _storage.write(
+      key: _debeCambiarPasswordKey,
+      value: value ? 'true' : 'false',
+    );
   }
 
   Future<bool> hasOfflineSession() async {

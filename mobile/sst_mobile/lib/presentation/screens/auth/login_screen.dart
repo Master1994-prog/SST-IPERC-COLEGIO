@@ -4,7 +4,24 @@ import 'package:flutter/material.dart';
 import '../../../data/models/login_response_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../home/main_navigation_screen.dart';
+import 'cambiar_password_obligatorio_screen.dart';
+import 'recuperar_password_screen.dart';
+import 'solicitar_acceso_screen.dart';
 
+/// ===============================================================
+/// LOGIN SCREEN - SST EDURISK
+/// ===============================================================
+///
+/// Permite:
+///
+/// - Iniciar sesión online.
+/// - Ingresar en modo offline si existe una sesión válida.
+/// - Bloquear el modo offline cuando existe un cambio obligatorio
+///   de contraseña pendiente.
+/// - Solicitar acceso.
+/// - Solicitar recuperación de contraseña.
+/// - Redirigir al cambio obligatorio de contraseña.
+/// ===============================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,7 +32,15 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  // =============================================================
+  // REPOSITORIO
+  // =============================================================
+
   final AuthRepository _authRepository = AuthRepository();
+
+  // =============================================================
+  // FORMULARIO
+  // =============================================================
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -23,15 +48,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final TextEditingController _passwordController = TextEditingController();
 
+  // =============================================================
+  // ESTADO
+  // =============================================================
+
   bool _procesando = false;
+
   bool _ocultarPassword = true;
+
+  // =============================================================
+  // DISPOSE
+  // =============================================================
 
   @override
   void dispose() {
     _usuarioController.dispose();
     _passwordController.dispose();
+
     super.dispose();
   }
+
+  // =============================================================
+  // INICIAR SESIÓN
+  // =============================================================
 
   Future<void> _iniciarSesion() async {
     FocusScope.of(context).unfocus();
@@ -47,6 +86,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // ---------------------------------------------------------
+      // LOGIN ONLINE
+      // ---------------------------------------------------------
+
       final LoginResponseModel response = await _authRepository.login(
         usuario: _usuarioController.text.trim(),
         password: _passwordController.text,
@@ -55,6 +98,33 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) {
         return;
       }
+
+      // =========================================================
+      // CAMBIO OBLIGATORIO DE CONTRASEÑA
+      // =========================================================
+      //
+      // Si el administrador asignó una contraseña temporal,
+      // el usuario NO puede entrar al menú principal todavía.
+      // =========================================================
+
+      if (response.debeCambiarPassword) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) {
+              return CambiarPasswordObligatorioScreen(
+                nombreUsuario: response.nombreUsuario,
+                rol: response.rol,
+              );
+            },
+          ),
+        );
+
+        return;
+      }
+
+      // ---------------------------------------------------------
+      // LOGIN NORMAL
+      // ---------------------------------------------------------
 
       _mostrarMensaje('Inicio de sesión correcto.');
 
@@ -89,6 +159,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // =============================================================
+  // PROCESAR ERROR DIO
+  // =============================================================
+
   Future<void> _procesarErrorDio(DioException error) async {
     if (!mounted) {
       return;
@@ -96,24 +170,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final int? statusCode = error.response?.statusCode;
 
-    /*
-     * No se debe habilitar el acceso offline cuando el
-     * servidor respondió 401 o 403, porque eso significa
-     * que sí hubo conexión pero las credenciales o permisos
-     * son incorrectos.
-     */
+    // ===========================================================
+    // EL SERVIDOR RESPONDIÓ
+    // ===========================================================
+
+    // -----------------------------------------------------------
+    // CREDENCIALES INCORRECTAS
+    // -----------------------------------------------------------
+
     if (statusCode == 401) {
       _mostrarMensaje('Usuario o contraseña incorrectos.', esError: true);
+
       return;
     }
+
+    // -----------------------------------------------------------
+    // SIN PERMISOS
+    // -----------------------------------------------------------
 
     if (statusCode == 403) {
       _mostrarMensaje(
         'El usuario no tiene permiso para ingresar.',
         esError: true,
       );
+
       return;
     }
+
+    // -----------------------------------------------------------
+    // OTRO ERROR HTTP
+    // -----------------------------------------------------------
 
     if (statusCode != null) {
       final String mensajeServidor = _obtenerMensajeServidor(
@@ -121,8 +207,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       _mostrarMensaje(mensajeServidor, esError: true);
+
       return;
     }
+
+    // ===========================================================
+    // COMPROBAR SI ES ERROR DE CONEXIÓN
+    // ===========================================================
 
     final bool esErrorConexion =
         error.type == DioExceptionType.connectionError ||
@@ -133,8 +224,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!esErrorConexion) {
       _mostrarMensaje('No se pudo completar la solicitud.', esError: true);
+
       return;
     }
+
+    // ===========================================================
+    // OBTENER SESIÓN OFFLINE
+    // ===========================================================
 
     final OfflineSession? sesionOffline = await _authRepository
         .getOfflineSession();
@@ -143,14 +239,24 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    // -----------------------------------------------------------
+    // NO HAY SESIÓN OFFLINE
+    // -----------------------------------------------------------
+
     if (sesionOffline == null) {
       _mostrarMensaje(
         'No se pudo conectar con el servidor. '
-        'Primero debe iniciar sesión con conexión a internet.',
+        'Primero debe iniciar sesión con conexión '
+        'a internet.',
         esError: true,
       );
+
       return;
     }
+
+    // ===========================================================
+    // VALIDAR USUARIO
+    // ===========================================================
 
     final String usuarioIngresado = _usuarioController.text
         .trim()
@@ -160,18 +266,45 @@ class _LoginScreenState extends State<LoginScreen> {
         .trim()
         .toLowerCase();
 
-    /*
-     * Evita abrir la sesión guardada cuando se escribe
-     * un nombre de usuario diferente.
-     */
     if (usuarioIngresado != usuarioGuardado) {
       _mostrarMensaje(
         'No existe una sesión offline guardada '
         'para este usuario.',
         esError: true,
       );
+
       return;
     }
+
+    // ===========================================================
+    // BLOQUEAR OFFLINE SI DEBE CAMBIAR PASSWORD
+    // ===========================================================
+    //
+    // IMPORTANTE:
+    //
+    // sesionOffline ya:
+    //
+    // 1. Fue declarada.
+    // 2. Fue comprobada contra null.
+    // 3. Pertenece al usuario escrito.
+    //
+    // Por eso esta comprobación debe estar AQUÍ.
+    // ===========================================================
+
+    if (sesionOffline.debeCambiarPassword) {
+      _mostrarMensaje(
+        'Debes conectarte a internet para cambiar '
+        'la contraseña temporal antes de utilizar '
+        'SST EduRisk en modo offline.',
+        esError: true,
+      );
+
+      return;
+    }
+
+    // ===========================================================
+    // ENTRAR EN MODO OFFLINE
+    // ===========================================================
 
     _mostrarMensaje('Ingresando en modo offline.');
 
@@ -181,6 +314,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // =============================================================
+  // MENSAJE DEL SERVIDOR
+  // =============================================================
+
   String _obtenerMensajeServidor(dynamic contenido) {
     if (contenido is Map) {
       final Map<String, dynamic> respuesta = Map<String, dynamic>.from(
@@ -188,11 +325,18 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       final dynamic mensaje =
-          respuesta['mensaje'] ?? respuesta['message'] ?? respuesta['title'];
+          respuesta['mensaje'] ??
+          respuesta['message'] ??
+          respuesta['detail'] ??
+          respuesta['title'];
 
       if (mensaje != null && mensaje.toString().trim().isNotEmpty) {
-        return mensaje.toString();
+        return mensaje.toString().trim();
       }
+
+      // ---------------------------------------------------------
+      // VALIDACIONES DEL BACKEND
+      // ---------------------------------------------------------
 
       final dynamic errors = respuesta['errors'];
 
@@ -213,8 +357,13 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
 
-    return 'El servidor no pudo procesar la solicitud.';
+    return 'El servidor no pudo procesar '
+        'la solicitud.';
   }
+
+  // =============================================================
+  // ABRIR SISTEMA
+  // =============================================================
 
   void _abrirPantallaPrincipal({
     required String nombreUsuario,
@@ -222,12 +371,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            MainNavigationScreen(nombreUsuario: nombreUsuario, rol: rol),
+        builder: (_) {
+          return MainNavigationScreen(nombreUsuario: nombreUsuario, rol: rol);
+        },
       ),
       (Route<dynamic> route) => false,
     );
   }
+
+  // =============================================================
+  // MENSAJE
+  // =============================================================
 
   void _mostrarMensaje(String mensaje, {bool esError = false}) {
     if (!mounted) {
@@ -244,25 +398,47 @@ class _LoginScreenState extends State<LoginScreen> {
       );
   }
 
+  // =============================================================
+  // VOLVER
+  // =============================================================
+
   void _volver() {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
   }
 
+  // =============================================================
+  // SOLICITAR ACCESO
+  // =============================================================
+
   void _solicitarAcceso() {
-    _mostrarMensaje(
-      'La solicitud de acceso se implementará '
-      'en el módulo de usuarios.',
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          return const SolicitarAccesoScreen();
+        },
+      ),
     );
   }
 
+  // =============================================================
+  // RECUPERAR CONTRASEÑA
+  // =============================================================
+
   void _recuperarPassword() {
-    _mostrarMensaje(
-      'La recuperación de contraseña se '
-      'implementará próximamente.',
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          return const RecuperarPasswordScreen();
+        },
+      ),
     );
   }
+
+  // =============================================================
+  // BUILD
+  // =============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -273,69 +449,131 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Stack(
           children: <Widget>[
+            // ===================================================
+            // DECORACIÓN
+            // ===================================================
             const Positioned(
               top: -120,
               left: -110,
-              child: _DecoracionCircular(tamano: 310, color: Color(0xFFDDF2F2)),
+              child: _DecoracionCircular(tamano: 310, color: Color(0xFFDCEAFF)),
             ),
+
             const Positioned(
               top: -120,
               right: -140,
-              child: _DecoracionCircular(tamano: 330, color: Color(0xFFE1F0FD)),
+              child: _DecoracionCircular(tamano: 330, color: Color(0xFFE5F0FF)),
             ),
+
+            // ===================================================
+            // FORMULARIO
+            // ===================================================
             Form(
               key: _formKey,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 14, 24, 30),
                 children: <Widget>[
+                  // =============================================
+                  // VOLVER
+                  // =============================================
                   Align(
                     alignment: Alignment.centerLeft,
                     child: IconButton(
                       tooltip: 'Volver',
-                      onPressed: _volver,
-                      icon: const Icon(Icons.arrow_back_ios_new, size: 28),
+                      onPressed: _procesando ? null : _volver,
+                      icon: const Icon(Icons.arrow_back_ios_new, size: 26),
                     ),
                   ),
-                  const SizedBox(height: 120),
-                  Center(
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2F1FD),
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: const Icon(
-                        Icons.health_and_safety,
-                        size: 48,
-                        color: Color(0xFF1565C0),
-                      ),
-                    ),
-                  ),
+
                   const SizedBox(height: 38),
+
+                  // =============================================
+                  // LOGO SST EDURISK
+                  // =============================================
+                  Center(
+                    child: SizedBox(
+                      width: 125,
+                      height: 125,
+                      child: Image.asset(
+                        'assets/icons/sst_edurisk_icon_1024.png',
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                        errorBuilder:
+                            (
+                              BuildContext context,
+                              Object error,
+                              StackTrace? stackTrace,
+                            ) {
+                              return Container(
+                                decoration: BoxDecoration(
+                                  color: colores.primaryContainer,
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                child: Icon(
+                                  Icons.health_and_safety_outlined,
+                                  size: 62,
+                                  color: colores.primary,
+                                ),
+                              );
+                            },
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // =============================================
+                  // NOMBRE
+                  // =============================================
+                  Text(
+                    'SST EduRisk',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colores.primary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    'Sistema Móvil de Gestión '
+                    'SST e IPERC',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colores.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // =============================================
+                  // TÍTULO
+                  // =============================================
                   Text(
                     'Iniciar sesión',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          '¿Todavía no tiene acceso?',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(color: Colors.grey[700]),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _procesando ? null : _solicitarAcceso,
-                        child: const Text('Solicitar acceso'),
-                      ),
-                    ],
+
+                  const SizedBox(height: 8),
+
+                  Text(
+                    'Ingrese sus credenciales '
+                    'para continuar.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colores.onSurfaceVariant,
+                    ),
                   ),
-                  const SizedBox(height: 24),
+
+                  const SizedBox(height: 26),
+
+                  // =============================================
+                  // USUARIO
+                  // =============================================
                   TextFormField(
                     controller: _usuarioController,
                     enabled: !_procesando,
@@ -346,18 +584,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       AutofillHints.email,
                     ],
                     decoration: InputDecoration(
-                      hintText: 'Usuario o correo electrónico',
+                      labelText: 'Usuario o correo electrónico',
+                      hintText: 'Ingrese su usuario',
                       prefixIcon: const Icon(Icons.person_outline),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(28),
-                        borderSide: BorderSide(color: colores.outlineVariant),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
+                        horizontal: 18,
+                        vertical: 18,
                       ),
                     ),
                     validator: (String? value) {
@@ -368,7 +603,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+
+                  const SizedBox(height: 18),
+
+                  // =============================================
+                  // PASSWORD
+                  // =============================================
                   TextFormField(
                     controller: _passwordController,
                     enabled: !_procesando,
@@ -379,7 +619,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       _iniciarSesion();
                     },
                     decoration: InputDecoration(
-                      hintText: 'Contraseña',
+                      labelText: 'Contraseña',
+                      hintText: 'Ingrese su contraseña',
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         tooltip: _ocultarPassword
@@ -399,15 +640,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(28),
-                        borderSide: BorderSide(color: colores.outlineVariant),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
+                        horizontal: 18,
+                        vertical: 18,
                       ),
                     ),
                     validator: (String? value) {
@@ -423,58 +660,101 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
+
+                  // =============================================
+                  // RECUPERAR PASSWORD
+                  // =============================================
                   Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: _procesando ? null : _recuperarPassword,
                       child: const Text('¿Olvidó su contraseña?'),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: SizedBox(
-                      width: 205,
-                      height: 58,
-                      child: FilledButton.icon(
-                        onPressed: _procesando ? null : _iniciarSesion,
-                        icon: _procesando
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.arrow_forward),
-                        label: Text(
-                          _procesando ? 'Ingresando...' : 'Ingresar',
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
+
+                  const SizedBox(height: 10),
+
+                  // =============================================
+                  // INGRESAR
+                  // =============================================
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: FilledButton.icon(
+                      onPressed: _procesando ? null : _iniciarSesion,
+                      icon: _procesando
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.login),
+                      label: Text(
+                        _procesando ? 'Ingresando...' : 'Ingresar',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
                         ),
-                        style: FilledButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
+                      ),
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 180),
-                  const Icon(
-                    Icons.verified_user_outlined,
-                    color: Color(0xFF1976D2),
-                    size: 34,
+
+                  const SizedBox(height: 18),
+
+                  // =============================================
+                  // SOLICITAR ACCESO
+                  // =============================================
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(
+                          '¿Todavía no tiene acceso?',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colores.onSurfaceVariant),
+                        ),
+                      ),
+
+                      TextButton(
+                        onPressed: _procesando ? null : _solicitarAcceso,
+                        child: const Text('Solicitar acceso'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 10),
+
+                  const SizedBox(height: 34),
+
+                  // =============================================
+                  // SEGURIDAD
+                  // =============================================
+                  Icon(
+                    Icons.verified_user_outlined,
+                    color: colores.primary,
+                    size: 30,
+                  ),
+
+                  const SizedBox(height: 8),
+
                   Text(
-                    'Acceso seguro al sistema SST–IPERC',
+                    'Acceso seguro a SST EduRisk',
                     textAlign: TextAlign.center,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: Colors.grey[700]),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colores.onSurfaceVariant,
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Text(
+                    'Sistema Móvil de Gestión '
+                    'SST e IPERC',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
@@ -486,10 +766,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+/// ===============================================================
+/// DECORACIÓN CIRCULAR
+/// ===============================================================
 class _DecoracionCircular extends StatelessWidget {
   const _DecoracionCircular({required this.tamano, required this.color});
 
   final double tamano;
+
   final Color color;
 
   @override

@@ -57,7 +57,7 @@ public class SSTDbContext : DbContext
     #region Security
 
     public DbSet<Usuario> Usuarios =>
-    Set<Usuario>();
+        Set<Usuario>();
 
     public DbSet<Rol> Roles =>
         Set<Rol>();
@@ -65,7 +65,14 @@ public class SSTDbContext : DbContext
     public DbSet<UsuarioRol> UsuariosRoles =>
         Set<UsuarioRol>();
 
-    #endregion
+    public DbSet<SolicitudAcceso> SolicitudesAcceso =>
+        Set<SolicitudAcceso>();
+
+    public DbSet<SolicitudRecuperacionPassword>
+        SolicitudesRecuperacionPassword =>
+            Set<SolicitudRecuperacionPassword>();
+
+   #endregion
 
     #region Organization
 

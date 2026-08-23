@@ -7,6 +7,7 @@ import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../controles/controles_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
 import 'detalles_iperc_screen.dart';
+import 'editar_matriz_iperc_screen.dart';
 
 /// Pantalla que muestra la información completa de una matriz IPERC.
 class MatrizIpercDetailScreen extends StatefulWidget {
@@ -92,6 +93,31 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
     );
   }
 
+  /// Abre la pantalla de edición de la matriz.
+  ///
+  /// Si la actualización se realiza correctamente,
+  /// vuelve a consultar la matriz desde el backend
+  /// para refrescar inmediatamente esta pantalla.
+  Future<void> _editarMatriz() async {
+    if (!_puedeGestionarMatrices || _cargandoDetalle) {
+      return;
+    }
+
+    final bool? actualizada = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) {
+          return EditarMatrizIpercScreen(matriz: matriz);
+        },
+      ),
+    );
+
+    if (!mounted || actualizada != true) {
+      return;
+    }
+
+    await _cargarDetalleActualizado();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,17 +132,7 @@ class _MatrizIpercDetailScreenState extends State<MatrizIpercDetailScreen> {
           if (_puedeGestionarMatrices)
             IconButton(
               tooltip: 'Editar matriz',
-              onPressed: () {
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'La edición de la matriz se implementará en el siguiente paso.',
-                      ),
-                    ),
-                  );
-              },
+              onPressed: _cargandoDetalle ? null : _editarMatriz,
               icon: const Icon(Icons.edit_outlined),
             ),
         ],

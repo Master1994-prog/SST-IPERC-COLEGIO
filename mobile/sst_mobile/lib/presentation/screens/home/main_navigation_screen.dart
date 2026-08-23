@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../core/security/role_permissions.dart';
+import '../../../data/repositories/solicitud_seguridad_repository.dart';
 import '../../providers/dashboard_provider.dart';
 import '../actividades/actividades_screen.dart';
 import '../areas/areas_screen.dart';
@@ -21,6 +23,7 @@ import '../puestos_trabajo/puestos_trabajo_screen.dart';
 import '../reportes/reportes_screen.dart';
 import '../roles/roles_screen.dart';
 import '../seguimientos/seguimientos_screen.dart';
+import '../solicitudes_seguridad/solicitudes_seguridad_screen.dart';
 import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
 import '../usuarios/usuarios_screen.dart';
@@ -72,8 +75,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titulos[_indiceActual]),
         automaticallyImplyLeading: false,
+        titleSpacing: 16,
+
+        title: Row(
+          children: <Widget>[
+            Container(
+              width: 38,
+              height: 38,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Image.asset(
+                'assets/icons/sst_edurisk_icon_1024.png',
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  const Text(
+                    'SST EduRisk',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  Text(
+                    _titulos[_indiceActual],
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFDCEAFF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
       body: IndexedStack(index: _indiceActual, children: _pantallas),
       bottomNavigationBar: NavigationBar(
@@ -122,6 +173,28 @@ class InicioView extends StatelessWidget {
   final String nombreUsuario;
   final String rol;
 
+  String _rolVisible(String rol) {
+    switch (rol.trim().toUpperCase()) {
+      case 'SUPER_ADMIN':
+        return 'SUPER ADMIN';
+
+      case 'SUP_TITULAR':
+        return 'SUPERVISOR TITULAR';
+
+      case 'SUP_SUPLENTE':
+        return 'SUPERVISOR SUPLENTE';
+
+      case 'ADMIN':
+        return 'ADMINISTRADOR';
+
+      case 'COORDINADOR':
+        return 'COORDINADOR';
+
+      default:
+        return rol.replaceAll('_', ' ');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<DashboardProvider>(
@@ -132,34 +205,96 @@ class InicioView extends StatelessWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: <Widget>[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          'Bienvenido, $nombreUsuario',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Rol: $rol',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[
+                      Color(0xFF0D60D6),
+                      Color(0xFF083F85),
+                      Color(0xFF05295E),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: const Color(0xFF083F85).withValues(alpha: 0.20),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Actualizar resumen',
-                    onPressed: provider.cargando
-                        ? null
-                        : provider.cargarResumen,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
+                  ],
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 68,
+                      height: 68,
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Image.asset(
+                        'assets/icons/sst_edurisk_icon_1024.png',
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'Bienvenido, $nombreUsuario',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+
+                          const SizedBox(height: 5),
+
+                          Text(
+                            'Rol: ${_rolVisible(rol)}',
+                            style: const TextStyle(
+                              color: Color(0xFFDCEAFF),
+                              fontSize: 14,
+                            ),
+                          ),
+
+                          const SizedBox(height: 7),
+
+                          const Text(
+                            'SST EduRisk',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    IconButton(
+                      tooltip: 'Actualizar resumen',
+                      onPressed: provider.cargando
+                          ? null
+                          : provider.cargarResumen,
+                      color: Colors.white,
+                      disabledColor: Colors.white54,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 20),
               if (provider.cargando) ...<Widget>[
@@ -174,47 +309,62 @@ class InicioView extends StatelessWidget {
                 const SizedBox(height: 16),
               ],
               ResumenCard(
-                icono: Icons.assignment,
+                icono: Icons.assignment_outlined,
                 titulo: 'Matrices IPERC',
                 descripcion:
-                    'Matrices registradas para identificar peligros y evaluar riesgos.',
+                    'Matrices registradas para identificar peligros '
+                    'y evaluar riesgos.',
                 resumen:
                     '${provider.cantidadMatrices} '
                     '${provider.cantidadMatrices == 1 ? 'matriz registrada' : 'matrices registradas'}',
+                color: AppColors.primaryBright,
               ),
+
               ResumenCard(
-                icono: Icons.warning_amber,
+                icono: Icons.warning_amber_rounded,
                 titulo: 'Riesgos críticos',
                 descripcion:
-                    'Riesgos altos que requieren controles y atención prioritaria.',
+                    'Riesgos altos que requieren controles '
+                    'y atención prioritaria.',
                 resumen:
                     '${provider.cantidadRiesgosCriticos} '
                     '${provider.cantidadRiesgosCriticos == 1 ? 'riesgo crítico' : 'riesgos críticos'}',
+                color: AppColors.riskOrange,
               ),
+
               ResumenCard(
-                icono: Icons.fact_check,
+                icono: Icons.fact_check_outlined,
                 titulo: 'Seguimientos',
                 descripcion:
-                    'Controles y medidas correctivas pendientes de verificación.',
+                    'Controles y medidas correctivas '
+                    'pendientes de verificación.',
                 resumen:
                     '${provider.cantidadSeguimientosPendientes} '
                     '${provider.cantidadSeguimientosPendientes == 1 ? 'seguimiento pendiente' : 'seguimientos pendientes'}',
+                color: AppColors.yellow,
+                colorTexto: const Color(0xFF8A5A00),
               ),
+
               ResumenCard(
                 icono: Icons.verified_outlined,
                 titulo: 'Seguimientos verificados',
                 descripcion:
-                    'Seguimientos que ya fueron revisados y aprobados.',
+                    'Seguimientos que ya fueron revisados '
+                    'y aprobados.',
                 resumen:
                     '${provider.cantidadSeguimientosVerificados} '
                     '${provider.cantidadSeguimientosVerificados == 1 ? 'seguimiento verificado' : 'seguimientos verificados'}',
+                color: AppColors.green,
               ),
+
               const ResumenCard(
                 icono: Icons.sync,
                 titulo: 'Sincronización',
                 descripcion:
-                    'Estado de los registros guardados en modo online y offline.',
+                    'Estado de los registros guardados '
+                    'en modo online y offline.',
                 resumen: 'Sincronización automática activa',
+                color: AppColors.primary,
               ),
             ],
           ),
@@ -512,100 +662,261 @@ class MapasView extends StatelessWidget {
   }
 }
 
-/// Vista de opciones adicionales.
-class MasView extends StatelessWidget {
+/// ===============================================================
+/// MÁS OPCIONES
+/// ===============================================================
+///
+/// Contiene opciones administrativas y adicionales.
+///
+/// Para SUPER_ADMIN también consulta la cantidad de solicitudes
+/// de acceso y recuperación pendientes.
+/// ===============================================================
+class MasView extends StatefulWidget {
   const MasView({required this.nombreUsuario, required this.rol, super.key});
 
   final String nombreUsuario;
   final String rol;
 
   @override
+  State<MasView> createState() => _MasViewState();
+}
+
+class _MasViewState extends State<MasView> {
+  final SolicitudSeguridadRepository _solicitudesRepository =
+      SolicitudSeguridadRepository();
+
+  int _solicitudesPendientes = 0;
+
+  bool _cargandoSolicitudes = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (RolePermissions.esSuperAdmin(widget.rol)) {
+      _cargarSolicitudesPendientes();
+    }
+  }
+
+  // =============================================================
+  // CONTAR SOLICITUDES PENDIENTES
+  // =============================================================
+
+  Future<void> _cargarSolicitudesPendientes() async {
+    if (_cargandoSolicitudes) {
+      return;
+    }
+
+    if (!RolePermissions.esSuperAdmin(widget.rol)) {
+      return;
+    }
+
+    setState(() {
+      _cargandoSolicitudes = true;
+    });
+
+    try {
+      final List<dynamic> resultados = await Future.wait<dynamic>(
+        <Future<dynamic>>[
+          _solicitudesRepository.obtenerSolicitudesAcceso(estado: 'PENDIENTE'),
+          _solicitudesRepository.obtenerSolicitudesRecuperacion(
+            estado: 'PENDIENTE',
+          ),
+        ],
+      );
+
+      final int accesos = (resultados[0] as List).length;
+
+      final int recuperaciones = (resultados[1] as List).length;
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _solicitudesPendientes = accesos + recuperaciones;
+      });
+    } catch (_) {
+      // El contador no debe bloquear el menú
+      // si temporalmente no hay conexión.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargandoSolicitudes = false;
+        });
+      }
+    }
+  }
+
+  // =============================================================
+  // ABRIR SOLICITUDES
+  // =============================================================
+
+  Future<void> _abrirSolicitudes() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          return SolicitudesSeguridadScreen(rol: widget.rol);
+        },
+      ),
+    );
+
+    // Cuando el SUPER_ADMIN regresa del módulo,
+    // actualizamos el contador.
+    if (mounted) {
+      await _cargarSolicitudesPendientes();
+    }
+  }
+
+  // =============================================================
+  // BUILD
+  // =============================================================
+
+  @override
   Widget build(BuildContext context) {
     return ModulosList(
       modulos: <ModuloItem>[
-        // Módulos organizacionales:
-        // SUPER_ADMIN, ADMIN y COORDINADOR.
-        if (RolePermissions.puedeAdministrarCatalogos(rol))
+        // =======================================================
+        // ORGANIZACIÓN
+        // =======================================================
+        if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
             icono: Icons.apartment,
             titulo: 'Áreas',
             descripcion:
-                'Consultar las áreas y ambientes activos de la institución.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const AreasScreen()),
-            ),
+                'Consultar las áreas y ambientes activos '
+                'de la institución.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AreasScreen()),
+              );
+            },
           ),
-        if (RolePermissions.puedeAdministrarCatalogos(rol))
+
+        if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
             icono: Icons.account_tree_outlined,
             titulo: 'Procesos',
-            descripcion: 'Gestionar los procesos pertenecientes a cada área.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
-            ),
+            descripcion:
+                'Gestionar los procesos pertenecientes '
+                'a cada área.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
+              );
+            },
           ),
-        if (RolePermissions.puedeAdministrarCatalogos(rol))
+
+        if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
             icono: Icons.task_alt,
             titulo: 'Actividades',
-            descripcion: 'Registrar actividades y tareas que serán evaluadas.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const ActividadesScreen(),
-              ),
-            ),
+            descripcion:
+                'Registrar actividades y tareas '
+                'que serán evaluadas.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const ActividadesScreen(),
+                ),
+              );
+            },
           ),
-        if (RolePermissions.puedeAdministrarCatalogos(rol))
+
+        if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
             icono: Icons.badge_outlined,
             titulo: 'Puestos de trabajo',
-            descripcion: 'Administrar los puestos pertenecientes a cada área.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const PuestosTrabajoScreen(),
-              ),
-            ),
+            descripcion:
+                'Administrar los puestos pertenecientes '
+                'a cada área.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PuestosTrabajoScreen(),
+                ),
+              );
+            },
           ),
 
-        // Solo SUPER_ADMIN según role_permissions.dart actualizado.
-        if (RolePermissions.puedeAdministrarUsuarios(rol))
+        // =======================================================
+        // SOLO SUPER_ADMIN
+        // =======================================================
+        if (RolePermissions.esSuperAdmin(widget.rol))
+          ModuloItem(
+            icono: Icons.mark_email_unread_outlined,
+            titulo: 'Solicitudes de seguridad',
+            descripcion:
+                'Aprobar accesos y atender recuperaciones '
+                'de contraseña.',
+            cantidad: _solicitudesPendientes,
+            cargandoCantidad: _cargandoSolicitudes,
+            onTap: _abrirSolicitudes,
+          ),
+
+        if (RolePermissions.puedeAdministrarUsuarios(widget.rol))
           ModuloItem(
             icono: Icons.manage_accounts_outlined,
             titulo: 'Usuarios',
-            descripcion: 'Crear, editar, activar, desactivar y asignar roles.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const UsuariosScreen()),
-            ),
+            descripcion:
+                'Crear, editar, activar, desactivar '
+                'y asignar roles.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const UsuariosScreen()),
+              );
+            },
           ),
-        if (RolePermissions.puedeAdministrarRoles(rol))
+
+        if (RolePermissions.puedeAdministrarRoles(widget.rol))
           ModuloItem(
             icono: Icons.admin_panel_settings_outlined,
             titulo: 'Roles',
-            descripcion: 'Administrar roles y permisos generales del sistema.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const RolesScreen()),
-            ),
+            descripcion:
+                'Administrar roles y permisos '
+                'generales del sistema.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const RolesScreen()),
+              );
+            },
           ),
-        if (RolePermissions.puedeVerReportes(rol))
+
+        // =======================================================
+        // REPORTES
+        // =======================================================
+        if (RolePermissions.puedeVerReportes(widget.rol))
           ModuloItem(
             icono: Icons.bar_chart,
             titulo: 'Reportes',
             descripcion:
-                'Consultar reportes de riesgos, controles y seguimientos.',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => ReportesScreen(rol: rol)),
-            ),
+                'Consultar reportes de riesgos, '
+                'controles y seguimientos.',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ReportesScreen(rol: widget.rol),
+                ),
+              );
+            },
           ),
 
+        // =======================================================
+        // PERFIL
+        // =======================================================
         ModuloItem(
           icono: Icons.person,
           titulo: 'Perfil',
-          descripcion: 'Consultar la información de la cuenta y cerrar sesión.',
+          descripcion:
+              'Consultar la información de la cuenta '
+              'y cerrar sesión.',
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) =>
-                    PerfilScreen(nombreUsuario: nombreUsuario, rol: rol),
+                builder: (_) => PerfilScreen(
+                  nombreUsuario: widget.nombreUsuario,
+                  rol: widget.rol,
+                ),
               ),
             );
           },
@@ -645,7 +956,46 @@ class ModulosList extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Text(modulo.descripcion),
             ),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (modulo.cargandoCantidad)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else if (modulo.cantidad > 0)
+                  Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.error,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      modulo.cantidad > 99 ? '99+' : modulo.cantidad.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+
+                if (modulo.cargandoCantidad || modulo.cantidad > 0)
+                  const SizedBox(width: 8),
+
+                const Icon(Icons.chevron_right),
+              ],
+            ),
             onTap:
                 modulo.onTap ??
                 () {
@@ -666,54 +1016,123 @@ class ModulosList extends StatelessWidget {
   }
 }
 
-/// Tarjeta del dashboard.
+/// ===============================================================
+/// TARJETA DEL DASHBOARD SST EDURISK
+/// ===============================================================
 class ResumenCard extends StatelessWidget {
   const ResumenCard({
     required this.icono,
     required this.titulo,
     required this.descripcion,
     required this.resumen,
+    required this.color,
+    this.colorTexto,
     super.key,
   });
 
   final IconData icono;
+
   final String titulo;
+
   final String descripcion;
+
   final String resumen;
+
+  /// Color asociado al módulo según la identidad SST EduRisk.
+  final Color color;
+
+  /// Permite usar un tono más oscuro cuando sea necesario,
+  /// especialmente con el amarillo.
+  final Color? colorTexto;
 
   @override
   Widget build(BuildContext context) {
+    final Color textoDestacado = colorTexto ?? color;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            CircleAvatar(radius: 24, child: Icon(icono)),
-            const SizedBox(width: 14),
+            // ===================================================
+            // BARRA DE COLOR
+            // ===================================================
+            Container(width: 5, color: color),
+
+            // ===================================================
+            // CONTENIDO
+            // ===================================================
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    titulo,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // ===========================================
+                    // ICONO
+                    // ===========================================
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(icono, color: textoDestacado, size: 28),
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(descripcion),
-                  const SizedBox(height: 10),
-                  Text(
-                    resumen,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.primary,
+
+                    const SizedBox(width: 14),
+
+                    // ===========================================
+                    // INFORMACIÓN
+                    // ===========================================
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            titulo,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+
+                          const SizedBox(height: 5),
+
+                          Text(
+                            descripcion,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.copyWith(height: 1.35),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              resumen,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: textoDestacado,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -730,10 +1149,21 @@ class ModuloItem {
     required this.titulo,
     required this.descripcion,
     this.onTap,
+    this.cantidad = 0,
+    this.cargandoCantidad = false,
   });
 
   final IconData icono;
+
   final String titulo;
+
   final String descripcion;
+
   final VoidCallback? onTap;
+
+  /// Cantidad pendiente que se mostrará como badge.
+  final int cantidad;
+
+  /// Indica si el contador todavía se está consultando.
+  final bool cargandoCantidad;
 }

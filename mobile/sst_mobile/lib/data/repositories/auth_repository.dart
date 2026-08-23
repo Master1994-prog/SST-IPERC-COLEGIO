@@ -13,11 +13,14 @@ class OfflineSession {
     required this.usuarioId,
     required this.nombreUsuario,
     required this.rol,
+    required this.debeCambiarPassword,
   });
 
   final String usuarioId;
   final String nombreUsuario;
   final String rol;
+
+  final bool debeCambiarPassword;
 }
 
 /// ===============================================================
@@ -77,6 +80,7 @@ class AuthRepository {
       usuarioId: response.usuarioId,
       nombreUsuario: response.nombreUsuario,
       rol: response.rol,
+      debeCambiarPassword: response.debeCambiarPassword,
       expiraEn: response.expiraEn,
     );
 
@@ -94,7 +98,9 @@ class AuthRepository {
     // catálogo y conserva la última copia SQLite válida.
     // -----------------------------------------------------------
 
-    unawaited(_precargarCatalogosSilenciosamente());
+    if (!response.debeCambiarPassword) {
+      unawaited(_precargarCatalogosSilenciosamente());
+    }
 
     return response;
   }
@@ -133,11 +139,45 @@ class AuthRepository {
       return null;
     }
 
+    final bool debeCambiarPassword = await _secureStorage
+        .getDebeCambiarPassword();
+
     return OfflineSession(
       usuarioId: usuarioId,
       nombreUsuario: nombreUsuario,
       rol: rol,
+      debeCambiarPassword: debeCambiarPassword,
     );
+  }
+
+  // =============================================================
+  // SOLICITAR ACCESO
+  // =============================================================
+
+  Future<String> solicitarAcceso({
+    required String nombres,
+    required String apellidos,
+    required String correo,
+    required String institucion,
+    String? cargo,
+    String? motivo,
+  }) {
+    return _remoteDatasource.solicitarAcceso(
+      nombres: nombres,
+      apellidos: apellidos,
+      correo: correo,
+      institucion: institucion,
+      cargo: cargo,
+      motivo: motivo,
+    );
+  }
+
+  // =============================================================
+  // RECUPERAR CONTRASEÑA
+  // =============================================================
+
+  Future<String> recuperarPassword({required String identificador}) {
+    return _remoteDatasource.recuperarPassword(identificador: identificador);
   }
 
   // =============================================================
@@ -146,5 +186,23 @@ class AuthRepository {
 
   Future<void> logout() {
     return _secureStorage.clearSession();
+  }
+
+  Future<String> cambiarPasswordPropio({
+    required String passwordActual,
+    required String nuevaPassword,
+    required String confirmarPassword,
+  }) async {
+    final String mensaje = await _remoteDatasource.cambiarPasswordPropio(
+      passwordActual: passwordActual,
+      nuevaPassword: nuevaPassword,
+      confirmarPassword: confirmarPassword,
+    );
+
+    await _secureStorage.setDebeCambiarPassword(false);
+
+    unawaited(_precargarCatalogosSilenciosamente());
+
+    return mensaje;
   }
 }
