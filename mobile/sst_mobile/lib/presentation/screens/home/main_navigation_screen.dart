@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/theme/app_theme.dart';
 import '../../../core/security/role_permissions.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/solicitud_seguridad_repository.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../widgets/sync_status_card.dart';
 import '../actividades/actividades_screen.dart';
 import '../areas/areas_screen.dart';
 import '../categorias_peligro/categorias_peligro_screen.dart';
@@ -28,7 +29,21 @@ import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
 import '../usuarios/usuarios_screen.dart';
 
-/// Pantalla principal de navegación de la aplicación.
+/// ===============================================================
+/// MAIN NAVIGATION SCREEN - SST EDURISK
+/// ===============================================================
+///
+/// Navegación principal con identidad visual oficial.
+///
+/// Colores:
+/// primary       #083F85
+/// primaryBright #0D60D6
+/// navyDark      #05295E
+/// green         #1DA041
+/// yellow        #FEB81C
+/// riskOrange    #EC490F
+/// background    #F6F8FC
+/// ===============================================================
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({
     required this.nombreUsuario,
@@ -74,10 +89,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         titleSpacing: 16,
-
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         title: Row(
           children: <Widget>[
             Container(
@@ -94,9 +111,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 filterQuality: FilterQuality.high,
               ),
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,10 +122,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 17,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-
                   Text(
                     _titulos[_indiceActual],
                     overflow: TextOverflow.ellipsis,
@@ -128,6 +142,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       body: IndexedStack(index: _indiceActual, children: _pantallas),
       bottomNavigationBar: NavigationBar(
+        backgroundColor: AppColors.surface,
+        indicatorColor: AppColors.primary.withValues(alpha: 0.14),
         selectedIndex: _indiceActual,
         onDestinationSelected: (int index) {
           setState(() {
@@ -137,27 +153,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         destinations: const <NavigationDestination>[
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home, color: AppColors.primary),
             label: 'Inicio',
           ),
           NavigationDestination(
             icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment),
+            selectedIcon: Icon(Icons.assignment, color: AppColors.primary),
             label: 'IPERC',
           ),
           NavigationDestination(
             icon: Icon(Icons.health_and_safety_outlined),
-            selectedIcon: Icon(Icons.health_and_safety),
+            selectedIcon: Icon(
+              Icons.health_and_safety,
+              color: AppColors.primary,
+            ),
             label: 'SST',
           ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
+            selectedIcon: Icon(Icons.map, color: AppColors.primary),
             label: 'Mapas',
           ),
           NavigationDestination(
             icon: Icon(Icons.more_horiz),
-            selectedIcon: Icon(Icons.more),
+            selectedIcon: Icon(Icons.more, color: AppColors.primary),
             label: 'Más',
           ),
         ],
@@ -166,7 +185,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 }
 
-/// Vista inicial.
+/// ===============================================================
+/// INICIO
+/// ===============================================================
 class InicioView extends StatelessWidget {
   const InicioView({required this.nombreUsuario, required this.rol, super.key});
 
@@ -200,6 +221,7 @@ class InicioView extends StatelessWidget {
     return Consumer<DashboardProvider>(
       builder: (BuildContext context, DashboardProvider provider, Widget? child) {
         return RefreshIndicator(
+          color: AppColors.primary,
           onRefresh: provider.cargarResumen,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -212,15 +234,15 @@ class InicioView extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: <Color>[
-                      Color(0xFF0D60D6),
-                      Color(0xFF083F85),
-                      Color(0xFF05295E),
+                      AppColors.primaryBright,
+                      AppColors.primary,
+                      AppColors.navyDark,
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: <BoxShadow>[
                     BoxShadow(
-                      color: const Color(0xFF083F85).withValues(alpha: 0.20),
+                      color: AppColors.primary.withValues(alpha: 0.20),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
@@ -242,9 +264,7 @@ class InicioView extends StatelessWidget {
                         filterQuality: FilterQuality.high,
                       ),
                     ),
-
                     const SizedBox(width: 16),
-
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,12 +276,10 @@ class InicioView extends StatelessWidget {
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-
                           const SizedBox(height: 5),
-
                           Text(
                             'Rol: ${_rolVisible(rol)}',
                             style: const TextStyle(
@@ -269,9 +287,7 @@ class InicioView extends StatelessWidget {
                               fontSize: 14,
                             ),
                           ),
-
                           const SizedBox(height: 7),
-
                           const Text(
                             'SST EduRisk',
                             style: TextStyle(
@@ -283,7 +299,6 @@ class InicioView extends StatelessWidget {
                         ],
                       ),
                     ),
-
                     IconButton(
                       tooltip: 'Actualizar resumen',
                       onPressed: provider.cargando
@@ -297,10 +312,15 @@ class InicioView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
+
               if (provider.cargando) ...<Widget>[
-                const LinearProgressIndicator(),
+                const LinearProgressIndicator(
+                  color: AppColors.primaryBright,
+                  backgroundColor: AppColors.border,
+                ),
                 const SizedBox(height: 16),
               ],
+
               if (provider.tieneError) ...<Widget>[
                 _DashboardError(
                   mensaje: provider.error!,
@@ -308,6 +328,7 @@ class InicioView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
               ],
+
               ResumenCard(
                 icono: Icons.assignment_outlined,
                 titulo: 'Matrices IPERC',
@@ -357,15 +378,12 @@ class InicioView extends StatelessWidget {
                 color: AppColors.green,
               ),
 
-              const ResumenCard(
-                icono: Icons.sync,
-                titulo: 'Sincronización',
-                descripcion:
-                    'Estado de los registros guardados '
-                    'en modo online y offline.',
-                resumen: 'Sincronización automática activa',
-                color: AppColors.primary,
-              ),
+              const SizedBox(height: 2),
+
+              // Estado REAL de sincronización online/offline.
+              const SyncStatusCard(),
+
+              const SizedBox(height: 14),
             ],
           ),
         );
@@ -374,6 +392,9 @@ class InicioView extends StatelessWidget {
   }
 }
 
+/// ===============================================================
+/// ERROR DEL DASHBOARD
+/// ===============================================================
 class _DashboardError extends StatelessWidget {
   const _DashboardError({required this.mensaje, required this.onReintentar});
 
@@ -382,23 +403,25 @@ class _DashboardError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: colors.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.riskOrange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.riskOrange.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.error_outline, color: colors.onErrorContainer),
+          const Icon(Icons.error_outline, color: AppColors.riskOrange),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               mensaje,
-              style: TextStyle(color: colors.onErrorContainer),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                height: 1.35,
+              ),
             ),
           ),
           TextButton(onPressed: onReintentar, child: const Text('Reintentar')),
@@ -408,7 +431,9 @@ class _DashboardError extends StatelessWidget {
   }
 }
 
-/// Vista principal del módulo IPERC.
+/// ===============================================================
+/// IPERC
+/// ===============================================================
 class IpercView extends StatelessWidget {
   const IpercView({required this.rol, super.key});
 
@@ -416,14 +441,15 @@ class IpercView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        _IpercModuloCard(
-          icono: Icons.assignment,
+    return ModulosList(
+      modulos: <ModuloItem>[
+        ModuloItem(
+          icono: Icons.assignment_outlined,
           titulo: 'Matrices IPERC',
           descripcion:
-              'Crear, consultar y actualizar matrices de identificación de peligros y evaluación de riesgos.',
+              'Crear, consultar y actualizar matrices de identificación '
+              'de peligros y evaluación de riesgos.',
+          color: AppColors.primaryBright,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -432,12 +458,13 @@ class IpercView extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 12),
-        _IpercModuloCard(
-          icono: Icons.grid_view,
+        ModuloItem(
+          icono: Icons.grid_view_rounded,
           titulo: 'Evaluación 5×5',
           descripcion:
               'Calcular el nivel de riesgo según probabilidad y severidad.',
+          color: AppColors.yellow,
+          colorTexto: AppColors.navyDark,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -446,12 +473,12 @@ class IpercView extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 12),
-        _IpercModuloCard(
-          icono: Icons.fact_check,
+        ModuloItem(
+          icono: Icons.fact_check_outlined,
           titulo: 'Seguimientos',
           descripcion:
               'Registrar avances, evidencias, responsables y observaciones.',
+          color: AppColors.green,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -465,44 +492,9 @@ class IpercView extends StatelessWidget {
   }
 }
 
-class _IpercModuloCard extends StatelessWidget {
-  const _IpercModuloCard({
-    required this.icono,
-    required this.titulo,
-    required this.descripcion,
-    required this.onTap,
-  });
-
-  final IconData icono;
-  final String titulo;
-  final String descripcion;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: CircleAvatar(child: Icon(icono)),
-        title: Text(
-          titulo,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(descripcion),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
-/// Catálogos SST.
-///
-/// Solo SUPER_ADMIN, ADMIN y COORDINADOR pueden administrar
-/// los catálogos SST.
+/// ===============================================================
+/// SST
+/// ===============================================================
 class SstView extends StatelessWidget {
   const SstView({required this.rol, super.key});
 
@@ -518,23 +510,38 @@ class SstView extends StatelessWidget {
       return ListView(
         padding: const EdgeInsets.all(24),
         children: <Widget>[
-          Icon(
-            Icons.lock_outline,
-            size: 64,
-            color: Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 32),
+          Center(
+            child: Container(
+              width: 92,
+              height: 92,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.09),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_outline,
+                size: 48,
+                color: AppColors.primary,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(
+          const SizedBox(height: 18),
+          const Text(
             'Acceso restringido',
             textAlign: TextAlign.center,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 10),
           const Text(
-            'Tu usuario no tiene permisos para administrar los catálogos SST.',
+            'Tu usuario no tiene permisos para administrar '
+            'los catálogos SST.',
             textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, height: 1.40),
           ),
         ],
       );
@@ -546,7 +553,9 @@ class SstView extends StatelessWidget {
           icono: Icons.category_outlined,
           titulo: 'Categorías de peligro',
           descripcion:
-              'Administrar las categorías principales utilizadas para organizar los tipos de peligro.',
+              'Administrar las categorías principales utilizadas para '
+              'organizar los tipos de peligro.',
+          color: AppColors.primary,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const CategoriasPeligroScreen(),
@@ -557,16 +566,19 @@ class SstView extends StatelessWidget {
           icono: Icons.account_tree_outlined,
           titulo: 'Tipos de peligro',
           descripcion:
-              'Administrar los tipos utilizados para clasificar los peligros SST.',
+              'Administrar los tipos utilizados para clasificar '
+              'los peligros SST.',
+          color: AppColors.primaryBright,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const TiposPeligroScreen()),
           ),
         ),
         ModuloItem(
-          icono: Icons.warning_amber_outlined,
+          icono: Icons.warning_amber_rounded,
           titulo: 'Peligros',
           descripcion:
               'Registrar fuentes, actos y situaciones que pueden causar daño.',
+          color: AppColors.riskOrange,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const PeligrosScreen()),
           ),
@@ -575,7 +587,10 @@ class SstView extends StatelessWidget {
           icono: Icons.personal_injury_outlined,
           titulo: 'Consecuencias',
           descripcion:
-              'Registrar los posibles daños o efectos producidos por cada peligro.',
+              'Registrar los posibles daños o efectos producidos '
+              'por cada peligro.',
+          color: AppColors.yellow,
+          colorTexto: AppColors.navyDark,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const ConsecuenciasScreen(),
@@ -586,7 +601,9 @@ class SstView extends StatelessWidget {
           icono: Icons.account_tree_outlined,
           titulo: 'Clasificaciones de control',
           descripcion:
-              'Administrar la jerarquía utilizada para organizar los controles SST.',
+              'Administrar la jerarquía utilizada para organizar '
+              'los controles SST.',
+          color: AppColors.navyDark,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const ClasificacionesControlScreen(),
@@ -598,6 +615,7 @@ class SstView extends StatelessWidget {
           titulo: 'Controles',
           descripcion:
               'Administrar medidas para eliminar o reducir los riesgos.',
+          color: AppColors.green,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => ControlesScreen(rol: rol)),
           ),
@@ -606,7 +624,9 @@ class SstView extends StatelessWidget {
           icono: Icons.category_outlined,
           titulo: 'Tipos de EPP',
           descripcion:
-              'Administrar las categorías utilizadas para clasificar los equipos de protección personal.',
+              'Administrar las categorías utilizadas para clasificar '
+              'los equipos de protección personal.',
+          color: AppColors.primaryBright,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const TiposEquipoProteccionScreen(),
@@ -618,6 +638,7 @@ class SstView extends StatelessWidget {
           titulo: 'Equipos de protección',
           descripcion:
               'Gestionar los equipos de protección personal requeridos.',
+          color: AppColors.green,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const EquiposProteccionScreen(),
@@ -629,7 +650,9 @@ class SstView extends StatelessWidget {
   }
 }
 
-/// Mapas de riesgo.
+/// ===============================================================
+/// MAPAS DE RIESGO
+/// ===============================================================
 class MapasView extends StatelessWidget {
   const MapasView({super.key});
 
@@ -641,7 +664,9 @@ class MapasView extends StatelessWidget {
           icono: Icons.map_outlined,
           titulo: 'Mapas de riesgo',
           descripcion:
-              'Consultar los peligros y niveles de riesgo registrados por matriz IPERC.',
+              'Consultar los peligros y niveles de riesgo registrados '
+              'por matriz IPERC.',
+          color: AppColors.primaryBright,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const MapasRiesgoScreen()),
           ),
@@ -650,7 +675,9 @@ class MapasView extends StatelessWidget {
           icono: Icons.location_on_outlined,
           titulo: 'Zonas identificadas',
           descripcion:
-              'Consultar las áreas identificadas, su nivel máximo y cantidad de riesgos.',
+              'Consultar las áreas identificadas, su nivel máximo '
+              'y cantidad de riesgos.',
+          color: AppColors.riskOrange,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const ZonasIdentificadasScreen(),
@@ -664,12 +691,6 @@ class MapasView extends StatelessWidget {
 
 /// ===============================================================
 /// MÁS OPCIONES
-/// ===============================================================
-///
-/// Contiene opciones administrativas y adicionales.
-///
-/// Para SUPER_ADMIN también consulta la cantidad de solicitudes
-/// de acceso y recuperación pendientes.
 /// ===============================================================
 class MasView extends StatefulWidget {
   const MasView({required this.nombreUsuario, required this.rol, super.key});
@@ -726,7 +747,6 @@ class _MasViewState extends State<MasView> {
       );
 
       final int accesos = (resultados[0] as List).length;
-
       final int recuperaciones = (resultados[1] as List).length;
 
       if (!mounted) {
@@ -737,8 +757,7 @@ class _MasViewState extends State<MasView> {
         _solicitudesPendientes = accesos + recuperaciones;
       });
     } catch (_) {
-      // El contador no debe bloquear el menú
-      // si temporalmente no hay conexión.
+      // El contador no debe bloquear el menú si no hay conexión.
     } finally {
       if (mounted) {
         setState(() {
@@ -761,31 +780,22 @@ class _MasViewState extends State<MasView> {
       ),
     );
 
-    // Cuando el SUPER_ADMIN regresa del módulo,
-    // actualizamos el contador.
     if (mounted) {
       await _cargarSolicitudesPendientes();
     }
   }
 
-  // =============================================================
-  // BUILD
-  // =============================================================
-
   @override
   Widget build(BuildContext context) {
     return ModulosList(
       modulos: <ModuloItem>[
-        // =======================================================
-        // ORGANIZACIÓN
-        // =======================================================
         if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
-            icono: Icons.apartment,
+            icono: Icons.apartment_outlined,
             titulo: 'Áreas',
             descripcion:
-                'Consultar las áreas y ambientes activos '
-                'de la institución.',
+                'Consultar las áreas y ambientes activos de la institución.',
+            color: AppColors.primary,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const AreasScreen()),
@@ -797,9 +807,8 @@ class _MasViewState extends State<MasView> {
           ModuloItem(
             icono: Icons.account_tree_outlined,
             titulo: 'Procesos',
-            descripcion:
-                'Gestionar los procesos pertenecientes '
-                'a cada área.',
+            descripcion: 'Gestionar los procesos pertenecientes a cada área.',
+            color: AppColors.primaryBright,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const ProcesosScreen()),
@@ -809,11 +818,10 @@ class _MasViewState extends State<MasView> {
 
         if (RolePermissions.puedeAdministrarCatalogos(widget.rol))
           ModuloItem(
-            icono: Icons.task_alt,
+            icono: Icons.task_alt_outlined,
             titulo: 'Actividades',
-            descripcion:
-                'Registrar actividades y tareas '
-                'que serán evaluadas.',
+            descripcion: 'Registrar actividades y tareas que serán evaluadas.',
+            color: AppColors.green,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -827,9 +835,9 @@ class _MasViewState extends State<MasView> {
           ModuloItem(
             icono: Icons.badge_outlined,
             titulo: 'Puestos de trabajo',
-            descripcion:
-                'Administrar los puestos pertenecientes '
-                'a cada área.',
+            descripcion: 'Administrar los puestos pertenecientes a cada área.',
+            color: AppColors.yellow,
+            colorTexto: AppColors.navyDark,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -839,16 +847,13 @@ class _MasViewState extends State<MasView> {
             },
           ),
 
-        // =======================================================
-        // SOLO SUPER_ADMIN
-        // =======================================================
         if (RolePermissions.esSuperAdmin(widget.rol))
           ModuloItem(
             icono: Icons.mark_email_unread_outlined,
             titulo: 'Solicitudes de seguridad',
             descripcion:
-                'Aprobar accesos y atender recuperaciones '
-                'de contraseña.',
+                'Aprobar accesos y atender recuperaciones de contraseña.',
+            color: AppColors.riskOrange,
             cantidad: _solicitudesPendientes,
             cargandoCantidad: _cargandoSolicitudes,
             onTap: _abrirSolicitudes,
@@ -858,9 +863,8 @@ class _MasViewState extends State<MasView> {
           ModuloItem(
             icono: Icons.manage_accounts_outlined,
             titulo: 'Usuarios',
-            descripcion:
-                'Crear, editar, activar, desactivar '
-                'y asignar roles.',
+            descripcion: 'Crear, editar, activar, desactivar y asignar roles.',
+            color: AppColors.primary,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const UsuariosScreen()),
@@ -872,9 +876,8 @@ class _MasViewState extends State<MasView> {
           ModuloItem(
             icono: Icons.admin_panel_settings_outlined,
             titulo: 'Roles',
-            descripcion:
-                'Administrar roles y permisos '
-                'generales del sistema.',
+            descripcion: 'Administrar roles y permisos generales del sistema.',
+            color: AppColors.navyDark,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const RolesScreen()),
@@ -882,16 +885,13 @@ class _MasViewState extends State<MasView> {
             },
           ),
 
-        // =======================================================
-        // REPORTES
-        // =======================================================
         if (RolePermissions.puedeVerReportes(widget.rol))
           ModuloItem(
-            icono: Icons.bar_chart,
+            icono: Icons.bar_chart_outlined,
             titulo: 'Reportes',
             descripcion:
-                'Consultar reportes de riesgos, '
-                'controles y seguimientos.',
+                'Consultar reportes de riesgos, controles y seguimientos.',
+            color: AppColors.green,
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -901,15 +901,13 @@ class _MasViewState extends State<MasView> {
             },
           ),
 
-        // =======================================================
-        // PERFIL
-        // =======================================================
         ModuloItem(
-          icono: Icons.person,
+          icono: Icons.person_outline,
           titulo: 'Perfil',
           descripcion:
-              'Consultar la información de la cuenta '
+              'Consultar la información de la cuenta, acceso offline '
               'y cerrar sesión.',
+          color: AppColors.primaryBright,
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -926,7 +924,9 @@ class _MasViewState extends State<MasView> {
   }
 }
 
-/// Lista reutilizable de módulos.
+/// ===============================================================
+/// LISTA REUTILIZABLE DE MÓDULOS
+/// ===============================================================
 class ModulosList extends StatelessWidget {
   const ModulosList({required this.modulos, super.key});
 
@@ -935,67 +935,20 @@ class ModulosList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       itemCount: modulos.length,
       separatorBuilder: (BuildContext context, int index) {
         return const SizedBox(height: 12);
       },
       itemBuilder: (BuildContext context, int index) {
         final ModuloItem modulo = modulos[index];
+        final Color colorTexto = modulo.colorTexto ?? modulo.color;
 
-        return Card(
+        return Material(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
           clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: CircleAvatar(child: Icon(modulo.icono)),
-            title: Text(
-              modulo.titulo,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(modulo.descripcion),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                if (modulo.cargandoCantidad)
-                  const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else if (modulo.cantidad > 0)
-                  Container(
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.error,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      modulo.cantidad > 99 ? '99+' : modulo.cantidad.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-
-                if (modulo.cargandoCantidad || modulo.cantidad > 0)
-                  const SizedBox(width: 8),
-
-                const Icon(Icons.chevron_right),
-              ],
-            ),
+          child: InkWell(
             onTap:
                 modulo.onTap ??
                 () {
@@ -1003,12 +956,125 @@ class ModulosList extends StatelessWidget {
                     ..hideCurrentSnackBar()
                     ..showSnackBar(
                       SnackBar(
+                        backgroundColor: AppColors.primary,
+                        behavior: SnackBarBehavior.floating,
                         content: Text(
                           'Módulo ${modulo.titulo} en construcción.',
                         ),
                       ),
                     );
                 },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    Container(width: 5, color: modulo.color),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: <Widget>[
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: modulo.color.withValues(alpha: 0.11),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(
+                                modulo.icono,
+                                color: colorTexto,
+                                size: 27,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: <Widget>[
+                                  Text(
+                                    modulo.titulo,
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    modulo.descripcion,
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                                if (modulo.cargandoCantidad)
+                                  SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: modulo.color,
+                                    ),
+                                  )
+                                else if (modulo.cantidad > 0)
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 30,
+                                      minHeight: 30,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.riskOrange,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(
+                                      modulo.cantidad > 99
+                                          ? '99+'
+                                          : modulo.cantidad.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                if (modulo.cargandoCantidad ||
+                                    modulo.cantidad > 0)
+                                  const SizedBox(width: 8),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: colorTexto,
+                                  size: 26,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },
@@ -1017,7 +1083,7 @@ class ModulosList extends StatelessWidget {
 }
 
 /// ===============================================================
-/// TARJETA DEL DASHBOARD SST EDURISK
+/// TARJETA DEL DASHBOARD
 /// ===============================================================
 class ResumenCard extends StatelessWidget {
   const ResumenCard({
@@ -1031,18 +1097,10 @@ class ResumenCard extends StatelessWidget {
   });
 
   final IconData icono;
-
   final String titulo;
-
   final String descripcion;
-
   final String resumen;
-
-  /// Color asociado al módulo según la identidad SST EduRisk.
   final Color color;
-
-  /// Permite usar un tono más oscuro cuando sea necesario,
-  /// especialmente con el amarillo.
   final Color? colorTexto;
 
   @override
@@ -1056,23 +1114,13 @@ class ResumenCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // ===================================================
-            // BARRA DE COLOR
-            // ===================================================
             Container(width: 5, color: color),
-
-            // ===================================================
-            // CONTENIDO
-            // ===================================================
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    // ===========================================
-                    // ICONO
-                    // ===========================================
                     Container(
                       width: 52,
                       height: 52,
@@ -1082,12 +1130,7 @@ class ResumenCard extends StatelessWidget {
                       ),
                       child: Icon(icono, color: textoDestacado, size: 28),
                     ),
-
                     const SizedBox(width: 14),
-
-                    // ===========================================
-                    // INFORMACIÓN
-                    // ===========================================
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1095,22 +1138,20 @@ class ResumenCard extends StatelessWidget {
                           Text(
                             titulo,
                             style: const TextStyle(
+                              color: AppColors.textPrimary,
                               fontSize: 17,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
-
                           const SizedBox(height: 5),
-
                           Text(
                             descripcion,
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(height: 1.35),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              height: 1.35,
+                            ),
                           ),
-
                           const SizedBox(height: 10),
-
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -1142,28 +1183,36 @@ class ResumenCard extends StatelessWidget {
   }
 }
 
-/// Información visual de un módulo.
+/// ===============================================================
+/// INFORMACIÓN VISUAL DE UN MÓDULO
+/// ===============================================================
 class ModuloItem {
   const ModuloItem({
     required this.icono,
     required this.titulo,
     required this.descripcion,
+    required this.color,
+    this.colorTexto,
     this.onTap,
     this.cantidad = 0,
     this.cargandoCantidad = false,
   });
 
   final IconData icono;
-
   final String titulo;
-
   final String descripcion;
+
+  /// Color de identidad del módulo.
+  final Color color;
+
+  /// Se usa especialmente con amarillo para mejorar contraste.
+  final Color? colorTexto;
 
   final VoidCallback? onTap;
 
-  /// Cantidad pendiente que se mostrará como badge.
+  /// Cantidad pendiente mostrada como badge.
   final int cantidad;
 
-  /// Indica si el contador todavía se está consultando.
+  /// Indica si todavía se consulta el contador.
   final bool cargandoCantidad;
 }

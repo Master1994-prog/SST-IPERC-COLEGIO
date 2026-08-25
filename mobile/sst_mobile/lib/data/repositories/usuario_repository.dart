@@ -1,16 +1,30 @@
 import '../datasources/remote/usuario_remote_datasource.dart';
 import '../models/usuario_model.dart';
 
-/// Repositorio para gestionar usuarios del sistema SST/IPERC.
+/// ===============================================================
+/// REPOSITORIO DE USUARIOS - SST EDURISK
+/// ===============================================================
+///
+/// Centraliza las operaciones del módulo de usuarios.
+///
+/// IMPORTANTE:
+/// Los identificadores de auditoría ya NO utilizan valores fijos.
+///
+/// El usuario que realiza cada operación debe enviarse explícitamente
+/// desde la sesión autenticada.
+///
+/// El backend también debe validar el usuario real desde el JWT.
+/// ===============================================================
 class UsuarioRepository {
   UsuarioRepository({UsuarioRemoteDatasource? remoteDatasource})
     : _remoteDatasource = remoteDatasource ?? UsuarioRemoteDatasource();
 
   final UsuarioRemoteDatasource _remoteDatasource;
 
-  /// Obtiene todos los usuarios activos.
-  ///
-  /// Permite filtrar por institución, sede, área y rol.
+  // =============================================================
+  // OBTENER TODOS
+  // =============================================================
+
   Future<List<UsuarioModel>> obtenerTodos({
     int? institucionId,
     int? sedeId,
@@ -25,12 +39,26 @@ class UsuarioRepository {
     );
   }
 
-  /// Obtiene un usuario por su identificador.
+  // =============================================================
+  // OBTENER POR ID
+  // =============================================================
+
   Future<UsuarioModel> obtenerPorId(int id) {
+    if (id <= 0) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'El identificador del usuario no es válido.',
+      );
+    }
+
     return _remoteDatasource.obtenerPorId(id);
   }
 
-  /// Registra un nuevo usuario.
+  // =============================================================
+  // CREAR USUARIO
+  // =============================================================
+
   Future<UsuarioModel> crear({
     required String nombres,
     required String apellidos,
@@ -45,8 +73,10 @@ class UsuarioRepository {
     int? areaId,
     required List<int> rolIds,
     bool debeCambiarPassword = true,
-    int usuarioRegistroId = 1,
+    required int usuarioRegistroId,
   }) {
+    _validarUsuarioAuditoria(usuarioRegistroId, campo: 'usuarioRegistroId');
+
     return _remoteDatasource.crear(
       nombres: nombres,
       apellidos: apellidos,
@@ -65,7 +95,10 @@ class UsuarioRepository {
     );
   }
 
-  /// Actualiza los datos generales del usuario.
+  // =============================================================
+  // ACTUALIZAR USUARIO
+  // =============================================================
+
   Future<UsuarioModel> actualizar({
     required int id,
     required String nombres,
@@ -79,8 +112,15 @@ class UsuarioRepository {
     int? sedeId,
     int? areaId,
     required bool activo,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
+
     return _remoteDatasource.actualizar(
       id: id,
       nombres: nombres,
@@ -98,13 +138,23 @@ class UsuarioRepository {
     );
   }
 
-  /// Cambia la contraseña del usuario.
+  // =============================================================
+  // CAMBIAR CONTRASEÑA
+  // =============================================================
+
   Future<String> cambiarPassword({
     required int id,
     required String nuevaPassword,
     bool debeCambiarPassword = true,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
+
     return _remoteDatasource.cambiarPassword(
       id: id,
       nuevaPassword: nuevaPassword,
@@ -113,12 +163,22 @@ class UsuarioRepository {
     );
   }
 
-  /// Reemplaza los roles asignados al usuario.
+  // =============================================================
+  // ACTUALIZAR ROLES
+  // =============================================================
+
   Future<UsuarioModel> actualizarRoles({
     required int id,
     required List<int> rolIds,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
+
     return _remoteDatasource.actualizarRoles(
       id: id,
       rolIds: rolIds,
@@ -126,12 +186,22 @@ class UsuarioRepository {
     );
   }
 
-  /// Activa o desactiva un usuario.
+  // =============================================================
+  // ACTIVAR / DESACTIVAR
+  // =============================================================
+
   Future<String> cambiarEstado({
     required int id,
     required bool activo,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
+
     return _remoteDatasource.cambiarEstado(
       id: id,
       activo: activo,
@@ -139,13 +209,22 @@ class UsuarioRepository {
     );
   }
 
-  /// Realiza la eliminación lógica de un usuario.
-  Future<String> eliminar({required int id, int usuarioId = 1}) {
+  // =============================================================
+  // ELIMINAR
+  // =============================================================
+
+  Future<String> eliminar({required int id, required int usuarioId}) {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(usuarioId, campo: 'usuarioId');
+
     return _remoteDatasource.eliminar(id: id, usuarioId: usuarioId);
   }
 
-  /// Busca usuarios por nombre, usuario, documento,
-  /// correo, teléfono o rol.
+  // =============================================================
+  // BÚSQUEDA LOCAL
+  // =============================================================
+
   List<UsuarioModel> buscarEnLista(List<UsuarioModel> usuarios, String texto) {
     final String criterio = texto.trim().toLowerCase();
 
@@ -170,18 +249,25 @@ class UsuarioRepository {
     }).toList();
   }
 
-  /// Ordena usuarios por apellidos y nombres.
+  // =============================================================
+  // ORDENAR
+  // =============================================================
+
   List<UsuarioModel> ordenarPorNombre(List<UsuarioModel> usuarios) {
     final List<UsuarioModel> resultado = List<UsuarioModel>.from(usuarios);
 
     resultado.sort((UsuarioModel primero, UsuarioModel segundo) {
-      final String nombrePrimero = '${primero.apellidos} ${primero.nombres}'
-          .trim()
-          .toLowerCase();
+      final String nombrePrimero =
+          '${primero.apellidos} '
+                  '${primero.nombres}'
+              .trim()
+              .toLowerCase();
 
-      final String nombreSegundo = '${segundo.apellidos} ${segundo.nombres}'
-          .trim()
-          .toLowerCase();
+      final String nombreSegundo =
+          '${segundo.apellidos} '
+                  '${segundo.nombres}'
+              .trim()
+              .toLowerCase();
 
       return nombrePrimero.compareTo(nombreSegundo);
     });
@@ -189,7 +275,10 @@ class UsuarioRepository {
     return resultado;
   }
 
-  /// Filtra usuarios por rol.
+  // =============================================================
+  // FILTRAR POR ROL
+  // =============================================================
+
   List<UsuarioModel> filtrarPorRol(List<UsuarioModel> usuarios, {int? rolId}) {
     if (rolId == null || rolId <= 0) {
       return List<UsuarioModel>.from(usuarios);
@@ -202,7 +291,10 @@ class UsuarioRepository {
         .toList();
   }
 
-  /// Filtra usuarios por área.
+  // =============================================================
+  // FILTRAR POR ÁREA
+  // =============================================================
+
   List<UsuarioModel> filtrarPorArea(
     List<UsuarioModel> usuarios, {
     int? areaId,
@@ -216,7 +308,10 @@ class UsuarioRepository {
         .toList();
   }
 
-  /// Filtra usuarios por institución.
+  // =============================================================
+  // FILTRAR POR INSTITUCIÓN
+  // =============================================================
+
   List<UsuarioModel> filtrarPorInstitucion(
     List<UsuarioModel> usuarios, {
     int? institucionId,
@@ -228,5 +323,29 @@ class UsuarioRepository {
     return usuarios
         .where((UsuarioModel usuario) => usuario.institucionId == institucionId)
         .toList();
+  }
+
+  // =============================================================
+  // VALIDACIONES INTERNAS
+  // =============================================================
+
+  void _validarIdUsuario(int id) {
+    if (id <= 0) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'El identificador del usuario no es válido.',
+      );
+    }
+  }
+
+  void _validarUsuarioAuditoria(int usuarioId, {required String campo}) {
+    if (usuarioId <= 0) {
+      throw ArgumentError.value(
+        usuarioId,
+        campo,
+        'No se pudo identificar al usuario autenticado.',
+      );
+    }
   }
 }

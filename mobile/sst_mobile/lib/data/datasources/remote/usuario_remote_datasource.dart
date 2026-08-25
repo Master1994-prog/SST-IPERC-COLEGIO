@@ -4,16 +4,28 @@ import '../../../core/config/api_config.dart';
 import '../../../core/network/api_client.dart';
 import '../../models/usuario_model.dart';
 
-/// Accede al endpoint remoto de usuarios.
+/// ===============================================================
+/// DATASOURCE REMOTO DE USUARIOS - SST EDURISK
+/// ===============================================================
+///
+/// Comunica Flutter con el módulo de usuarios del backend.
+///
+/// IMPORTANTE:
+/// - Ya no utiliza IDs de auditoría fijos.
+/// - usuarioRegistroId, usuarioActualizacionId y usuarioId son obligatorios.
+/// - El ID debe provenir de la sesión autenticada.
+/// - El backend debe validar adicionalmente el usuario desde el JWT.
+/// ===============================================================
 class UsuarioRemoteDatasource {
   UsuarioRemoteDatasource({ApiClient? apiClient})
     : _apiClient = apiClient ?? ApiClient.instance;
 
   final ApiClient _apiClient;
 
-  /// Obtiene todos los usuarios activos.
-  ///
-  /// Permite filtrar por institución, sede, área y rol.
+  // =============================================================
+  // OBTENER TODOS
+  // =============================================================
+
   Future<List<UsuarioModel>> obtenerTodos({
     int? institucionId,
     int? sedeId,
@@ -57,11 +69,12 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Obtiene un usuario por su identificador.
+  // =============================================================
+  // OBTENER POR ID
+  // =============================================================
+
   Future<UsuarioModel> obtenerPorId(int id) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+    _validarIdUsuario(id);
 
     try {
       final Response<dynamic> response = await _apiClient.get(
@@ -89,7 +102,10 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Registra un nuevo usuario.
+  // =============================================================
+  // CREAR USUARIO
+  // =============================================================
+
   Future<UsuarioModel> crear({
     required String nombres,
     required String apellidos,
@@ -104,32 +120,22 @@ class UsuarioRemoteDatasource {
     int? areaId,
     required List<int> rolIds,
     bool debeCambiarPassword = true,
-    int usuarioRegistroId = 1,
+    required int usuarioRegistroId,
   }) async {
-    if (nombres.trim().length < 2) {
-      throw Exception('Los nombres deben tener al menos 2 caracteres.');
-    }
-
-    if (apellidos.trim().length < 2) {
-      throw Exception('Los apellidos deben tener al menos 2 caracteres.');
-    }
-
-    if (nombreUsuario.trim().length < 4) {
-      throw Exception('El nombre de usuario debe tener al menos 4 caracteres.');
-    }
+    _validarDatosUsuario(
+      nombres: nombres,
+      apellidos: apellidos,
+      nombreUsuario: nombreUsuario,
+      institucionId: institucionId,
+    );
 
     if (password.length < 8) {
       throw Exception('La contraseña debe tener al menos 8 caracteres.');
     }
 
-    if (institucionId <= 0) {
-      throw Exception('Debe seleccionar una institución válida.');
-    }
+    _validarUsuarioAuditoria(usuarioRegistroId, campo: 'usuarioRegistroId');
 
-    final List<int> rolesValidos = rolIds
-        .where((int id) => id > 0)
-        .toSet()
-        .toList();
+    final List<int> rolesValidos = _normalizarRoles(rolIds);
 
     if (rolesValidos.isEmpty) {
       throw Exception('Debe seleccionar al menos un rol.');
@@ -139,19 +145,15 @@ class UsuarioRemoteDatasource {
       final Map<String, dynamic> datos = <String, dynamic>{
         'nombres': nombres.trim(),
         'apellidos': apellidos.trim(),
-        'numeroDocumento': numeroDocumento.trim().isEmpty
-            ? null
-            : numeroDocumento.trim(),
-        'tipoDocumento': tipoDocumento.trim().isEmpty
-            ? null
-            : tipoDocumento.trim(),
+        'numeroDocumento': _textoOpcional(numeroDocumento),
+        'tipoDocumento': _textoOpcional(tipoDocumento),
         'correo': correo.trim().isEmpty ? null : correo.trim().toLowerCase(),
-        'telefono': telefono.trim().isEmpty ? null : telefono.trim(),
+        'telefono': _textoOpcional(telefono),
         'nombreUsuario': nombreUsuario.trim().toLowerCase(),
         'password': password,
         'institucionId': institucionId,
-        'sedeId': sedeId,
-        'areaId': areaId,
+        'sedeId': _idOpcionalValido(sedeId),
+        'areaId': _idOpcionalValido(areaId),
         'rolIds': rolesValidos,
         'debeCambiarPassword': debeCambiarPassword,
         'usuarioRegistroId': usuarioRegistroId,
@@ -183,7 +185,10 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Actualiza los datos generales de un usuario.
+  // =============================================================
+  // ACTUALIZAR USUARIO
+  // =============================================================
+
   Future<UsuarioModel> actualizar({
     required int id,
     required String nombres,
@@ -197,44 +202,34 @@ class UsuarioRemoteDatasource {
     int? sedeId,
     int? areaId,
     required bool activo,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+    _validarIdUsuario(id);
 
-    if (nombres.trim().length < 2) {
-      throw Exception('Los nombres deben tener al menos 2 caracteres.');
-    }
+    _validarDatosUsuario(
+      nombres: nombres,
+      apellidos: apellidos,
+      nombreUsuario: nombreUsuario,
+      institucionId: institucionId,
+    );
 
-    if (apellidos.trim().length < 2) {
-      throw Exception('Los apellidos deben tener al menos 2 caracteres.');
-    }
-
-    if (nombreUsuario.trim().length < 4) {
-      throw Exception('El nombre de usuario debe tener al menos 4 caracteres.');
-    }
-
-    if (institucionId <= 0) {
-      throw Exception('Debe seleccionar una institución válida.');
-    }
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
 
     try {
       final Map<String, dynamic> datos = <String, dynamic>{
         'nombres': nombres.trim(),
         'apellidos': apellidos.trim(),
-        'numeroDocumento': numeroDocumento.trim().isEmpty
-            ? null
-            : numeroDocumento.trim(),
-        'tipoDocumento': tipoDocumento.trim().isEmpty
-            ? null
-            : tipoDocumento.trim(),
+        'numeroDocumento': _textoOpcional(numeroDocumento),
+        'tipoDocumento': _textoOpcional(tipoDocumento),
         'correo': correo.trim().isEmpty ? null : correo.trim().toLowerCase(),
-        'telefono': telefono.trim().isEmpty ? null : telefono.trim(),
+        'telefono': _textoOpcional(telefono),
         'nombreUsuario': nombreUsuario.trim().toLowerCase(),
         'institucionId': institucionId,
-        'sedeId': sedeId,
-        'areaId': areaId,
+        'sedeId': _idOpcionalValido(sedeId),
+        'areaId': _idOpcionalValido(areaId),
         'activo': activo,
         'usuarioActualizacionId': usuarioActualizacionId,
       };
@@ -265,20 +260,26 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Cambia la contraseña de un usuario.
+  // =============================================================
+  // CAMBIAR CONTRASEÑA
+  // =============================================================
+
   Future<String> cambiarPassword({
     required int id,
     required String nuevaPassword,
     bool debeCambiarPassword = true,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+    _validarIdUsuario(id);
 
     if (nuevaPassword.length < 8) {
       throw Exception('La nueva contraseña debe tener al menos 8 caracteres.');
     }
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
 
     try {
       final Response<dynamic> response = await _apiClient.put(
@@ -306,20 +307,23 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Reemplaza los roles asignados al usuario.
+  // =============================================================
+  // ACTUALIZAR ROLES
+  // =============================================================
+
   Future<UsuarioModel> actualizarRoles({
     required int id,
     required List<int> rolIds,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+    _validarIdUsuario(id);
 
-    final List<int> rolesValidos = rolIds
-        .where((int rolId) => rolId > 0)
-        .toSet()
-        .toList();
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
+
+    final List<int> rolesValidos = _normalizarRoles(rolIds);
 
     if (rolesValidos.isEmpty) {
       throw Exception('Debe seleccionar al menos un rol.');
@@ -356,15 +360,21 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Activa o desactiva un usuario.
+  // =============================================================
+  // ACTIVAR / DESACTIVAR
+  // =============================================================
+
   Future<String> cambiarEstado({
     required int id,
     required bool activo,
-    int usuarioActualizacionId = 1,
+    required int usuarioActualizacionId,
   }) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(
+      usuarioActualizacionId,
+      campo: 'usuarioActualizacionId',
+    );
 
     try {
       final Response<dynamic> response = await _apiClient.patch(
@@ -393,11 +403,14 @@ class UsuarioRemoteDatasource {
     }
   }
 
-  /// Realiza la eliminación lógica del usuario.
-  Future<String> eliminar({required int id, int usuarioId = 1}) async {
-    if (id <= 0) {
-      throw Exception('El identificador del usuario no es válido.');
-    }
+  // =============================================================
+  // ELIMINAR
+  // =============================================================
+
+  Future<String> eliminar({required int id, required int usuarioId}) async {
+    _validarIdUsuario(id);
+
+    _validarUsuarioAuditoria(usuarioId, campo: 'usuarioId');
 
     try {
       final Response<dynamic> response = await _apiClient.delete(
@@ -421,6 +434,10 @@ class UsuarioRemoteDatasource {
     }
   }
 
+  // =============================================================
+  // MENSAJES DE RESPUESTA
+  // =============================================================
+
   String _extraerMensaje(
     dynamic data, {
     required String mensajePredeterminado,
@@ -442,6 +459,10 @@ class UsuarioRemoteDatasource {
 
     return mensajePredeterminado;
   }
+
+  // =============================================================
+  // MANEJO DE ERRORES DIO
+  // =============================================================
 
   String _obtenerMensajeError(
     DioException error, {
@@ -494,6 +515,8 @@ class UsuarioRemoteDatasource {
       return data.trim();
     }
 
+    final int? statusCode = error.response?.statusCode;
+
     return switch (error.type) {
       DioExceptionType.connectionTimeout ||
       DioExceptionType.sendTimeout ||
@@ -504,24 +527,24 @@ class UsuarioRemoteDatasource {
         'No se pudo conectar con el servidor. '
             'Verifica que la API esté ejecutándose.',
 
-      DioExceptionType.badResponse when error.response?.statusCode == 400 =>
+      DioExceptionType.badResponse when statusCode == 400 =>
         'Los datos enviados no son válidos.',
 
-      DioExceptionType.badResponse when error.response?.statusCode == 401 =>
+      DioExceptionType.badResponse when statusCode == 401 =>
         'La sesión venció. Inicia sesión nuevamente.',
 
-      DioExceptionType.badResponse when error.response?.statusCode == 403 =>
+      DioExceptionType.badResponse when statusCode == 403 =>
         'No tienes permiso para realizar esta operación.',
 
-      DioExceptionType.badResponse when error.response?.statusCode == 404 =>
+      DioExceptionType.badResponse when statusCode == 404 =>
         'No se encontró el usuario solicitado.',
 
-      DioExceptionType.badResponse when error.response?.statusCode == 409 =>
-        'No se pudo completar la operación porque existe información duplicada o relacionada.',
+      DioExceptionType.badResponse when statusCode == 409 =>
+        'No se pudo completar la operación porque existe '
+            'información duplicada o relacionada.',
 
       DioExceptionType.badResponse
-          when error.response?.statusCode != null &&
-              error.response!.statusCode! >= 500 =>
+          when statusCode != null && statusCode >= 500 =>
         'El servidor presentó un error al procesar la solicitud.',
 
       DioExceptionType.cancel => 'La solicitud fue cancelada.',
@@ -530,7 +553,89 @@ class UsuarioRemoteDatasource {
     };
   }
 
+  // =============================================================
+  // VALIDACIONES
+  // =============================================================
+
+  void _validarIdUsuario(int id) {
+    if (id <= 0) {
+      throw Exception('El identificador del usuario no es válido.');
+    }
+  }
+
+  void _validarUsuarioAuditoria(int usuarioId, {required String campo}) {
+    if (usuarioId <= 0) {
+      throw Exception(
+        'No se pudo identificar al usuario autenticado '
+        'para $campo.',
+      );
+    }
+  }
+
+  void _validarDatosUsuario({
+    required String nombres,
+    required String apellidos,
+    required String nombreUsuario,
+    required int institucionId,
+  }) {
+    if (nombres.trim().length < 2) {
+      throw Exception('Los nombres deben tener al menos 2 caracteres.');
+    }
+
+    if (apellidos.trim().length < 2) {
+      throw Exception('Los apellidos deben tener al menos 2 caracteres.');
+    }
+
+    if (nombreUsuario.trim().length < 4) {
+      throw Exception('El nombre de usuario debe tener al menos 4 caracteres.');
+    }
+
+    if (institucionId <= 0) {
+      throw Exception('Debe seleccionar una institución válida.');
+    }
+  }
+
+  List<int> _normalizarRoles(List<int> rolIds) {
+    final List<int> roles = rolIds
+        .where((int rolId) => rolId > 0)
+        .toSet()
+        .toList();
+
+    roles.sort();
+
+    return roles;
+  }
+
+  String? _textoOpcional(String valor) {
+    final String texto = valor.trim();
+
+    return texto.isEmpty ? null : texto;
+  }
+
+  int? _idOpcionalValido(int? valor) {
+    if (valor == null || valor <= 0) {
+      return null;
+    }
+
+    return valor;
+  }
+
   String _limpiarMensaje(Object error) {
-    return error.toString().replaceFirst('Exception: ', '').trim();
+    String mensaje = error.toString().trim();
+
+    const List<String> prefijos = <String>[
+      'Exception: ',
+      'StateError: ',
+      'Bad state: ',
+      'ArgumentError: ',
+    ];
+
+    for (final String prefijo in prefijos) {
+      if (mensaje.startsWith(prefijo)) {
+        mensaje = mensaje.substring(prefijo.length);
+      }
+    }
+
+    return mensaje.isEmpty ? 'Ocurrió un error inesperado.' : mensaje;
   }
 }

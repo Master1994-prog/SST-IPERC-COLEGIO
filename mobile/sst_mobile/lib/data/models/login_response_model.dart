@@ -1,3 +1,14 @@
+/// ===============================================================
+/// LOGIN RESPONSE MODEL - SST EDURISK
+/// ===============================================================
+///
+/// Representa la respuesta de autenticación enviada por el backend.
+///
+/// Incluye la política de seguridad de contraseña:
+/// - sesión 5, 10, 15, 20 y 25: recordatorio;
+/// - sesión 30: cambio obligatorio;
+/// - contraseña temporal: cambio obligatorio antes de ingresar.
+/// ===============================================================
 class LoginResponseModel {
   const LoginResponseModel({
     required this.token,
@@ -10,6 +21,9 @@ class LoginResponseModel {
     required this.roles,
     required this.institucionId,
     required this.debeCambiarPassword,
+    required this.sesionesDesdeCambioPassword,
+    required this.sesionesRestantesCambioPassword,
+    required this.recordarCambioPassword,
     this.correo,
     this.sedeId,
     this.areaId,
@@ -24,59 +38,122 @@ class LoginResponseModel {
   final String apellidos;
   final String? correo;
 
-  /// Rol principal utilizado por la navegación y los permisos visuales.
-  ///
-  /// IMPORTANTE:
-  /// Ya no se toma simplemente roles.first.
-  /// Se selecciona el rol con mayor privilegio.
+  /// Rol principal usado por navegación y permisos visuales.
   final String rol;
 
-  /// Lista completa de roles recibidos desde el backend.
+  /// Lista completa de roles recibidos.
   final List<String> roles;
 
   final String institucionId;
   final String? sedeId;
   final String? areaId;
 
+  /// Indica que el usuario no puede continuar sin cambiar su contraseña.
   final bool debeCambiarPassword;
 
-  factory LoginResponseModel.fromMap(Map<String, dynamic> map) {
-    final dynamic usuarioData = map['usuario'];
+  /// Sesiones online realizadas desde el último cambio válido.
+  final int sesionesDesdeCambioPassword;
 
-    if (usuarioData is! Map<String, dynamic>) {
+  /// Sesiones restantes hasta el límite de 30.
+  final int sesionesRestantesCambioPassword;
+
+  /// True en las sesiones 5, 10, 15, 20 y 25.
+  final bool recordarCambioPassword;
+
+  /// Cambio obligatorio por contraseña temporal.
+  bool get esPasswordTemporal =>
+      debeCambiarPassword && sesionesDesdeCambioPassword == 0;
+
+  /// Cambio obligatorio por llegar a la sesión 30.
+  bool get esCambioPorSesiones =>
+      debeCambiarPassword && sesionesDesdeCambioPassword >= 30;
+
+  /// Texto breve útil para UI.
+  String get resumenSeguridad {
+    if (esPasswordTemporal) {
+      return 'Debe cambiar la contraseña temporal.';
+    }
+
+    if (esCambioPorSesiones) {
+      return 'Alcanzó el límite de 30 sesiones.';
+    }
+
+    if (recordarCambioPassword) {
+      return 'Recordatorio de cambio de contraseña.';
+    }
+
+    return 'Contraseña vigente.';
+  }
+
+  factory LoginResponseModel.fromMap(Map<String, dynamic> map) {
+    final dynamic usuarioRaw = map['usuario'] ?? map['Usuario'];
+
+    if (usuarioRaw is! Map) {
       throw const FormatException(
         'La respuesta no contiene los datos del usuario.',
       );
     }
 
-    final List<String> roles = _obtenerRoles(usuarioData['roles']);
+    final Map<String, dynamic> usuarioData = Map<String, dynamic>.from(
+      usuarioRaw,
+    );
+
+    final List<String> roles = _obtenerRoles(
+      usuarioData['roles'] ?? usuarioData['Roles'],
+    );
+
+    final bool debeCambiarPassword = _toBool(
+      usuarioData['debeCambiarPassword'] ?? usuarioData['DebeCambiarPassword'],
+    );
+
+    final int sesionesDesdeCambioPassword = _toInt(
+      usuarioData['sesionesDesdeCambioPassword'] ??
+          usuarioData['SesionesDesdeCambioPassword'],
+    );
+
+    int sesionesRestantesCambioPassword = _toInt(
+      usuarioData['sesionesRestantesCambioPassword'] ??
+          usuarioData['SesionesRestantesCambioPassword'],
+      valorPredeterminado: (30 - sesionesDesdeCambioPassword).clamp(0, 30),
+    );
+
+    if (sesionesRestantesCambioPassword < 0) {
+      sesionesRestantesCambioPassword = 0;
+    }
+
+    final bool recordarCambioPassword = _toBool(
+      usuarioData['recordarCambioPassword'] ??
+          usuarioData['RecordarCambioPassword'],
+    );
 
     return LoginResponseModel(
-      token: map['token']?.toString() ?? '',
-      expiraEn: DateTime.tryParse(map['expiraEn']?.toString() ?? ''),
-      usuarioId: usuarioData['id']?.toString() ?? '',
-      nombreUsuario: usuarioData['nombreUsuario']?.toString() ?? '',
-      nombres: usuarioData['nombres']?.toString() ?? '',
-      apellidos: usuarioData['apellidos']?.toString() ?? '',
-      correo: usuarioData['correo']?.toString(),
-
-      // ==========================================================
-      // CORRECCIÓN:
-      // Se determina el rol principal por prioridad.
-      // Si el usuario tiene SUPER_ADMIN en cualquier posición,
-      // ese será siempre el rol utilizado por la navegación.
-      // ==========================================================
+      token: _toString(map['token'] ?? map['Token']),
+      expiraEn: DateTime.tryParse(
+        _toString(map['expiraEn'] ?? map['ExpiraEn']),
+      ),
+      usuarioId: _toString(usuarioData['id'] ?? usuarioData['Id']),
+      nombreUsuario: _toString(
+        usuarioData['nombreUsuario'] ?? usuarioData['NombreUsuario'],
+      ),
+      nombres: _toString(usuarioData['nombres'] ?? usuarioData['Nombres']),
+      apellidos: _toString(
+        usuarioData['apellidos'] ?? usuarioData['Apellidos'],
+      ),
+      correo: _toNullableString(usuarioData['correo'] ?? usuarioData['Correo']),
       rol: _obtenerRolPrincipal(roles),
-
       roles: roles,
-      institucionId: usuarioData['institucionId']?.toString() ?? '',
-      sedeId: usuarioData['sedeId']?.toString(),
-      areaId: usuarioData['areaId']?.toString(),
-      debeCambiarPassword: usuarioData['debeCambiarPassword'] == true,
+      institucionId: _toString(
+        usuarioData['institucionId'] ?? usuarioData['InstitucionId'],
+      ),
+      sedeId: _toNullableString(usuarioData['sedeId'] ?? usuarioData['SedeId']),
+      areaId: _toNullableString(usuarioData['areaId'] ?? usuarioData['AreaId']),
+      debeCambiarPassword: debeCambiarPassword,
+      sesionesDesdeCambioPassword: sesionesDesdeCambioPassword,
+      sesionesRestantesCambioPassword: sesionesRestantesCambioPassword,
+      recordarCambioPassword: recordarCambioPassword,
     );
   }
 
-  /// Convierte la respuesta de roles en una lista de texto.
   static List<String> _obtenerRoles(dynamic value) {
     if (value is List) {
       return value
@@ -94,15 +171,11 @@ class LoginResponseModel {
   /// =============================================================
   ///
   /// Prioridad:
-  ///
   /// 1. SUPER_ADMIN
   /// 2. ADMIN
   /// 3. SUP_TITULAR
   /// 4. SUP_SUPLENTE
   /// 5. COORDINADOR
-  ///
-  /// Así, aunque SUPER_ADMIN sea el segundo o tercer rol recibido
-  /// desde el backend, seguirá teniendo acceso administrativo total.
   /// =============================================================
   static String _obtenerRolPrincipal(List<String> roles) {
     if (roles.isEmpty) {
@@ -125,12 +198,9 @@ class LoginResponseModel {
       }
     }
 
-    // Si llega un rol no contemplado todavía,
-    // se conserva el primero para no bloquear el ingreso.
-    return roles.first;
+    return _normalizarRol(roles.first);
   }
 
-  /// Normaliza nombres y códigos de rol.
   static String _normalizarRol(String rol) {
     String value = rol.trim().toUpperCase();
 
@@ -169,5 +239,45 @@ class LoginResponseModel {
       default:
         return value;
     }
+  }
+
+  static String _toString(dynamic value) {
+    return value?.toString().trim() ?? '';
+  }
+
+  static String? _toNullableString(dynamic value) {
+    final String texto = value?.toString().trim() ?? '';
+
+    if (texto.isEmpty || texto.toLowerCase() == 'null') {
+      return null;
+    }
+
+    return texto;
+  }
+
+  static int _toInt(dynamic value, {int valorPredeterminado = 0}) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(value?.toString() ?? '') ?? valorPredeterminado;
+  }
+
+  static bool _toBool(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+
+    if (value is num) {
+      return value != 0;
+    }
+
+    final String texto = value?.toString().trim().toLowerCase() ?? '';
+
+    return <String>['true', '1', 'si', 'sí'].contains(texto);
   }
 }

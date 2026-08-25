@@ -29,6 +29,9 @@ dependencies:
   share_plus: ^11.1.0
   image_picker: ^1.2.3
 
+  # Hash/HMAC para la validación segura de contraseña offline.
+  crypto: ^3.0.6
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

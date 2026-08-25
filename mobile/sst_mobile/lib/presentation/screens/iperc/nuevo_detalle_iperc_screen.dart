@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../../data/models/consecuencia_model.dart';
 import '../../../data/models/control_model.dart';
 import '../../../data/models/detalle_iperc_model.dart';
@@ -11,52 +12,33 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/models/peligro_model.dart';
 import '../../../data/models/probabilidad_model.dart';
 import '../../../data/models/severidad_model.dart';
-
 import '../../../data/repositories/consecuencia_repository.dart';
 import '../../../data/repositories/control_repository.dart';
 import '../../../data/repositories/equipo_proteccion_repository.dart';
 import '../../../data/repositories/peligro_repository.dart';
 import '../../../data/repositories/probabilidad_repository.dart';
 import '../../../data/repositories/severidad_repository.dart';
-
 import '../../providers/detalle_iperc_provider.dart';
 
 /// ===============================================================
-/// NUEVO DETALLE IPERC
+/// NUEVO DETALLE IPERC - SST EDURISK
 /// ===============================================================
 ///
 /// Permite agregar un peligro evaluado a una Matriz IPERC.
 ///
 /// IMPORTANTE:
+/// - Probabilidad y severidad se cargan desde el backend.
+/// - Para el cálculo visual se utilizan los valores 1..5.
+/// - Para guardar se utilizan los IDs reales de MySQL.
 ///
-/// Probabilidad y Severidad se cargan desde el backend.
-///
-/// Cada registro contiene:
-///
-/// - id   -> identificador REAL de MySQL.
-/// - valor -> valor 1..5 usado para calcular el riesgo.
-///
-/// Ejemplo:
-///
-/// Probabilidad:
-/// id = 24
-/// valor = 4
-///
-/// Severidad:
-/// id = 35
-/// valor = 5
-///
-/// Cálculo:
-///
-/// 4 × 5 = 20
-///
-/// Al guardar:
-///
-/// probabilidadInicialId = 24
-/// severidadInicialId = 35
-///
-/// De esta manera evitamos confundir el valor de la escala
-/// con el identificador real de la base de datos.
+/// Colores oficiales SST EduRisk:
+/// primary       #083F85
+/// primaryBright #0D60D6
+/// navyDark      #05295E
+/// green         #1DA041
+/// yellow        #FEB81C
+/// riskOrange    #EC490F
+/// background    #F6F8FC
 /// ===============================================================
 class NuevoDetalleIpercScreen extends StatefulWidget {
   const NuevoDetalleIpercScreen({required this.matriz, super.key});
@@ -174,9 +156,7 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   @override
   void dispose() {
     _itemController.dispose();
-
     _tareaController.dispose();
-
     _descripcionController.dispose();
 
     super.dispose();
@@ -193,20 +173,15 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     });
 
     try {
-      final List<dynamic> resultados = await Future.wait<dynamic>(
-        <Future<dynamic>>[
-          _peligroRepository.obtenerActivos(),
-          _consecuenciaRepository.obtenerActivos(),
-          _controlRepository.obtenerActivos(),
-          _equipoProteccionRepository.obtenerActivos(),
-
-          // =====================================================
-          // PROBABILIDADES Y SEVERIDADES REALES
-          // =====================================================
-          _probabilidadRepository.obtenerTodas(),
-          _severidadRepository.obtenerTodas(),
-        ],
-      );
+      final List<dynamic> resultados =
+          await Future.wait<dynamic>(<Future<dynamic>>[
+            _peligroRepository.obtenerActivos(),
+            _consecuenciaRepository.obtenerActivos(),
+            _controlRepository.obtenerActivos(),
+            _equipoProteccionRepository.obtenerActivos(),
+            _probabilidadRepository.obtenerTodas(),
+            _severidadRepository.obtenerTodas(),
+          ]);
 
       if (!mounted) {
         return;
@@ -239,26 +214,20 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
           .whereType<SeveridadModel>()
           .toList();
 
-      probabilidades.sort(
-        (ProbabilidadModel a, ProbabilidadModel b) =>
-            a.valor.compareTo(b.valor),
-      );
+      probabilidades.sort((ProbabilidadModel a, ProbabilidadModel b) {
+        return a.valor.compareTo(b.valor);
+      });
 
-      severidades.sort(
-        (SeveridadModel a, SeveridadModel b) => a.valor.compareTo(b.valor),
-      );
+      severidades.sort((SeveridadModel a, SeveridadModel b) {
+        return a.valor.compareTo(b.valor);
+      });
 
       setState(() {
         _peligros = peligros;
-
         _consecuencias = consecuencias;
-
         _controles = controles;
-
         _equiposProteccion = equipos;
-
         _probabilidades = probabilidades;
-
         _severidades = severidades;
       });
     } catch (error) {
@@ -304,60 +273,27 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     });
 
     try {
-      // =========================================================
-      // IMPORTANTE
-      // =========================================================
-      //
-      // Para calcular visualmente usamos:
-      //
-      // probabilidad.valor
-      // severidad.valor
-      //
-      // Pero para guardar enviamos:
-      //
-      // probabilidad.id
-      // severidad.id
-      //
-      // Esos IDs vienen directamente de MySQL.
-
       final CrearDetalleIpercRequest request = CrearDetalleIpercRequest(
         matrizIpercId: widget.matriz.id,
-
         item: int.parse(_itemController.text.trim()),
-
         tarea: _tareaController.text,
-
         peligroId: _peligroSeleccionado!.id,
-
         consecuenciaId: _consecuenciaSeleccionada!.id,
-
         descripcionPeligro: _descripcionController.text,
 
-        // =======================================================
-        // EVALUACIÓN INICIAL
-        // =======================================================
+        // IDs REALES de MySQL.
         probabilidadInicialId: _probabilidadSeleccionada!.id,
-
         severidadInicialId: _severidadSeleccionada!.id,
 
         observacionesEvaluacionInicial:
             'Evaluación inicial registrada desde Detalle IPERC.',
 
-        // =======================================================
-        // CONTROLES
-        // =======================================================
         controlIds: _controlIdsSeleccionados.toList(growable: false),
 
-        // =======================================================
-        // EPP
-        // =======================================================
         equipoProteccionIds: _equipoProteccionIdsSeleccionados.toList(
           growable: false,
         ),
 
-        // =======================================================
-        // IMPLEMENTACIÓN
-        // =======================================================
         estadoImplementacion: _estadoImplementacion,
       );
 
@@ -368,13 +304,10 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
       }
 
       if (registrado) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            const SnackBar(
-              content: Text('Peligro evaluado registrado correctamente.'),
-            ),
-          );
+        _mostrarMensaje(
+          'Peligro evaluado registrado correctamente.',
+          esError: false,
+        );
 
         Navigator.of(context).pop(true);
 
@@ -407,11 +340,17 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     final DetalleIpercProvider provider = context.watch<DetalleIpercProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Agregar peligro evaluado')),
-
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        title: const Text('Agregar peligro evaluado'),
+      ),
       body: SafeArea(
         child: _cargandoCatalogos
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              )
             : _construirContenido(provider),
       ),
     );
@@ -433,374 +372,333 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
 
     return Form(
       key: _formKey,
-
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
         children: <Widget>[
           // =====================================================
           // MATRIZ
           // =====================================================
           _ResumenMatriz(matriz: widget.matriz),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           // =====================================================
           // IDENTIFICACIÓN
           // =====================================================
-          Text(
-            'Identificación del peligro',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 12),
-
-          // =====================================================
-          // ITEM
-          // =====================================================
-          TextFormField(
-            controller: _itemController,
-
-            enabled: !bloqueado,
-
-            keyboardType: TextInputType.number,
-
-            inputFormatters: <TextInputFormatter>[
-              FilteringTextInputFormatter.digitsOnly,
-            ],
-
-            decoration: const InputDecoration(
-              labelText: 'Ítem *',
-
-              helperText: 'Se propone automáticamente el siguiente número.',
-
-              prefixIcon: Icon(Icons.tag_outlined),
-
-              border: OutlineInputBorder(),
-            ),
-
-            validator: _validarEnteroObligatorio,
-          ),
-
-          const SizedBox(height: 12),
-
-          // =====================================================
-          // TAREA
-          // =====================================================
-          TextFormField(
-            controller: _tareaController,
-
-            enabled: !bloqueado,
-
-            textCapitalization: TextCapitalization.sentences,
-
-            maxLength: 250,
-
-            decoration: const InputDecoration(
-              labelText: 'Tarea *',
-
-              hintText: 'Ejemplo: Limpiar el aula de innovación',
-
-              prefixIcon: Icon(Icons.work_outline),
-
-              border: OutlineInputBorder(),
-            ),
-
-            validator: (String? value) {
-              if (value == null || value.trim().isEmpty) {
-                return 'Ingresa la tarea que será evaluada.';
-              }
-
-              return null;
-            },
-          ),
-
-          const SizedBox(height: 12),
-
-          // =====================================================
-          // PELIGRO
-          // =====================================================
-          DropdownButtonFormField<PeligroModel>(
-            initialValue: _peligroSeleccionado,
-
-            isExpanded: true,
-
-            decoration: const InputDecoration(
-              labelText: 'Peligro *',
-
-              prefixIcon: Icon(Icons.warning_amber_outlined),
-
-              border: OutlineInputBorder(),
-            ),
-
-            items: _peligros.map((PeligroModel peligro) {
-              return DropdownMenuItem<PeligroModel>(
-                value: peligro,
-
-                child: Text(
-                  peligro.nombreCompleto,
-
-                  maxLines: 1,
-
-                  overflow: TextOverflow.ellipsis,
+          _SeccionFormulario(
+            icono: Icons.warning_amber_outlined,
+            titulo: 'Identificación del peligro',
+            descripcion:
+                'Registre la tarea, peligro, consecuencia '
+                'y descripción específica.',
+            color: AppColors.riskOrange,
+            child: Column(
+              children: <Widget>[
+                TextFormField(
+                  controller: _itemController,
+                  enabled: !bloqueado,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  decoration: const InputDecoration(
+                    labelText: 'Ítem *',
+                    helperText:
+                        'Se propone automáticamente el siguiente número.',
+                    prefixIcon: Icon(
+                      Icons.tag_outlined,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  validator: _validarEnteroObligatorio,
                 ),
-              );
-            }).toList(),
 
-            onChanged: bloqueado
-                ? null
-                : (PeligroModel? value) {
-                    setState(() {
-                      _peligroSeleccionado = value;
-                    });
+                const SizedBox(height: 14),
+
+                TextFormField(
+                  controller: _tareaController,
+                  enabled: !bloqueado,
+                  textCapitalization: TextCapitalization.sentences,
+                  maxLength: 250,
+                  decoration: const InputDecoration(
+                    labelText: 'Tarea *',
+                    hintText: 'Ejemplo: Limpiar el aula de innovación',
+                    prefixIcon: Icon(
+                      Icons.work_outline,
+                      color: AppColors.primaryBright,
+                    ),
+                  ),
+                  validator: (String? value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Ingresa la tarea que será evaluada.';
+                    }
+
+                    return null;
                   },
-
-            validator: (PeligroModel? value) {
-              return value == null ? 'Selecciona un peligro.' : null;
-            },
-          ),
-
-          if (_peligros.isEmpty)
-            const _AdvertenciaCatalogo(
-              mensaje:
-                  'No existen peligros activos. '
-                  'Registra uno antes de continuar.',
-            ),
-
-          const SizedBox(height: 16),
-
-          // =====================================================
-          // CONSECUENCIA
-          // =====================================================
-          DropdownButtonFormField<ConsecuenciaModel>(
-            initialValue: _consecuenciaSeleccionada,
-
-            isExpanded: true,
-
-            decoration: const InputDecoration(
-              labelText: 'Consecuencia *',
-
-              prefixIcon: Icon(Icons.report_problem_outlined),
-
-              border: OutlineInputBorder(),
-            ),
-
-            items: _consecuencias.map((ConsecuenciaModel consecuencia) {
-              return DropdownMenuItem<ConsecuenciaModel>(
-                value: consecuencia,
-
-                child: Text(
-                  consecuencia.nombreCompleto,
-
-                  maxLines: 1,
-
-                  overflow: TextOverflow.ellipsis,
                 ),
-              );
-            }).toList(),
 
-            onChanged: bloqueado
-                ? null
-                : (ConsecuenciaModel? value) {
-                    setState(() {
-                      _consecuenciaSeleccionada = value;
-                    });
+                const SizedBox(height: 14),
+
+                DropdownButtonFormField<PeligroModel>(
+                  initialValue: _peligroSeleccionado,
+                  isExpanded: true,
+                  iconEnabledColor: AppColors.primary,
+                  dropdownColor: AppColors.surface,
+                  decoration: const InputDecoration(
+                    labelText: 'Peligro *',
+                    prefixIcon: Icon(
+                      Icons.warning_amber_outlined,
+                      color: AppColors.riskOrange,
+                    ),
+                  ),
+                  items: _peligros.map((PeligroModel peligro) {
+                    return DropdownMenuItem<PeligroModel>(
+                      value: peligro,
+                      child: Text(
+                        peligro.nombreCompleto,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: bloqueado
+                      ? null
+                      : (PeligroModel? value) {
+                          setState(() {
+                            _peligroSeleccionado = value;
+                          });
+                        },
+                  validator: (PeligroModel? value) {
+                    return value == null ? 'Selecciona un peligro.' : null;
                   },
+                ),
 
-            validator: (ConsecuenciaModel? value) {
-              return value == null ? 'Selecciona una consecuencia.' : null;
-            },
+                if (_peligros.isEmpty)
+                  const _AdvertenciaCatalogo(
+                    mensaje:
+                        'No existen peligros activos. '
+                        'Registra uno antes de continuar.',
+                  ),
+
+                const SizedBox(height: 14),
+
+                DropdownButtonFormField<ConsecuenciaModel>(
+                  initialValue: _consecuenciaSeleccionada,
+                  isExpanded: true,
+                  iconEnabledColor: AppColors.primary,
+                  dropdownColor: AppColors.surface,
+                  decoration: const InputDecoration(
+                    labelText: 'Consecuencia *',
+                    prefixIcon: Icon(
+                      Icons.report_problem_outlined,
+                      color: AppColors.yellow,
+                    ),
+                  ),
+                  items: _consecuencias.map((ConsecuenciaModel consecuencia) {
+                    return DropdownMenuItem<ConsecuenciaModel>(
+                      value: consecuencia,
+                      child: Text(
+                        consecuencia.nombreCompleto,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: bloqueado
+                      ? null
+                      : (ConsecuenciaModel? value) {
+                          setState(() {
+                            _consecuenciaSeleccionada = value;
+                          });
+                        },
+                  validator: (ConsecuenciaModel? value) {
+                    return value == null
+                        ? 'Selecciona una consecuencia.'
+                        : null;
+                  },
+                ),
+
+                if (_consecuencias.isEmpty)
+                  const _AdvertenciaCatalogo(
+                    mensaje:
+                        'No existen consecuencias activas. '
+                        'Registra una antes de continuar.',
+                  ),
+
+                const SizedBox(height: 14),
+
+                TextFormField(
+                  controller: _descripcionController,
+                  enabled: !bloqueado,
+                  textCapitalization: TextCapitalization.sentences,
+                  minLines: 3,
+                  maxLines: 5,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción específica',
+                    hintText:
+                        'Describe cómo se presenta el peligro en esta tarea.',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(
+                      Icons.description_outlined,
+                      color: AppColors.primaryBright,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
 
-          if (_consecuencias.isEmpty)
-            const _AdvertenciaCatalogo(
-              mensaje:
-                  'No existen consecuencias activas. '
-                  'Registra una antes de continuar.',
-            ),
-
-          const SizedBox(height: 16),
-
-          // =====================================================
-          // DESCRIPCIÓN
-          // =====================================================
-          TextFormField(
-            controller: _descripcionController,
-
-            enabled: !bloqueado,
-
-            textCapitalization: TextCapitalization.sentences,
-
-            minLines: 3,
-
-            maxLines: 5,
-
-            maxLength: 1000,
-
-            decoration: const InputDecoration(
-              labelText: 'Descripción específica',
-
-              hintText: 'Describe cómo se presenta el peligro en esta tarea.',
-
-              alignLabelWithHint: true,
-
-              prefixIcon: Icon(Icons.description_outlined),
-
-              border: OutlineInputBorder(),
-            ),
-          ),
-
-          const SizedBox(height: 8),
+          const SizedBox(height: 18),
 
           // =====================================================
           // EVALUACIÓN INICIAL
           // =====================================================
-          Text(
-            'Evaluación inicial del riesgo',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          _SeccionFormulario(
+            icono: Icons.calculate_outlined,
+            titulo: 'Evaluación inicial del riesgo',
+            descripcion:
+                'Seleccione probabilidad y severidad. '
+                'El sistema calculará automáticamente el nivel de riesgo.',
+            color: AppColors.yellow,
+            colorTexto: AppColors.navyDark,
+            child: Column(
+              children: <Widget>[
+                _SelectorProbabilidad(
+                  probabilidades: _probabilidades,
+                  seleccionada: _probabilidadSeleccionada,
+                  habilitado: !bloqueado,
+                  mostrarError:
+                      _mostrarErroresEvaluacion &&
+                      _probabilidadSeleccionada == null,
+                  onChanged: (ProbabilidadModel value) {
+                    setState(() {
+                      _probabilidadSeleccionada = value;
+                    });
+                  },
+                ),
+
+                if (_probabilidades.isEmpty)
+                  const _AdvertenciaCatalogo(
+                    mensaje:
+                        'No existen probabilidades disponibles. '
+                        'Verifica el catálogo del servidor.',
+                  ),
+
+                const SizedBox(height: 14),
+
+                _SelectorSeveridad(
+                  severidades: _severidades,
+                  seleccionada: _severidadSeleccionada,
+                  habilitado: !bloqueado,
+                  mostrarError:
+                      _mostrarErroresEvaluacion &&
+                      _severidadSeleccionada == null,
+                  onChanged: (SeveridadModel value) {
+                    setState(() {
+                      _severidadSeleccionada = value;
+                    });
+                  },
+                ),
+
+                if (_severidades.isEmpty)
+                  const _AdvertenciaCatalogo(
+                    mensaje:
+                        'No existen severidades disponibles. '
+                        'Verifica el catálogo del servidor.',
+                  ),
+
+                if (_probabilidadSeleccionada != null &&
+                    _severidadSeleccionada != null) ...<Widget>[
+                  const SizedBox(height: 14),
+                  _ResumenEvaluacionRiesgo(
+                    probabilidad: _probabilidadSeleccionada!,
+                    severidad: _severidadSeleccionada!,
+                  ),
+                ],
+              ],
+            ),
           ),
 
-          const SizedBox(height: 12),
-
-          // =====================================================
-          // PROBABILIDAD
-          // =====================================================
-          _SelectorProbabilidad(
-            probabilidades: _probabilidades,
-
-            seleccionada: _probabilidadSeleccionada,
-
-            habilitado: !bloqueado,
-
-            mostrarError:
-                _mostrarErroresEvaluacion && _probabilidadSeleccionada == null,
-
-            onChanged: (ProbabilidadModel value) {
-              setState(() {
-                _probabilidadSeleccionada = value;
-              });
-            },
-          ),
-
-          if (_probabilidades.isEmpty)
-            const _AdvertenciaCatalogo(
-              mensaje:
-                  'No existen probabilidades disponibles. '
-                  'Verifica el catálogo del servidor.',
-            ),
-
-          const SizedBox(height: 12),
-
-          // =====================================================
-          // SEVERIDAD
-          // =====================================================
-          _SelectorSeveridad(
-            severidades: _severidades,
-
-            seleccionada: _severidadSeleccionada,
-
-            habilitado: !bloqueado,
-
-            mostrarError:
-                _mostrarErroresEvaluacion && _severidadSeleccionada == null,
-
-            onChanged: (SeveridadModel value) {
-              setState(() {
-                _severidadSeleccionada = value;
-              });
-            },
-          ),
-
-          if (_severidades.isEmpty)
-            const _AdvertenciaCatalogo(
-              mensaje:
-                  'No existen severidades disponibles. '
-                  'Verifica el catálogo del servidor.',
-            ),
-
-          // =====================================================
-          // RESULTADO DEL RIESGO
-          // =====================================================
-          if (_probabilidadSeleccionada != null &&
-              _severidadSeleccionada != null) ...<Widget>[
-            const SizedBox(height: 12),
-
-            _ResumenEvaluacionRiesgo(
-              probabilidad: _probabilidadSeleccionada!,
-
-              severidad: _severidadSeleccionada!,
-            ),
-          ],
-
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           // =====================================================
           // CONTROLES
           // =====================================================
-          _SelectorControles(
-            controles: _controles,
-
-            seleccionados: _controlIdsSeleccionados,
-
-            habilitado: !bloqueado,
-
-            onChanged: _alternarControl,
+          _SeccionFormulario(
+            icono: Icons.security_outlined,
+            titulo: 'Controles aplicables',
+            descripcion:
+                'Seleccione las medidas de control necesarias para reducir el riesgo.',
+            color: AppColors.green,
+            child: _SelectorControles(
+              controles: _controles,
+              seleccionados: _controlIdsSeleccionados,
+              habilitado: !bloqueado,
+              onChanged: _alternarControl,
+            ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           // =====================================================
           // EPP
           // =====================================================
-          _SelectorEquiposProteccion(
-            equipos: _equiposProteccion,
-
-            seleccionados: _equipoProteccionIdsSeleccionados,
-
-            habilitado: !bloqueado,
-
-            onChanged: _alternarEquipoProteccion,
+          _SeccionFormulario(
+            icono: Icons.health_and_safety_outlined,
+            titulo: 'Equipos de protección personal',
+            descripcion:
+                'Seleccione los EPP requeridos para ejecutar la tarea de forma segura.',
+            color: AppColors.primaryBright,
+            child: _SelectorEquiposProteccion(
+              equipos: _equiposProteccion,
+              seleccionados: _equipoProteccionIdsSeleccionados,
+              habilitado: !bloqueado,
+              onChanged: _alternarEquipoProteccion,
+            ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
 
           // =====================================================
-          // ESTADO IMPLEMENTACIÓN
+          // IMPLEMENTACIÓN
           // =====================================================
-          DropdownButtonFormField<int>(
-            initialValue: _estadoImplementacion,
+          _SeccionFormulario(
+            icono: Icons.task_alt_outlined,
+            titulo: 'Estado de implementación',
+            descripcion:
+                'Indique el estado inicial de las medidas asociadas a este peligro.',
+            color: AppColors.primary,
+            child: DropdownButtonFormField<int>(
+              initialValue: _estadoImplementacion,
+              isExpanded: true,
+              iconEnabledColor: AppColors.primary,
+              dropdownColor: AppColors.surface,
+              decoration: const InputDecoration(
+                labelText: 'Estado de implementación',
+                prefixIcon: Icon(
+                  Icons.task_alt_outlined,
+                  color: AppColors.primary,
+                ),
+              ),
+              items: EstadoImplementacionIperc.valores.map((int estado) {
+                return DropdownMenuItem<int>(
+                  value: estado,
+                  child: Text(EstadoImplementacionIperc.obtenerNombre(estado)),
+                );
+              }).toList(),
+              onChanged: bloqueado
+                  ? null
+                  : (int? value) {
+                      if (value == null) {
+                        return;
+                      }
 
-            decoration: const InputDecoration(
-              labelText: 'Estado de implementación',
-
-              prefixIcon: Icon(Icons.task_alt_outlined),
-
-              border: OutlineInputBorder(),
+                      setState(() {
+                        _estadoImplementacion = value;
+                      });
+                    },
             ),
-
-            items: EstadoImplementacionIperc.valores.map((int estado) {
-              return DropdownMenuItem<int>(
-                value: estado,
-
-                child: Text(EstadoImplementacionIperc.obtenerNombre(estado)),
-              );
-            }).toList(),
-
-            onChanged: bloqueado
-                ? null
-                : (int? value) {
-                    if (value == null) {
-                      return;
-                    }
-
-                    setState(() {
-                      _estadoImplementacion = value;
-                    });
-                  },
           ),
 
           const SizedBox(height: 24),
@@ -808,35 +706,67 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
           // =====================================================
           // GUARDAR
           // =====================================================
-          FilledButton.icon(
-            onPressed:
-                bloqueado ||
-                    _peligros.isEmpty ||
-                    _consecuencias.isEmpty ||
-                    _probabilidades.isEmpty ||
-                    _severidades.isEmpty
-                ? null
-                : _guardar,
-
-            icon: bloqueado
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_outlined),
-
-            label: Text(bloqueado ? 'Guardando...' : 'Guardar peligro'),
+          SizedBox(
+            height: 56,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.primary.withValues(
+                  alpha: 0.45,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed:
+                  bloqueado ||
+                      _peligros.isEmpty ||
+                      _consecuencias.isEmpty ||
+                      _probabilidades.isEmpty ||
+                      _severidades.isEmpty
+                  ? null
+                  : _guardar,
+              icon: bloqueado
+                  ? const SizedBox(
+                      width: 21,
+                      height: 21,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(
+                bloqueado ? 'Guardando...' : 'Guardar peligro',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
           ),
 
           const SizedBox(height: 12),
 
-          OutlinedButton(
-            onPressed: bloqueado
-                ? null
-                : () => Navigator.of(context).pop(false),
-
-            child: const Text('Cancelar'),
+          SizedBox(
+            height: 50,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+              onPressed: bloqueado
+                  ? null
+                  : () {
+                      Navigator.of(context).pop(false);
+                    },
+              icon: const Icon(Icons.close),
+              label: const Text('Cancelar'),
+            ),
           ),
         ],
       ),
@@ -890,13 +820,37 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   // =============================================================
 
   void _mostrarMensaje(String mensaje, {required bool esError}) {
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
-
-          content: Text(mensaje),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: esError ? AppColors.riskOrange : AppColors.green,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          content: Row(
+            children: <Widget>[
+              Icon(
+                esError ? Icons.error_outline : Icons.check_circle_outline,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  mensaje,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
   }
@@ -910,9 +864,9 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
   }
 }
 
-// ===============================================================
-// RESUMEN MATRIZ
-// ===============================================================
+/// ===============================================================
+/// RESUMEN MATRIZ
+/// ===============================================================
 
 class _ResumenMatriz extends StatelessWidget {
   const _ResumenMatriz({required this.matriz});
@@ -921,52 +875,70 @@ class _ResumenMatriz extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Container(
-      padding: const EdgeInsets.all(16),
-
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        color: colors.primaryContainer.withValues(alpha: 0.45),
-
-        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[
+            AppColors.primaryBright,
+            AppColors.primary,
+            AppColors.navyDark,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-
       child: Row(
         children: <Widget>[
-          CircleAvatar(
-            backgroundColor: colors.primaryContainer,
-
-            child: const Icon(Icons.assignment_outlined),
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.assignment_outlined,
+              color: AppColors.primary,
+              size: 31,
+            ),
           ),
-
-          const SizedBox(width: 12),
-
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-
               children: <Widget>[
                 Text(
                   matriz.codigo,
-
-                  style: TextStyle(
-                    color: colors.primary,
-
-                    fontWeight: FontWeight.bold,
+                  style: const TextStyle(
+                    color: AppColors.yellow,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-
-                const SizedBox(height: 2),
-
+                const SizedBox(height: 4),
                 Text(
                   matriz.nombre,
-
                   maxLines: 2,
-
                   overflow: TextOverflow.ellipsis,
-
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Registro de peligro y evaluación inicial',
+                  style: TextStyle(color: Color(0xFFDCEAFF), fontSize: 12),
                 ),
               ],
             ),
@@ -977,9 +949,98 @@ class _ResumenMatriz extends StatelessWidget {
   }
 }
 
-// ===============================================================
-// ADVERTENCIA CATÁLOGO
-// ===============================================================
+/// ===============================================================
+/// SECCIÓN DEL FORMULARIO
+/// ===============================================================
+
+class _SeccionFormulario extends StatelessWidget {
+  const _SeccionFormulario({
+    required this.icono,
+    required this.titulo,
+    required this.descripcion,
+    required this.color,
+    required this.child,
+    this.colorTexto,
+  });
+
+  final IconData icono;
+  final String titulo;
+  final String descripcion;
+  final Color color;
+  final Color? colorTexto;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color foreground = colorTexto ?? color;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: AppColors.navyDark.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.11),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icono, color: foreground, size: 26),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      titulo,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      descripcion,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// ===============================================================
+/// ADVERTENCIA CATÁLOGO
+/// ===============================================================
 
 class _AdvertenciaCatalogo extends StatelessWidget {
   const _AdvertenciaCatalogo({required this.mensaje});
@@ -990,19 +1051,45 @@ class _AdvertenciaCatalogo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-
-      child: Text(
-        mensaje,
-
-        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(11),
+        decoration: BoxDecoration(
+          color: AppColors.riskOrange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: AppColors.riskOrange.withValues(alpha: 0.25),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Icon(
+              Icons.warning_amber_outlined,
+              color: AppColors.riskOrange,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                mensaje,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ===============================================================
-// SELECTOR DE PROBABILIDAD
-// ===============================================================
+/// ===============================================================
+/// SELECTOR DE PROBABILIDAD
+/// ===============================================================
 
 class _SelectorProbabilidad extends StatelessWidget {
   const _SelectorProbabilidad({
@@ -1027,40 +1114,45 @@ class _SelectorProbabilidad extends StatelessWidget {
   Widget build(BuildContext context) {
     return _TarjetaSelectorEscala(
       titulo: 'Probabilidad *',
-
       descripcion: 'Marca una opción del 1 al 5.',
-
       icono: Icons.trending_up_outlined,
-
+      color: AppColors.primaryBright,
       mostrarError: mostrarError,
-
       mensajeError: 'Selecciona la probabilidad.',
-
       opciones: probabilidades
           .map((ProbabilidadModel opcion) {
+            final bool seleccionada = this.seleccionada?.id == opcion.id;
+
             return ChoiceChip(
-              // Se compara por ID REAL.
-              selected: seleccionada?.id == opcion.id,
-
+              selected: seleccionada,
               showCheckmark: true,
-
-              avatar: CircleAvatar(child: Text(opcion.valor.toString())),
-
+              selectedColor: AppColors.primaryBright.withValues(alpha: 0.18),
+              checkmarkColor: AppColors.primary,
+              avatar: CircleAvatar(
+                backgroundColor: seleccionada
+                    ? AppColors.primary
+                    : AppColors.background,
+                foregroundColor: seleccionada
+                    ? Colors.white
+                    : AppColors.primary,
+                child: Text(
+                  opcion.valor.toString(),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
               label: Text(opcion.nombre),
-
               onSelected: habilitado ? (_) => onChanged(opcion) : null,
             );
           })
           .toList(growable: false),
-
       detalleSeleccionado: seleccionada?.descripcion,
     );
   }
 }
 
-// ===============================================================
-// SELECTOR DE SEVERIDAD
-// ===============================================================
+/// ===============================================================
+/// SELECTOR DE SEVERIDAD
+/// ===============================================================
 
 class _SelectorSeveridad extends StatelessWidget {
   const _SelectorSeveridad({
@@ -1085,46 +1177,52 @@ class _SelectorSeveridad extends StatelessWidget {
   Widget build(BuildContext context) {
     return _TarjetaSelectorEscala(
       titulo: 'Severidad *',
-
       descripcion: 'Marca una opción del 1 al 5.',
-
       icono: Icons.priority_high_outlined,
-
+      color: AppColors.riskOrange,
       mostrarError: mostrarError,
-
       mensajeError: 'Selecciona la severidad.',
-
       opciones: severidades
           .map((SeveridadModel opcion) {
+            final bool seleccionada = this.seleccionada?.id == opcion.id;
+
             return ChoiceChip(
-              // Se compara por ID REAL.
-              selected: seleccionada?.id == opcion.id,
-
+              selected: seleccionada,
               showCheckmark: true,
-
-              avatar: CircleAvatar(child: Text(opcion.valor.toString())),
-
+              selectedColor: AppColors.riskOrange.withValues(alpha: 0.15),
+              checkmarkColor: AppColors.riskOrange,
+              avatar: CircleAvatar(
+                backgroundColor: seleccionada
+                    ? AppColors.riskOrange
+                    : AppColors.background,
+                foregroundColor: seleccionada
+                    ? Colors.white
+                    : AppColors.riskOrange,
+                child: Text(
+                  opcion.valor.toString(),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
               label: Text(opcion.nombre),
-
               onSelected: habilitado ? (_) => onChanged(opcion) : null,
             );
           })
           .toList(growable: false),
-
       detalleSeleccionado: seleccionada?.descripcion,
     );
   }
 }
 
-// ===============================================================
-// TARJETA SELECTOR ESCALA
-// ===============================================================
+/// ===============================================================
+/// TARJETA SELECTOR ESCALA
+/// ===============================================================
 
 class _TarjetaSelectorEscala extends StatelessWidget {
   const _TarjetaSelectorEscala({
     required this.titulo,
     required this.descripcion,
     required this.icono,
+    required this.color,
     required this.mostrarError,
     required this.mensajeError,
     required this.opciones,
@@ -1132,88 +1230,96 @@ class _TarjetaSelectorEscala extends StatelessWidget {
   });
 
   final String titulo;
-
   final String descripcion;
-
   final IconData icono;
-
+  final Color color;
   final bool mostrarError;
-
   final String mensajeError;
-
   final List<Widget> opciones;
-
   final String? detalleSeleccionado;
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
-
     return Container(
       padding: const EdgeInsets.all(14),
-
       decoration: BoxDecoration(
+        color: AppColors.background,
         border: Border.all(
-          color: mostrarError ? colors.error : colors.outlineVariant,
+          color: mostrarError ? AppColors.riskOrange : AppColors.border,
         ),
-
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
-
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: <Widget>[
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Icon(icono, color: colors.primary),
-
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icono, color: color, size: 22),
+              ),
               const SizedBox(width: 10),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: <Widget>[
                     Text(
                       titulo,
-
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-
+                    const SizedBox(height: 2),
                     Text(
                       descripcion,
-
-                      style: Theme.of(context).textTheme.bodySmall,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
           Wrap(spacing: 8, runSpacing: 8, children: opciones),
-
           if (detalleSeleccionado != null &&
               detalleSeleccionado!.trim().isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
-
-            Text(
-              detalleSeleccionado!,
-
-              style: Theme.of(context).textTheme.bodySmall,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                detalleSeleccionado!,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.35,
+                ),
+              ),
             ),
           ],
-
           if (mostrarError) ...<Widget>[
             const SizedBox(height: 8),
-
             Text(
               mensajeError,
-
-              style: TextStyle(color: colors.error, fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.riskOrange,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ],
@@ -1222,9 +1328,9 @@ class _TarjetaSelectorEscala extends StatelessWidget {
   }
 }
 
-// ===============================================================
-// RESUMEN EVALUACIÓN DE RIESGO
-// ===============================================================
+/// ===============================================================
+/// RESUMEN EVALUACIÓN DE RIESGO
+/// ===============================================================
 
 class _ResumenEvaluacionRiesgo extends StatelessWidget {
   const _ResumenEvaluacionRiesgo({
@@ -1233,127 +1339,139 @@ class _ResumenEvaluacionRiesgo extends StatelessWidget {
   });
 
   final ProbabilidadModel probabilidad;
-
   final SeveridadModel severidad;
 
   @override
   Widget build(BuildContext context) {
-    // ===========================================================
-    // CÁLCULO
-    // ===========================================================
-    //
-    // Aquí usamos los VALORES 1..5.
-    //
-    // NO usamos los IDs de MySQL.
-
+    // Se usan los VALORES 1..5,
+    // NO los IDs de MySQL.
     final int valor = probabilidad.valor * severidad.valor;
 
     final NivelRiesgoIpercOption nivel = obtenerNivelRiesgoIperc(valor);
 
     final Color color = _colorDesdeHex(nivel.colorHex);
 
+    final Color texto = _colorDeTexto(color);
+
     return Container(
       width: double.infinity,
-
-      padding: const EdgeInsets.all(14),
-
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-
-        border: Border.all(color: color),
-
-        borderRadius: BorderRadius.circular(12),
+        color: color.withValues(alpha: 0.11),
+        border: Border.all(color: color.withValues(alpha: 0.60)),
+        borderRadius: BorderRadius.circular(14),
       ),
-
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-
         children: <Widget>[
           Row(
             children: <Widget>[
-              CircleAvatar(
-                backgroundColor: color,
-
-                foregroundColor: Colors.white,
-
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                alignment: Alignment.center,
                 child: Text(
                   valor.toString(),
-
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: texto,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: <Widget>[
                     Text(
                       'Nivel ${nivel.nombre}',
-
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-
-                    const SizedBox(height: 2),
-
+                    const SizedBox(height: 3),
                     Text(
                       nivel.aceptable
                           ? 'Riesgo aceptable con seguimiento.'
                           : 'Requiere controles y seguimiento.',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-
-          const SizedBox(height: 10),
-
-          Text(
-            'Cálculo: '
-            '${probabilidad.valor} × '
-            '${severidad.valor} = '
-            '$valor',
-
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          const SizedBox(height: 14),
+          _FilaCalculo(
+            etiqueta: 'Cálculo',
+            valor: '${probabilidad.valor} × ${severidad.valor} = $valor',
           ),
-
-          const SizedBox(height: 4),
-
-          Text(
-            'Probabilidad: '
-            '${probabilidad.textoSeleccion}',
+          _FilaCalculo(
+            etiqueta: 'Probabilidad',
+            valor: probabilidad.textoSeleccion,
           ),
+          _FilaCalculo(etiqueta: 'Severidad', valor: severidad.textoSeleccion),
+        ],
+      ),
+    );
+  }
+}
 
-          Text(
-            'Severidad: '
-            '${severidad.textoSeleccion}',
+/// ===============================================================
+/// FILA DEL CÁLCULO
+/// ===============================================================
+
+class _FilaCalculo extends StatelessWidget {
+  const _FilaCalculo({required this.etiqueta, required this.valor});
+
+  final String etiqueta;
+  final String valor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 100,
+            child: Text(
+              etiqueta,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              valor,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
-
-  Color _colorDesdeHex(String hex) {
-    final String limpio = hex.replaceAll('#', '').trim();
-
-    final String completo = limpio.length == 6 ? 'FF$limpio' : limpio;
-
-    final int? valor = int.tryParse(completo, radix: 16);
-
-    if (valor == null) {
-      return Colors.grey;
-    }
-
-    return Color(valor);
-  }
 }
 
-// ===============================================================
-// SELECTOR DE CONTROLES
-// ===============================================================
+/// ===============================================================
+/// SELECTOR DE CONTROLES
+/// ===============================================================
 
 class _SelectorControles extends StatelessWidget {
   const _SelectorControles({
@@ -1364,30 +1482,25 @@ class _SelectorControles extends StatelessWidget {
   });
 
   final List<ControlModel> controles;
-
   final Set<int> seleccionados;
-
   final bool habilitado;
-
   final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return _SelectorMultipleCatalogo(
-      titulo: 'Controles aplicables',
-
       subtitulo: controles.isEmpty
           ? 'No hay controles activos registrados.'
-          : 'Selecciona uno o más controles para reducir el riesgo.',
-
-      icono: Icons.security_outlined,
-
+          : 'Seleccionados: ${seleccionados.length}',
+      color: AppColors.green,
       chips: controles.map((ControlModel control) {
+        final bool selected = seleccionados.contains(control.id);
+
         return FilterChip(
-          selected: seleccionados.contains(control.id),
-
+          selected: selected,
+          selectedColor: AppColors.green.withValues(alpha: 0.16),
+          checkmarkColor: AppColors.green,
           label: Text(control.nombreCompleto),
-
           onSelected: habilitado ? (_) => onChanged(control.id) : null,
         );
       }).toList(),
@@ -1395,9 +1508,9 @@ class _SelectorControles extends StatelessWidget {
   }
 }
 
-// ===============================================================
-// SELECTOR DE EPP
-// ===============================================================
+/// ===============================================================
+/// SELECTOR DE EPP
+/// ===============================================================
 
 class _SelectorEquiposProteccion extends StatelessWidget {
   const _SelectorEquiposProteccion({
@@ -1418,20 +1531,18 @@ class _SelectorEquiposProteccion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _SelectorMultipleCatalogo(
-      titulo: 'Equipos de protección',
-
       subtitulo: equipos.isEmpty
           ? 'No hay EPP activos registrados.'
-          : 'Selecciona los EPP requeridos para esta tarea.',
-
-      icono: Icons.health_and_safety_outlined,
-
+          : 'Seleccionados: ${seleccionados.length}',
+      color: AppColors.primaryBright,
       chips: equipos.map((EquipoProteccionModel equipo) {
+        final bool selected = seleccionados.contains(equipo.id);
+
         return FilterChip(
-          selected: seleccionados.contains(equipo.id),
-
+          selected: selected,
+          selectedColor: AppColors.primaryBright.withValues(alpha: 0.16),
+          checkmarkColor: AppColors.primary,
           label: Text(equipo.nombreCompleto),
-
           onSelected: habilitado ? (_) => onChanged(equipo.id) : null,
         );
       }).toList(),
@@ -1439,127 +1550,170 @@ class _SelectorEquiposProteccion extends StatelessWidget {
   }
 }
 
-// ===============================================================
-// SELECTOR MÚLTIPLE
-// ===============================================================
+/// ===============================================================
+/// SELECTOR MÚLTIPLE
+/// ===============================================================
 
 class _SelectorMultipleCatalogo extends StatelessWidget {
   const _SelectorMultipleCatalogo({
-    required this.titulo,
     required this.subtitulo,
-    required this.icono,
+    required this.color,
     required this.chips,
   });
 
-  final String titulo;
-
   final String subtitulo;
-
-  final IconData icono;
-
+  final Color color;
   final List<Widget> chips;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-
-      children: <Widget>[
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-
-          children: <Widget>[
-            Icon(icono, color: Theme.of(context).colorScheme.primary),
-
-            const SizedBox(width: 10),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: <Widget>[
-                  Text(
-                    titulo,
-
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            subtitulo,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          if (chips.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: chips),
+          ] else ...<Widget>[
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Icon(Icons.info_outline, size: 18, color: color),
+                const SizedBox(width: 7),
+                const Expanded(
+                  child: Text(
+                    'No hay elementos disponibles para seleccionar.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-
-                  const SizedBox(height: 2),
-
-                  Text(subtitulo),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
-        ),
-
-        if (chips.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 10),
-
-          Wrap(spacing: 8, runSpacing: 8, children: chips),
         ],
-      ],
+      ),
     );
   }
 }
 
-// ===============================================================
-// ESTADO DE CARGA
-// ===============================================================
+/// ===============================================================
+/// ESTADO DE CARGA
+/// ===============================================================
 
 class _EstadoCarga extends StatelessWidget {
   const _EstadoCarga({required this.mensaje, required this.onReintentar});
 
   final String mensaje;
-
   final VoidCallback onReintentar;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
-
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-
-          children: <Widget>[
-            Icon(
-              Icons.cloud_off_outlined,
-
-              size: 64,
-
-              color: Theme.of(context).colorScheme.error,
-            ),
-
-            const SizedBox(height: 16),
-
-            Text(
-              'No se pudieron cargar los catálogos',
-
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-
-              textAlign: TextAlign.center,
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(mensaje, textAlign: TextAlign.center),
-
-            const SizedBox(height: 20),
-
-            FilledButton.icon(
-              onPressed: onReintentar,
-
-              icon: const Icon(Icons.refresh),
-
-              label: const Text('Volver a intentar'),
-            ),
-          ],
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 520),
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Container(
+                width: 86,
+                height: 86,
+                decoration: BoxDecoration(
+                  color: AppColors.riskOrange.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.cloud_off_outlined,
+                  size: 44,
+                  color: AppColors.riskOrange,
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'No se pudieron cargar los catálogos',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                mensaje,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: onReintentar,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Volver a intentar'),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// ===============================================================
+/// COLOR DESDE HEX
+/// ===============================================================
+
+Color _colorDesdeHex(String hex) {
+  final String limpio = hex.replaceAll('#', '').trim();
+
+  final String completo = limpio.length == 6 ? 'FF$limpio' : limpio;
+
+  final int? valor = int.tryParse(completo, radix: 16);
+
+  if (valor == null) {
+    return AppColors.textSecondary;
+  }
+
+  return Color(valor);
+}
+
+/// ===============================================================
+/// CONTRASTE DE TEXTO
+/// ===============================================================
+
+Color _colorDeTexto(Color fondo) {
+  return ThemeData.estimateBrightnessForColor(fondo) == Brightness.dark
+      ? Colors.white
+      : Colors.black;
 }

@@ -4,12 +4,14 @@ import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
 import '../../../core/services/secure_storage_service.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/models/matriz_iperc_local_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/repositories/matriz_iperc_offline_repository.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../../providers/detalle_iperc_offline_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../widgets/sync_status_card.dart';
 import '../matriz_iperc/detalles_iperc_offline_screen.dart';
 import 'editar_matriz_iperc_offline_screen.dart';
 import 'editar_matriz_iperc_screen.dart';
@@ -17,33 +19,22 @@ import 'matriz_iperc_detail_screen.dart';
 import 'nueva_matriz_iperc_screen.dart';
 
 /// ===============================================================
-/// MATRICES IPERC
+/// MATRICES IPERC - SST EDURISK
 /// ===============================================================
 ///
-/// Pantalla principal del módulo de matrices IPERC.
+/// Pantalla principal del módulo IPERC.
 ///
-/// Permite trabajar con:
+/// Mantiene la lógica online/offline existente y aplica la identidad
+/// visual oficial SST EduRisk.
 ///
-/// - Matrices almacenadas en el servidor.
-/// - Matrices almacenadas en SQLite.
-/// - Creación online/offline.
-/// - Edición online.
-/// - Eliminación online.
-/// - Edición offline.
-/// - Eliminación offline.
-/// - Sincronización automática.
-///
-/// PERMISOS:
-///
-/// Gestionar matrices:
-/// - SUPER_ADMIN
-/// - ADMIN
-/// - COORDINADOR
-/// - SUP_TITULAR
-/// - SUP_SUPLENTE
-///
-/// Eliminar matrices:
-/// - SOLO SUPER_ADMIN
+/// Colores:
+/// primary       #083F85
+/// primaryBright #0D60D6
+/// navyDark      #05295E
+/// green         #1DA041
+/// yellow        #FEB81C
+/// riskOrange    #EC490F
+/// background    #F6F8FC
 /// ===============================================================
 class MatricesIpercScreen extends StatefulWidget {
   const MatricesIpercScreen({required this.rol, super.key});
@@ -115,9 +106,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       });
     }
 
-    // ===========================================================
+    // -----------------------------------------------------------
     // 1. SQLITE
-    // ===========================================================
+    // -----------------------------------------------------------
 
     try {
       final List<MatrizIpercLocalModel> locales = await _offlineRepository
@@ -132,9 +123,9 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       debugPrint('Error cargando matrices locales: $error');
     }
 
-    // ===========================================================
+    // -----------------------------------------------------------
     // 2. BACKEND
-    // ===========================================================
+    // -----------------------------------------------------------
 
     try {
       final List<MatrizIpercModel> remotas = await _repository
@@ -294,35 +285,11 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       return;
     }
 
-    final bool? confirmar = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Eliminar matriz IPERC'),
-          content: Text(
-            '¿Deseas eliminar esta matriz?\n\n'
-            '${matriz.codigo}\n'
-            '${matriz.nombre}\n\n'
-            'La eliminación será lógica y '
-            'la matriz quedará inactiva.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('Cancelar'),
-            ),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Eliminar'),
-            ),
-          ],
-        );
-      },
+    final bool? confirmar = await _confirmarEliminacion(
+      titulo: 'Eliminar matriz IPERC',
+      codigo: matriz.codigo,
+      nombre: matriz.nombre,
+      mensaje: 'La eliminación será lógica y la matriz quedará inactiva.',
     );
 
     if (!mounted || confirmar != true) {
@@ -334,15 +301,7 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     });
 
     try {
-      // ---------------------------------------------------------
-      // OBTENER USUARIO AUTENTICADO
-      // ---------------------------------------------------------
-
       final int usuarioEliminacionId = await _obtenerUsuarioAutenticadoId();
-
-      // ---------------------------------------------------------
-      // ELIMINAR EN BACKEND
-      // ---------------------------------------------------------
 
       await _repository.eliminar(
         matriz.id,
@@ -474,36 +433,11 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         ? matriz.codigo!.trim()
         : 'SIN CÓDIGO';
 
-    final bool? confirmar = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Eliminar matriz offline'),
-          content: Text(
-            '¿Deseas eliminar esta matriz '
-            'del dispositivo?\n\n'
-            '$codigo\n'
-            '${matriz.nombre}\n\n'
-            'La operación quedará pendiente '
-            'de sincronización.',
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(false);
-              },
-              child: const Text('Cancelar'),
-            ),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(true);
-              },
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Eliminar'),
-            ),
-          ],
-        );
-      },
+    final bool? confirmar = await _confirmarEliminacion(
+      titulo: 'Eliminar matriz offline',
+      codigo: codigo,
+      nombre: matriz.nombre,
+      mensaje: 'La operación quedará pendiente de sincronización.',
     );
 
     if (!mounted || confirmar != true) {
@@ -511,23 +445,11 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
     }
 
     try {
-      // ---------------------------------------------------------
-      // ELIMINAR LOCALMENTE
-      // ---------------------------------------------------------
-      //
-      // El repositorio obtiene internamente el ID real
-      // del usuario autenticado.
-      // ---------------------------------------------------------
-
       await _offlineRepository.deleteOffline(idLocal: matriz.idLocal);
 
       if (!mounted) {
         return;
       }
-
-      // ---------------------------------------------------------
-      // ACTUALIZAR ESTADO GLOBAL DE SINCRONIZACIÓN
-      // ---------------------------------------------------------
 
       await _notificarCambioLocal();
 
@@ -563,6 +485,119 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
       _mostrarMensaje(_limpiarMensaje(error), esError: true);
     }
+  }
+
+  // =============================================================
+  // CONFIRMAR ELIMINACIÓN
+  // =============================================================
+
+  Future<bool?> _confirmarEliminacion({
+    required String titulo,
+    required String codigo,
+    required String nombre,
+    required String mensaje,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          icon: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.riskOrange.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.delete_outline,
+              color: AppColors.riskOrange,
+              size: 32,
+            ),
+          ),
+          title: Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                '¿Deseas eliminar esta matriz?',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      codigo,
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      nombre,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                mensaje,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancelar'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.riskOrange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // =============================================================
@@ -657,12 +692,6 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         return false;
       }
 
-      // -------------------------------------------------------
-      // Si una matriz local ya está sincronizada y también
-      // aparece en el servidor, mostramos solamente
-      // la versión del servidor.
-      // -------------------------------------------------------
-
       if (matriz.sincronizado && _existeEnServidor(matriz)) {
         return false;
       }
@@ -678,7 +707,10 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         title: const Text('Matrices IPERC'),
         actions: <Widget>[
           IconButton(
@@ -688,7 +720,10 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.refresh),
           ),
@@ -697,13 +732,19 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
       floatingActionButton: _puedeGestionarMatrices
           ? FloatingActionButton.extended(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
               onPressed: _cargando ? null : _abrirNuevaMatriz,
               icon: const Icon(Icons.add),
-              label: const Text('Nueva matriz'),
+              label: const Text(
+                'Nueva matriz',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             )
           : null,
 
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: _cargarMatrices,
         child: _construirContenido(),
       ),
@@ -719,89 +760,37 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
 
     final bool noHayMatrices = locales.isEmpty && _matricesServidor.isEmpty;
 
-    // ===========================================================
-    // CARGA INICIAL
-    // ===========================================================
-
     if (_cargando && noHayMatrices) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    // ===========================================================
-    // SIN DATOS
-    // ===========================================================
-
-    if (noHayMatrices) {
-      return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
-        children: <Widget>[
-          const SizedBox(height: 70),
-
-          Icon(
-            _mensajeErrorServidor != null
-                ? Icons.cloud_off_outlined
-                : Icons.assignment_outlined,
-            size: 72,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-
-          const SizedBox(height: 18),
-
-          Text(
-            _mensajeErrorServidor ?? 'No hay matrices IPERC registradas.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-
-          const SizedBox(height: 10),
-
-          const Text(
-            'Presione “Nueva matriz” para '
-            'registrar una matriz IPERC.',
-            textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 22),
-
-          Center(
-            child: FilledButton.icon(
-              onPressed: _cargando ? null : _cargarMatrices,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Actualizar'),
-            ),
-          ),
-        ],
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
       );
     }
 
-    // ===========================================================
-    // LISTADO
-    // ===========================================================
+    if (noHayMatrices) {
+      return _construirSinDatos();
+    }
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: <Widget>[
-        // =======================================================
-        // MENSAJE OFFLINE / SERVIDOR
-        // =======================================================
+        // Estado global de sincronización.
+        const SyncStatusCard(compact: true),
+
+        const SizedBox(height: 16),
+
         if (_mensajeErrorServidor != null) ...<Widget>[
           _construirAvisoServidor(),
-
           const SizedBox(height: 16),
         ],
 
-        // =======================================================
-        // MATRICES LOCALES
-        // =======================================================
         if (locales.isNotEmpty) ...<Widget>[
           const _TituloSeccion(
             titulo: 'Matrices del dispositivo',
-            subtitulo:
-                'Disponibles para trabajar '
-                'sin conexión.',
+            subtitulo: 'Disponibles para trabajar sin conexión.',
             icono: Icons.phone_android_outlined,
+            color: AppColors.yellow,
+            colorTexto: AppColors.navyDark,
           ),
 
           const SizedBox(height: 10),
@@ -816,16 +805,12 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
           if (_matricesServidor.isNotEmpty) const SizedBox(height: 8),
         ],
 
-        // =======================================================
-        // MATRICES SERVIDOR
-        // =======================================================
         if (_matricesServidor.isNotEmpty) ...<Widget>[
           const _TituloSeccion(
             titulo: 'Matrices del servidor',
-            subtitulo:
-                'Matrices registradas '
-                'y sincronizadas.',
+            subtitulo: 'Matrices registradas y sincronizadas.',
             icono: Icons.cloud_done_outlined,
+            color: AppColors.green,
           ),
 
           const SizedBox(height: 10),
@@ -842,6 +827,75 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   }
 
   // =============================================================
+  // SIN DATOS
+  // =============================================================
+
+  Widget _construirSinDatos() {
+    final bool offline = _mensajeErrorServidor != null;
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      children: <Widget>[
+        const SizedBox(height: 54),
+
+        Center(
+          child: Container(
+            width: 104,
+            height: 104,
+            decoration: BoxDecoration(
+              color: (offline ? AppColors.yellow : AppColors.primary)
+                  .withValues(alpha: offline ? 0.18 : 0.09),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              offline ? Icons.cloud_off_outlined : Icons.assignment_outlined,
+              size: 54,
+              color: offline ? AppColors.navyDark : AppColors.primary,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 22),
+
+        Text(
+          _mensajeErrorServidor ?? 'No hay matrices IPERC registradas.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        Text(
+          _puedeGestionarMatrices
+              ? 'Presione “Nueva matriz” para registrar una matriz IPERC.'
+              : 'No existen matrices disponibles para mostrar.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
+        ),
+
+        const SizedBox(height: 24),
+
+        Center(
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: _cargando ? null : _cargarMatrices,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Actualizar'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // =============================================================
   // AVISO SERVIDOR
   // =============================================================
 
@@ -850,18 +904,36 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade300),
+        color: AppColors.yellow.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.yellow.withValues(alpha: 0.55)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.cloud_off_outlined, color: Colors.orange.shade800),
-
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.yellow.withValues(alpha: 0.22),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: const Icon(
+              Icons.cloud_off_outlined,
+              color: AppColors.navyDark,
+            ),
+          ),
           const SizedBox(width: 12),
-
-          Expanded(child: Text(_mensajeErrorServidor!)),
+          Expanded(
+            child: Text(
+              _mensajeErrorServidor!,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -881,142 +953,188 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
         ? matriz.codigo!.trim()
         : 'SIN CÓDIGO';
 
-    return Card(
+    final Color colorEstado = pendiente ? AppColors.yellow : AppColors.green;
+
+    final Color colorTexto = pendiente ? AppColors.navyDark : AppColors.green;
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           _abrirMatrizLocal(matriz);
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              CircleAvatar(
-                radius: 25,
-                child: Icon(
-                  pendiente
-                      ? Icons.cloud_upload_outlined
-                      : Icons.cloud_done_outlined,
-                ),
-              ),
-
-              const SizedBox(width: 14),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      codigo,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      matriz.nombre,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    if (matriz.descripcion?.trim().isNotEmpty ==
-                        true) ...<Widget>[
-                      const SizedBox(height: 6),
-
-                      Text(
-                        matriz.descripcion!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-
-                    const SizedBox(height: 10),
-
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Container(width: 5, color: colorEstado),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _EstadoChip(
-                          icono: pendiente
-                              ? Icons.schedule_outlined
-                              : Icons.cloud_done_outlined,
-                          texto: pendiente
-                              ? 'Pendiente de sincronización'
-                              : 'Sincronizada',
-                        ),
-
-                        const _EstadoChip(
-                          icono: Icons.phone_android_outlined,
-                          texto: 'Disponible offline',
-                        ),
-
-                        if (matriz.idServidor?.trim().isNotEmpty == true)
-                          _EstadoChip(
-                            icono: Icons.link_outlined,
-                            texto: 'Servidor #${matriz.idServidor}',
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: colorEstado.withValues(alpha: 0.13),
+                            borderRadius: BorderRadius.circular(14),
                           ),
+                          child: Icon(
+                            pendiente
+                                ? Icons.cloud_upload_outlined
+                                : Icons.cloud_done_outlined,
+                            color: colorTexto,
+                            size: 27,
+                          ),
+                        ),
+
+                        const SizedBox(width: 14),
+
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                codigo,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+
+                              const SizedBox(height: 4),
+
+                              Text(
+                                matriz.nombre,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+
+                              if (matriz.descripcion?.trim().isNotEmpty ==
+                                  true) ...<Widget>[
+                                const SizedBox(height: 6),
+                                Text(
+                                  matriz.descripcion!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ],
+
+                              const SizedBox(height: 10),
+
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: <Widget>[
+                                  _EstadoChip(
+                                    icono: pendiente
+                                        ? Icons.schedule_outlined
+                                        : Icons.cloud_done_outlined,
+                                    texto: pendiente
+                                        ? 'Pendiente de sincronización'
+                                        : 'Sincronizada',
+                                    color: colorEstado,
+                                    colorTexto: colorTexto,
+                                  ),
+                                  const _EstadoChip(
+                                    icono: Icons.phone_android_outlined,
+                                    texto: 'Disponible offline',
+                                    color: AppColors.primary,
+                                  ),
+                                  if (matriz.idServidor?.trim().isNotEmpty ==
+                                      true)
+                                    _EstadoChip(
+                                      icono: Icons.link_outlined,
+                                      texto: 'Servidor #${matriz.idServidor}',
+                                      color: AppColors.primaryBright,
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        if (_puedeGestionarMatrices || _puedeEliminarMatrices)
+                          _menuMatrizLocal(matriz)
+                        else
+                          Icon(Icons.chevron_right_rounded, color: colorTexto),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // =================================================
-              // MENÚ LOCAL
-              // =================================================
-              if (_puedeGestionarMatrices || _puedeEliminarMatrices)
-                PopupMenuButton<String>(
-                  tooltip: 'Opciones de matriz',
-                  onSelected: (String opcion) {
-                    switch (opcion) {
-                      case 'editar':
-                        _editarMatrizLocal(matriz);
-                        break;
-
-                      case 'eliminar':
-                        _eliminarMatrizLocal(matriz);
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) {
-                    return <PopupMenuEntry<String>>[
-                      if (_puedeGestionarMatrices)
-                        const PopupMenuItem<String>(
-                          value: 'editar',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.edit_outlined),
-                            title: Text('Editar offline'),
-                          ),
-                        ),
-
-                      if (_puedeEliminarMatrices)
-                        const PopupMenuItem<String>(
-                          value: 'eliminar',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.delete_outline),
-                            title: Text('Eliminar offline'),
-                          ),
-                        ),
-                    ];
-                  },
-                )
-              else
-                const Icon(Icons.chevron_right),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  // =============================================================
+  // MENÚ LOCAL
+  // =============================================================
+
+  Widget _menuMatrizLocal(MatrizIpercLocalModel matriz) {
+    return PopupMenuButton<String>(
+      tooltip: 'Opciones de matriz',
+      color: AppColors.surface,
+      icon: const Icon(Icons.more_vert, color: AppColors.primary),
+      onSelected: (String opcion) {
+        switch (opcion) {
+          case 'editar':
+            _editarMatrizLocal(matriz);
+            break;
+
+          case 'eliminar':
+            _eliminarMatrizLocal(matriz);
+            break;
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        return <PopupMenuEntry<String>>[
+          if (_puedeGestionarMatrices)
+            const PopupMenuItem<String>(
+              value: 'editar',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.edit_outlined, color: AppColors.primary),
+                title: Text('Editar offline'),
+              ),
+            ),
+
+          if (_puedeEliminarMatrices)
+            const PopupMenuItem<String>(
+              value: 'eliminar',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: AppColors.riskOrange,
+                ),
+                title: Text('Eliminar offline'),
+              ),
+            ),
+        ];
+      },
     );
   }
 
@@ -1025,132 +1143,183 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
   // =============================================================
 
   Widget _construirMatrizServidor(MatrizIpercModel matriz) {
-    return Card(
+    final Color color = matriz.activo ? AppColors.green : AppColors.riskOrange;
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () {
           _abrirMatrizServidor(matriz);
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              CircleAvatar(
-                radius: 25,
-                child: Icon(
-                  matriz.activo ? Icons.assignment : Icons.assignment_outlined,
-                ),
-              ),
-
-              const SizedBox(width: 14),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      matriz.codigo,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      matriz.nombre,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    if (matriz.objetivo != null &&
-                        matriz.objetivo!.trim().isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 6),
-
-                      Text(
-                        matriz.objetivo!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-
-                    const SizedBox(height: 10),
-
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Container(width: 5, color: color),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        _EstadoChip(
-                          icono: matriz.activo
-                              ? Icons.check_circle_outline
-                              : Icons.cancel_outlined,
-                          texto: matriz.activo ? 'Activa' : 'Inactiva',
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.11),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            matriz.activo
+                                ? Icons.assignment_turned_in_outlined
+                                : Icons.assignment_outlined,
+                            color: color,
+                            size: 27,
+                          ),
                         ),
 
-                        const _EstadoChip(
-                          icono: Icons.cloud_done_outlined,
-                          texto: 'Servidor',
+                        const SizedBox(width: 14),
+
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                matriz.codigo,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+
+                              const SizedBox(height: 4),
+
+                              Text(
+                                matriz.nombre,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+
+                              if (matriz.objetivo != null &&
+                                  matriz.objetivo!
+                                      .trim()
+                                      .isNotEmpty) ...<Widget>[
+                                const SizedBox(height: 6),
+                                Text(
+                                  matriz.objetivo!,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ],
+
+                              const SizedBox(height: 10),
+
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: <Widget>[
+                                  _EstadoChip(
+                                    icono: matriz.activo
+                                        ? Icons.check_circle_outline
+                                        : Icons.cancel_outlined,
+                                    texto: matriz.activo
+                                        ? 'Activa'
+                                        : 'Inactiva',
+                                    color: color,
+                                  ),
+                                  const _EstadoChip(
+                                    icono: Icons.cloud_done_outlined,
+                                    texto: 'Servidor',
+                                    color: AppColors.green,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
+
+                        const SizedBox(width: 8),
+
+                        if (_puedeGestionarMatrices || _puedeEliminarMatrices)
+                          _menuMatrizServidor(matriz)
+                        else
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.primary,
+                          ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // =================================================
-              // MENÚ SERVIDOR
-              // =================================================
-              if (_puedeGestionarMatrices || _puedeEliminarMatrices)
-                PopupMenuButton<String>(
-                  tooltip: 'Opciones de matriz',
-                  onSelected: (String opcion) {
-                    switch (opcion) {
-                      case 'editar':
-                        _editarMatrizServidor(matriz);
-                        break;
-
-                      case 'eliminar':
-                        _eliminarMatrizServidor(matriz);
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) {
-                    return <PopupMenuEntry<String>>[
-                      if (_puedeGestionarMatrices)
-                        const PopupMenuItem<String>(
-                          value: 'editar',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.edit_outlined),
-                            title: Text('Editar'),
-                          ),
-                        ),
-
-                      if (_puedeEliminarMatrices)
-                        const PopupMenuItem<String>(
-                          value: 'eliminar',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.delete_outline),
-                            title: Text('Eliminar'),
-                          ),
-                        ),
-                    ];
-                  },
-                )
-              else
-                const Icon(Icons.chevron_right),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  // =============================================================
+  // MENÚ SERVIDOR
+  // =============================================================
+
+  Widget _menuMatrizServidor(MatrizIpercModel matriz) {
+    return PopupMenuButton<String>(
+      tooltip: 'Opciones de matriz',
+      color: AppColors.surface,
+      icon: const Icon(Icons.more_vert, color: AppColors.primary),
+      onSelected: (String opcion) {
+        switch (opcion) {
+          case 'editar':
+            _editarMatrizServidor(matriz);
+            break;
+
+          case 'eliminar':
+            _eliminarMatrizServidor(matriz);
+            break;
+        }
+      },
+      itemBuilder: (BuildContext context) {
+        return <PopupMenuEntry<String>>[
+          if (_puedeGestionarMatrices)
+            const PopupMenuItem<String>(
+              value: 'editar',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.edit_outlined, color: AppColors.primary),
+                title: Text('Editar'),
+              ),
+            ),
+
+          if (_puedeEliminarMatrices)
+            const PopupMenuItem<String>(
+              value: 'eliminar',
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: AppColors.riskOrange,
+                ),
+                title: Text('Eliminar'),
+              ),
+            ),
+        ];
+      },
     );
   }
 
@@ -1243,8 +1412,29 @@ class _MatricesIpercScreenState extends State<MatricesIpercScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(mensaje),
-          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: esError ? AppColors.riskOrange : AppColors.green,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          content: Row(
+            children: <Widget>[
+              Icon(
+                esError ? Icons.error_outline : Icons.check_circle_outline,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  mensaje,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       );
   }
@@ -1259,39 +1449,70 @@ class _TituloSeccion extends StatelessWidget {
     required this.titulo,
     required this.subtitulo,
     required this.icono,
+    required this.color,
+    this.colorTexto,
   });
 
   final String titulo;
   final String subtitulo;
   final IconData icono;
+  final Color color;
+  final Color? colorTexto;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        CircleAvatar(child: Icon(icono)),
+    final Color foreground = colorTexto ?? color;
 
-        const SizedBox(width: 12),
-
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                titulo,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 2),
-
-              Text(subtitulo, style: Theme.of(context).textTheme.bodySmall),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icono, color: foreground),
           ),
-        ),
-      ],
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  subtitulo,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1301,29 +1522,43 @@ class _TituloSeccion extends StatelessWidget {
 /// ===============================================================
 
 class _EstadoChip extends StatelessWidget {
-  const _EstadoChip({required this.icono, required this.texto});
+  const _EstadoChip({
+    required this.icono,
+    required this.texto,
+    required this.color,
+    this.colorTexto,
+  });
 
   final IconData icono;
   final String texto;
+  final Color color;
+  final Color? colorTexto;
 
   @override
   Widget build(BuildContext context) {
+    final Color foreground = colorTexto ?? color;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Icon(icono, size: 16),
+          Icon(icono, size: 16, color: foreground),
 
           const SizedBox(width: 5),
 
           Text(
             texto,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: foreground,
+            ),
           ),
         ],
       ),

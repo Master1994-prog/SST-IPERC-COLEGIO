@@ -16,8 +16,8 @@ class ApiConfig {
   static const String sedesEndpoint = '/Sedes';
   static const String usuariosEndpoint = '/Usuarios';
   static const String solicitudesAccesoEndpoint = '/Solicitudes/acceso';
-static const String cambiarPasswordPropioEndpoint =
-    '/Auth/cambiar-password-propio';
+  static const String cambiarPasswordPropioEndpoint =
+      '/Auth/cambiar-password-propio';
   static const String solicitudesRecuperacionEndpoint =
       '/Solicitudes/recuperacion';
   static const String rolesEndpoint = '/Roles';

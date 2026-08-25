@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -32,9 +33,7 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpGet]
-    [ProducesResponseType(
-        typeof(List<UsuarioResponseDto>),
-        StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(List<UsuarioResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ObtenerTodos(
         [FromQuery] long? institucionId,
         [FromQuery] long? sedeId,
@@ -43,125 +42,80 @@ public sealed class UsuariosController : ControllerBase
         [FromQuery] bool? activo,
         CancellationToken cancellationToken)
     {
-        IQueryable<Usuario> consulta =
-            _dbContext.Usuarios
-                .AsNoTracking()
-                .Where(usuario => usuario.Estado);
+        IQueryable<Usuario> consulta = _dbContext.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.Estado);
 
         if (activo.HasValue)
         {
-            consulta = consulta.Where(
-                usuario =>
-                    usuario.Activo == activo.Value);
+            consulta = consulta.Where(usuario => usuario.Activo == activo.Value);
         }
 
-        if (institucionId.HasValue &&
-            institucionId.Value > 0)
+        if (institucionId.HasValue && institucionId.Value > 0)
         {
-            consulta = consulta.Where(
-                usuario =>
-                    usuario.InstitucionId ==
-                    institucionId.Value);
+            consulta = consulta.Where(usuario => usuario.InstitucionId == institucionId.Value);
         }
 
-        if (sedeId.HasValue &&
-            sedeId.Value > 0)
+        if (sedeId.HasValue && sedeId.Value > 0)
         {
-            consulta = consulta.Where(
-                usuario =>
-                    usuario.SedeId ==
-                    sedeId.Value);
+            consulta = consulta.Where(usuario => usuario.SedeId == sedeId.Value);
         }
 
-        if (areaId.HasValue &&
-            areaId.Value > 0)
+        if (areaId.HasValue && areaId.Value > 0)
         {
-            consulta = consulta.Where(
-                usuario =>
-                    usuario.AreaId ==
-                    areaId.Value);
+            consulta = consulta.Where(usuario => usuario.AreaId == areaId.Value);
         }
 
-        if (rolId.HasValue &&
-            rolId.Value > 0)
+        if (rolId.HasValue && rolId.Value > 0)
         {
-            consulta = consulta.Where(
-                usuario =>
-                    usuario.UsuariosRoles.Any(
-                        relacion =>
-                            relacion.RolId ==
-                                rolId.Value &&
-                            relacion.Estado &&
-                            relacion.Activo &&
-                            relacion.Rol.Estado &&
-                            relacion.Rol.Activo));
+            consulta = consulta.Where(usuario =>
+                usuario.UsuariosRoles.Any(relacion =>
+                    relacion.RolId == rolId.Value &&
+                    relacion.Estado &&
+                    relacion.Activo &&
+                    relacion.Rol.Estado &&
+                    relacion.Rol.Activo));
         }
 
-        List<UsuarioResponseDto> usuarios =
-            await consulta
-                .OrderBy(usuario =>
-                    usuario.Apellidos)
-                .ThenBy(usuario =>
-                    usuario.Nombres)
-                .Select(usuario =>
-                    new UsuarioResponseDto
+        List<UsuarioResponseDto> usuarios = await consulta
+            .OrderBy(usuario => usuario.Apellidos)
+            .ThenBy(usuario => usuario.Nombres)
+            .Select(usuario => new UsuarioResponseDto
+            {
+                Id = usuario.Id,
+                Nombres = usuario.Nombres,
+                Apellidos = usuario.Apellidos,
+                NombreCompleto = usuario.Nombres + " " + usuario.Apellidos,
+                NumeroDocumento = usuario.NumeroDocumento,
+                TipoDocumento = usuario.TipoDocumento,
+                Correo = usuario.Correo,
+                Telefono = usuario.Telefono,
+                NombreUsuario = usuario.NombreUsuario,
+                DebeCambiarPassword = usuario.DebeCambiarPassword,
+                UltimoAcceso = usuario.UltimoAcceso,
+                InstitucionId = usuario.InstitucionId,
+                SedeId = usuario.SedeId,
+                AreaId = usuario.AreaId,
+                Activo = usuario.Activo,
+                FechaRegistro = usuario.FechaRegistro,
+                FechaActualizacion = usuario.FechaActualizacion,
+                Roles = usuario.UsuariosRoles
+                    .Where(relacion =>
+                        relacion.Estado &&
+                        relacion.Activo &&
+                        relacion.Rol.Estado &&
+                        relacion.Rol.Activo)
+                    .OrderBy(relacion => relacion.Rol.Nombre)
+                    .Select(relacion => new UsuarioRolResponseDto
                     {
-                        Id = usuario.Id,
-                        Nombres = usuario.Nombres,
-                        Apellidos = usuario.Apellidos,
-                        NombreCompleto =
-                            usuario.Nombres +
-                            " " +
-                            usuario.Apellidos,
-                        NumeroDocumento =
-                            usuario.NumeroDocumento,
-                        TipoDocumento =
-                            usuario.TipoDocumento,
-                        Correo = usuario.Correo,
-                        Telefono = usuario.Telefono,
-                        NombreUsuario =
-                            usuario.NombreUsuario,
-                        DebeCambiarPassword =
-                            usuario.DebeCambiarPassword,
-                        UltimoAcceso =
-                            usuario.UltimoAcceso,
-                        InstitucionId =
-                            usuario.InstitucionId,
-                        SedeId = usuario.SedeId,
-                        AreaId = usuario.AreaId,
-                        Activo = usuario.Activo,
-                        FechaRegistro =
-                            usuario.FechaRegistro,
-                        FechaActualizacion =
-                            usuario.FechaActualizacion,
-                        Roles =
-                            usuario
-                                .UsuariosRoles
-                                .Where(
-                                    relacion =>
-                                        relacion.Estado &&
-                                        relacion.Activo &&
-                                        relacion.Rol.Estado &&
-                                        relacion.Rol.Activo)
-                                .OrderBy(
-                                    relacion =>
-                                        relacion.Rol.Nombre)
-                                .Select(
-                                    relacion =>
-                                        new UsuarioRolResponseDto
-                                        {
-                                            Id =
-                                                relacion.Rol.Id,
-                                            Codigo =
-                                                relacion.Rol.Codigo,
-                                            Nombre =
-                                                relacion.Rol.Nombre,
-                                            EsGlobal =
-                                                relacion.Rol.EsGlobal
-                                        })
-                                .ToList()
+                        Id = relacion.Rol.Id,
+                        Codigo = relacion.Rol.Codigo,
+                        Nombre = relacion.Rol.Nombre,
+                        EsGlobal = relacion.Rol.EsGlobal
                     })
-                .ToListAsync(cancellationToken);
+                    .ToList()
+            })
+            .ToListAsync(cancellationToken);
 
         return Ok(usuarios);
     }
@@ -171,13 +125,9 @@ public sealed class UsuariosController : ControllerBase
     // =========================================================
 
     [HttpGet("{id:long}")]
-    [ProducesResponseType(
-        typeof(UsuarioResponseDto),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(UsuarioResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ObtenerPorId(
         long id,
         CancellationToken cancellationToken)
@@ -186,22 +136,19 @@ public sealed class UsuariosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        UsuarioResponseDto? usuario =
-            await ObtenerUsuarioResponseAsync(
-                id,
-                cancellationToken);
+        UsuarioResponseDto? usuario = await ObtenerUsuarioResponseAsync(
+            id,
+            cancellationToken);
 
         if (usuario is null)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario solicitado."
+                mensaje = "No se encontró el usuario solicitado."
             });
         }
 
@@ -214,163 +161,122 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "SUPER_ADMIN")]
-    [ProducesResponseType(
-        typeof(UsuarioResponseDto),
-        StatusCodes.Status201Created)]
-    [ProducesResponseType(
-        StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(UsuarioResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Crear(
         [FromBody] CrearUsuarioDto solicitud,
         CancellationToken cancellationToken)
     {
-        string nombres =
-            solicitud.Nombres.Trim();
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioRegistroId))
+        {
+            return UsuarioNoIdentificado();
+        }
 
-        string apellidos =
-            solicitud.Apellidos.Trim();
+        string nombres = solicitud.Nombres.Trim();
+        string apellidos = solicitud.Apellidos.Trim();
+        string nombreUsuario = solicitud.NombreUsuario.Trim().ToLowerInvariant();
 
-        string nombreUsuario =
-            solicitud.NombreUsuario
-                .Trim()
-                .ToLowerInvariant();
+        string? correo = LimpiarCorreo(solicitud.Correo);
+        string? numeroDocumento = LimpiarTextoOpcional(solicitud.NumeroDocumento);
+        string? tipoDocumento = LimpiarTextoOpcional(solicitud.TipoDocumento);
+        string? telefono = LimpiarTextoOpcional(solicitud.Telefono);
 
-        string? correo =
-            LimpiarCorreo(
-                solicitud.Correo);
-
-        string? numeroDocumento =
-            LimpiarTextoOpcional(
-                solicitud.NumeroDocumento);
-
-        string? tipoDocumento =
-            LimpiarTextoOpcional(
-                solicitud.TipoDocumento);
-
-        string? telefono =
-            LimpiarTextoOpcional(
-                solicitud.Telefono);
-
-        List<long> rolIds =
-            solicitud.RolIds
-                .Where(id => id > 0)
-                .Distinct()
-                .ToList();
+        List<long> rolIds = solicitud.RolIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
 
         if (rolIds.Count == 0)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "Debe seleccionar al menos un rol."
+                mensaje = "Debe seleccionar al menos un rol."
             });
         }
 
-        bool nombreUsuarioDuplicado =
-            await _dbContext.Usuarios
-                .AsNoTracking()
-                .AnyAsync(
-                    usuario =>
-                        usuario.Estado &&
-                        usuario.NombreUsuario
-                            .ToLower() ==
-                        nombreUsuario,
-                    cancellationToken);
+        bool nombreUsuarioDuplicado = await _dbContext.Usuarios
+            .AsNoTracking()
+            .AnyAsync(
+                usuario =>
+                    usuario.Estado &&
+                    usuario.NombreUsuario.ToLower() == nombreUsuario,
+                cancellationToken);
 
         if (nombreUsuarioDuplicado)
         {
             return Conflict(new
             {
-                mensaje =
-                    "El nombre de usuario ya está registrado."
+                mensaje = "El nombre de usuario ya está registrado."
             });
         }
 
-        if (!string.IsNullOrWhiteSpace(
-                correo))
+        if (!string.IsNullOrWhiteSpace(correo))
         {
-            bool correoDuplicado =
-                await _dbContext.Usuarios
-                    .AsNoTracking()
-                    .AnyAsync(
-                        usuario =>
-                            usuario.Estado &&
-                            usuario.Correo != null &&
-                            usuario.Correo
-                                .ToLower() ==
-                            correo,
-                        cancellationToken);
+            bool correoDuplicado = await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    usuario =>
+                        usuario.Estado &&
+                        usuario.Correo != null &&
+                        usuario.Correo.ToLower() == correo,
+                    cancellationToken);
 
             if (correoDuplicado)
             {
                 return Conflict(new
                 {
-                    mensaje =
-                        "El correo electrónico ya está registrado."
+                    mensaje = "El correo electrónico ya está registrado."
                 });
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(
-                numeroDocumento))
+        if (!string.IsNullOrWhiteSpace(numeroDocumento))
         {
-            bool documentoDuplicado =
-                await _dbContext.Usuarios
-                    .AsNoTracking()
-                    .AnyAsync(
-                        usuario =>
-                            usuario.Estado &&
-                            usuario.NumeroDocumento !=
-                                null &&
-                            usuario.NumeroDocumento ==
-                                numeroDocumento,
-                        cancellationToken);
+            bool documentoDuplicado = await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    usuario =>
+                        usuario.Estado &&
+                        usuario.NumeroDocumento != null &&
+                        usuario.NumeroDocumento == numeroDocumento,
+                    cancellationToken);
 
             if (documentoDuplicado)
             {
                 return Conflict(new
                 {
-                    mensaje =
-                        "El número de documento ya está registrado."
+                    mensaje = "El número de documento ya está registrado."
                 });
             }
         }
 
-        IActionResult? validacionOrganizacion =
-            await ValidarOrganizacionAsync(
-                solicitud.InstitucionId,
-                solicitud.SedeId,
-                solicitud.AreaId,
-                cancellationToken);
+        IActionResult? validacionOrganizacion = await ValidarOrganizacionAsync(
+            solicitud.InstitucionId,
+            solicitud.SedeId,
+            solicitud.AreaId,
+            cancellationToken);
 
         if (validacionOrganizacion is not null)
         {
             return validacionOrganizacion;
         }
 
-        List<Rol> roles =
-            await _dbContext.Roles
-                .Where(
-                    rol =>
-                        rolIds.Contains(rol.Id) &&
-                        rol.Estado &&
-                        rol.Activo)
-                .ToListAsync(
-                    cancellationToken);
+        List<Rol> roles = await _dbContext.Roles
+            .Where(rol =>
+                rolIds.Contains(rol.Id) &&
+                rol.Estado &&
+                rol.Activo)
+            .ToListAsync(cancellationToken);
 
         if (roles.Count != rolIds.Count)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "Uno o más roles seleccionados no existen o están inactivos."
+                mensaje = "Uno o más roles seleccionados no existen o están inactivos."
             });
         }
-
-        long usuarioRegistroId =
-            ObtenerUsuarioId(
-                solicitud.UsuarioRegistroId);
 
         var usuario = new Usuario
         {
@@ -381,85 +287,60 @@ public sealed class UsuariosController : ControllerBase
             Correo = correo,
             Telefono = telefono,
             NombreUsuario = nombreUsuario,
-            InstitucionId =
-                solicitud.InstitucionId,
+            InstitucionId = solicitud.InstitucionId,
             SedeId = solicitud.SedeId,
             AreaId = solicitud.AreaId,
             Activo = true,
             Estado = true,
-            DebeCambiarPassword =
-                solicitud.DebeCambiarPassword,
+            DebeCambiarPassword = solicitud.DebeCambiarPassword,
             FechaRegistro = DateTime.UtcNow,
-            UsuarioRegistroId =
-                usuarioRegistroId
+            UsuarioRegistroId = usuarioRegistroId
         };
 
-        usuario.PasswordHash =
-            _passwordHasher.HashPassword(
-                usuario,
-                solicitud.Password);
+        usuario.PasswordHash = _passwordHasher.HashPassword(
+            usuario,
+            solicitud.Password);
 
-        await using var transaccion =
-            await _dbContext.Database
-                .BeginTransactionAsync(
-                    cancellationToken);
+        await using var transaccion = await _dbContext.Database
+            .BeginTransactionAsync(cancellationToken);
 
         try
         {
-            _dbContext.Usuarios.Add(
-                usuario);
+            _dbContext.Usuarios.Add(usuario);
 
-            await _dbContext.SaveChangesAsync(
-                cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
 
             foreach (Rol rol in roles)
             {
-                var usuarioRol =
-                    new UsuarioRol
-                    {
-                        UsuarioId =
-                            usuario.Id,
-                        RolId =
-                            rol.Id,
-                        Activo =
-                            true,
-                        Estado =
-                            true,
-                        FechaRegistro =
-                            DateTime.UtcNow,
-                        UsuarioRegistroId =
-                            usuarioRegistroId
-                    };
+                var usuarioRol = new UsuarioRol
+                {
+                    UsuarioId = usuario.Id,
+                    RolId = rol.Id,
+                    Activo = true,
+                    Estado = true,
+                    FechaRegistro = DateTime.UtcNow,
+                    UsuarioRegistroId = usuarioRegistroId
+                };
 
-                _dbContext.UsuariosRoles.Add(
-                    usuarioRol);
+                _dbContext.UsuariosRoles.Add(usuarioRol);
             }
 
-            await _dbContext.SaveChangesAsync(
-                cancellationToken);
-
-            await transaccion.CommitAsync(
-                cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaccion.CommitAsync(cancellationToken);
         }
         catch
         {
-            await transaccion.RollbackAsync(
-                cancellationToken);
-
+            await transaccion.RollbackAsync(cancellationToken);
             throw;
         }
 
-        UsuarioResponseDto? resultado =
-            await ObtenerUsuarioResponseAsync(
-                usuario.Id,
-                cancellationToken);
+        UsuarioResponseDto? resultado = await ObtenerUsuarioResponseAsync(
+            usuario.Id,
+            cancellationToken);
 
         return CreatedAtAction(
             nameof(ObtenerPorId),
-            new
-            {
-                id = usuario.Id
-            },
+            new { id = usuario.Id },
             resultado);
     }
 
@@ -469,15 +350,11 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpPut("{id:long}")]
     [Authorize(Roles = "SUPER_ADMIN")]
-    [ProducesResponseType(
-        typeof(UsuarioResponseDto),
-        StatusCodes.Status200OK)]
-    [ProducesResponseType(
-        StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(
-        StatusCodes.Status404NotFound)]
-    [ProducesResponseType(
-        StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(UsuarioResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Actualizar(
         long id,
         [FromBody] ActualizarUsuarioDto solicitud,
@@ -487,181 +364,123 @@ public sealed class UsuariosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        Usuario? usuario =
-            await _dbContext.Usuarios
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.Id == id &&
-                        item.Estado,
-                    cancellationToken);
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioActualizacionId))
+        {
+            return UsuarioNoIdentificado();
+        }
+
+        Usuario? usuario = await _dbContext.Usuarios
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Estado,
+                cancellationToken);
 
         if (usuario is null)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario que se desea actualizar."
+                mensaje = "No se encontró el usuario que se desea actualizar."
             });
         }
 
-        string nombres =
-            solicitud.Nombres.Trim();
+        string nombres = solicitud.Nombres.Trim();
+        string apellidos = solicitud.Apellidos.Trim();
+        string nombreUsuario = solicitud.NombreUsuario.Trim().ToLowerInvariant();
+        string? correo = LimpiarCorreo(solicitud.Correo);
+        string? numeroDocumento = LimpiarTextoOpcional(solicitud.NumeroDocumento);
 
-        string apellidos =
-            solicitud.Apellidos.Trim();
-
-        string nombreUsuario =
-            solicitud.NombreUsuario
-                .Trim()
-                .ToLowerInvariant();
-
-        string? correo =
-            LimpiarCorreo(
-                solicitud.Correo);
-
-        string? numeroDocumento =
-            LimpiarTextoOpcional(
-                solicitud.NumeroDocumento);
-
-        bool nombreUsuarioDuplicado =
-            await _dbContext.Usuarios
-                .AsNoTracking()
-                .AnyAsync(
-                    item =>
-                        item.Id != id &&
-                        item.Estado &&
-                        item.NombreUsuario
-                            .ToLower() ==
-                        nombreUsuario,
-                    cancellationToken);
+        bool nombreUsuarioDuplicado = await _dbContext.Usuarios
+            .AsNoTracking()
+            .AnyAsync(
+                item =>
+                    item.Id != id &&
+                    item.Estado &&
+                    item.NombreUsuario.ToLower() == nombreUsuario,
+                cancellationToken);
 
         if (nombreUsuarioDuplicado)
         {
             return Conflict(new
             {
-                mensaje =
-                    "El nombre de usuario ya está registrado por otro usuario."
+                mensaje = "El nombre de usuario ya está registrado por otro usuario."
             });
         }
 
-        if (!string.IsNullOrWhiteSpace(
-                correo))
+        if (!string.IsNullOrWhiteSpace(correo))
         {
-            bool correoDuplicado =
-                await _dbContext.Usuarios
-                    .AsNoTracking()
-                    .AnyAsync(
-                        item =>
-                            item.Id != id &&
-                            item.Estado &&
-                            item.Correo != null &&
-                            item.Correo
-                                .ToLower() ==
-                            correo,
-                        cancellationToken);
+            bool correoDuplicado = await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.Id != id &&
+                        item.Estado &&
+                        item.Correo != null &&
+                        item.Correo.ToLower() == correo,
+                    cancellationToken);
 
             if (correoDuplicado)
             {
                 return Conflict(new
                 {
-                    mensaje =
-                        "El correo electrónico ya está registrado por otro usuario."
+                    mensaje = "El correo electrónico ya está registrado por otro usuario."
                 });
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(
-                numeroDocumento))
+        if (!string.IsNullOrWhiteSpace(numeroDocumento))
         {
-            bool documentoDuplicado =
-                await _dbContext.Usuarios
-                    .AsNoTracking()
-                    .AnyAsync(
-                        item =>
-                            item.Id != id &&
-                            item.Estado &&
-                            item.NumeroDocumento !=
-                                null &&
-                            item.NumeroDocumento ==
-                                numeroDocumento,
-                        cancellationToken);
+            bool documentoDuplicado = await _dbContext.Usuarios
+                .AsNoTracking()
+                .AnyAsync(
+                    item =>
+                        item.Id != id &&
+                        item.Estado &&
+                        item.NumeroDocumento != null &&
+                        item.NumeroDocumento == numeroDocumento,
+                    cancellationToken);
 
             if (documentoDuplicado)
             {
                 return Conflict(new
                 {
-                    mensaje =
-                        "El número de documento ya está registrado por otro usuario."
+                    mensaje = "El número de documento ya está registrado por otro usuario."
                 });
             }
         }
 
-        IActionResult? validacionOrganizacion =
-            await ValidarOrganizacionAsync(
-                solicitud.InstitucionId,
-                solicitud.SedeId,
-                solicitud.AreaId,
-                cancellationToken);
+        IActionResult? validacionOrganizacion = await ValidarOrganizacionAsync(
+            solicitud.InstitucionId,
+            solicitud.SedeId,
+            solicitud.AreaId,
+            cancellationToken);
 
         if (validacionOrganizacion is not null)
         {
             return validacionOrganizacion;
         }
 
-        usuario.Nombres =
-            nombres;
+        usuario.Nombres = nombres;
+        usuario.Apellidos = apellidos;
+        usuario.NumeroDocumento = numeroDocumento;
+        usuario.TipoDocumento = LimpiarTextoOpcional(solicitud.TipoDocumento);
+        usuario.Correo = correo;
+        usuario.Telefono = LimpiarTextoOpcional(solicitud.Telefono);
+        usuario.NombreUsuario = nombreUsuario;
+        usuario.InstitucionId = solicitud.InstitucionId;
+        usuario.SedeId = solicitud.SedeId;
+        usuario.AreaId = solicitud.AreaId;
+        usuario.Activo = solicitud.Activo;
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        usuario.UsuarioActualizacionId = usuarioActualizacionId;
 
-        usuario.Apellidos =
-            apellidos;
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        usuario.NumeroDocumento =
-            numeroDocumento;
-
-        usuario.TipoDocumento =
-            LimpiarTextoOpcional(
-                solicitud.TipoDocumento);
-
-        usuario.Correo =
-            correo;
-
-        usuario.Telefono =
-            LimpiarTextoOpcional(
-                solicitud.Telefono);
-
-        usuario.NombreUsuario =
-            nombreUsuario;
-
-        usuario.InstitucionId =
-            solicitud.InstitucionId;
-
-        usuario.SedeId =
-            solicitud.SedeId;
-
-        usuario.AreaId =
-            solicitud.AreaId;
-
-        usuario.Activo =
-            solicitud.Activo;
-
-        usuario.FechaActualizacion =
-            DateTime.UtcNow;
-
-        usuario.UsuarioActualizacionId =
-            ObtenerUsuarioId(
-                solicitud.UsuarioActualizacionId);
-
-        await _dbContext.SaveChangesAsync(
+        UsuarioResponseDto? resultado = await ObtenerUsuarioResponseAsync(
+            usuario.Id,
             cancellationToken);
-
-        UsuarioResponseDto? resultado =
-            await ObtenerUsuarioResponseAsync(
-                usuario.Id,
-                cancellationToken);
 
         return Ok(resultado);
     }
@@ -672,6 +491,10 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpPut("{id:long}/password")]
     [Authorize(Roles = "SUPER_ADMIN")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CambiarPassword(
         long id,
         [FromBody] CambiarPasswordUsuarioDto solicitud,
@@ -681,50 +504,47 @@ public sealed class UsuariosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        Usuario? usuario =
-            await _dbContext.Usuarios
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.Id == id &&
-                        item.Estado,
-                    cancellationToken);
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioActualizacionId))
+        {
+            return UsuarioNoIdentificado();
+        }
+
+        Usuario? usuario = await _dbContext.Usuarios
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Estado,
+                cancellationToken);
 
         if (usuario is null)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario solicitado."
+                mensaje = "No se encontró el usuario solicitado."
             });
         }
 
-        usuario.PasswordHash =
-            _passwordHasher.HashPassword(
-                usuario,
-                solicitud.NuevaPassword);
+        string nuevoHash = _passwordHasher.HashPassword(
+            usuario,
+            solicitud.NuevaPassword);
 
-        usuario.DebeCambiarPassword =
-            solicitud.DebeCambiarPassword;
+        usuario.PasswordHash = nuevoHash;
+        usuario.DebeCambiarPassword = solicitud.DebeCambiarPassword;
 
-        usuario.FechaActualizacion =
-            DateTime.UtcNow;
+        // Compatible con la política de contraseña de 30 sesiones.
+        // Si la propiedad todavía no existe en Usuario, no falla.
+        ReiniciarContadorPasswordSiExiste(usuario);
 
-        usuario.UsuarioActualizacionId =
-            ObtenerUsuarioId(
-                solicitud.UsuarioActualizacionId);
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        usuario.UsuarioActualizacionId = usuarioActualizacionId;
 
-        await _dbContext.SaveChangesAsync(
-            cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            mensaje =
-                "Contraseña actualizada correctamente."
+            mensaje = "Contraseña actualizada correctamente."
         });
     }
 
@@ -734,6 +554,10 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpPut("{id:long}/roles")]
     [Authorize(Roles = "SUPER_ADMIN")]
+    [ProducesResponseType(typeof(UsuarioResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ActualizarRoles(
         long id,
         [FromBody] ActualizarRolesUsuarioDto solicitud,
@@ -743,127 +567,93 @@ public sealed class UsuariosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        bool usuarioExiste =
-            await _dbContext.Usuarios
-                .AsNoTracking()
-                .AnyAsync(
-                    usuario =>
-                        usuario.Id == id &&
-                        usuario.Estado,
-                    cancellationToken);
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioActualizacionId))
+        {
+            return UsuarioNoIdentificado();
+        }
+
+        bool usuarioExiste = await _dbContext.Usuarios
+            .AsNoTracking()
+            .AnyAsync(
+                usuario => usuario.Id == id && usuario.Estado,
+                cancellationToken);
 
         if (!usuarioExiste)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario solicitado."
+                mensaje = "No se encontró el usuario solicitado."
             });
         }
 
-        List<long> rolIds =
-            solicitud.RolIds
-                .Where(rolId =>
-                    rolId > 0)
-                .Distinct()
-                .ToList();
+        List<long> rolIds = solicitud.RolIds
+            .Where(rolId => rolId > 0)
+            .Distinct()
+            .ToList();
 
         if (rolIds.Count == 0)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "Debe seleccionar al menos un rol."
+                mensaje = "Debe seleccionar al menos un rol."
             });
         }
 
-        List<Rol> roles =
-            await _dbContext.Roles
-                .Where(
-                    rol =>
-                        rolIds.Contains(rol.Id) &&
-                        rol.Estado &&
-                        rol.Activo)
-                .ToListAsync(
-                    cancellationToken);
+        List<Rol> roles = await _dbContext.Roles
+            .Where(rol =>
+                rolIds.Contains(rol.Id) &&
+                rol.Estado &&
+                rol.Activo)
+            .ToListAsync(cancellationToken);
 
         if (roles.Count != rolIds.Count)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "Uno o más roles seleccionados no existen o están inactivos."
+                mensaje = "Uno o más roles seleccionados no existen o están inactivos."
             });
         }
 
-        long usuarioActualizacionId =
-            ObtenerUsuarioId(
-                solicitud.UsuarioActualizacionId);
+        DateTime fecha = DateTime.UtcNow;
 
-        DateTime fecha =
-            DateTime.UtcNow;
+        List<UsuarioRol> relacionesActuales = await _dbContext.UsuariosRoles
+            .Where(relacion =>
+                relacion.UsuarioId == id &&
+                relacion.Estado)
+            .ToListAsync(cancellationToken);
 
-        List<UsuarioRol> relacionesActuales =
-            await _dbContext.UsuariosRoles
-                .Where(
-                    relacion =>
-                        relacion.UsuarioId ==
-                            id &&
-                        relacion.Estado)
-                .ToListAsync(
-                    cancellationToken);
-
-        foreach (UsuarioRol relacion
-            in relacionesActuales)
+        foreach (UsuarioRol relacion in relacionesActuales)
         {
-            relacion.Activo =
-                false;
-
-            relacion.Estado =
-                false;
-
-            relacion.FechaActualizacion =
-                fecha;
-
-            relacion.UsuarioActualizacionId =
-                usuarioActualizacionId;
+            relacion.Activo = false;
+            relacion.Estado = false;
+            relacion.FechaActualizacion = fecha;
+            relacion.UsuarioActualizacionId = usuarioActualizacionId;
         }
 
         foreach (Rol rol in roles)
         {
-            var nuevaRelacion =
-                new UsuarioRol
-                {
-                    UsuarioId =
-                        id,
-                    RolId =
-                        rol.Id,
-                    Activo =
-                        true,
-                    Estado =
-                        true,
-                    FechaRegistro =
-                        fecha,
-                    UsuarioRegistroId =
-                        usuarioActualizacionId
-                };
+            var nuevaRelacion = new UsuarioRol
+            {
+                UsuarioId = id,
+                RolId = rol.Id,
+                Activo = true,
+                Estado = true,
+                FechaRegistro = fecha,
+                UsuarioRegistroId = usuarioActualizacionId
+            };
 
-            _dbContext.UsuariosRoles.Add(
-                nuevaRelacion);
+            _dbContext.UsuariosRoles.Add(nuevaRelacion);
         }
 
-        await _dbContext.SaveChangesAsync(
-            cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        UsuarioResponseDto? resultado =
-            await ObtenerUsuarioResponseAsync(
-                id,
-                cancellationToken);
+        UsuarioResponseDto? resultado = await ObtenerUsuarioResponseAsync(
+            id,
+            cancellationToken);
 
         return Ok(resultado);
     }
@@ -874,6 +664,10 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpPatch("{id:long}/estado")]
     [Authorize(Roles = "SUPER_ADMIN")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CambiarEstado(
         long id,
         [FromBody] CambiarEstadoUsuarioDto solicitud,
@@ -883,47 +677,39 @@ public sealed class UsuariosController : ControllerBase
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        Usuario? usuario =
-            await _dbContext.Usuarios
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.Id == id &&
-                        item.Estado,
-                    cancellationToken);
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioActualizacionId))
+        {
+            return UsuarioNoIdentificado();
+        }
+
+        Usuario? usuario = await _dbContext.Usuarios
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Estado,
+                cancellationToken);
 
         if (usuario is null)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario solicitado."
+                mensaje = "No se encontró el usuario solicitado."
             });
         }
 
-        usuario.Activo =
-            solicitud.Activo;
+        usuario.Activo = solicitud.Activo;
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        usuario.UsuarioActualizacionId = usuarioActualizacionId;
 
-        usuario.FechaActualizacion =
-            DateTime.UtcNow;
-
-        usuario.UsuarioActualizacionId =
-            ObtenerUsuarioId(
-                solicitud.UsuarioActualizacionId);
-
-        await _dbContext.SaveChangesAsync(
-            cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            mensaje =
-                solicitud.Activo
-                    ? "Usuario activado correctamente."
-                    : "Usuario desactivado correctamente."
+            mensaje = solicitud.Activo
+                ? "Usuario activado correctamente."
+                : "Usuario desactivado correctamente."
         });
     }
 
@@ -933,88 +719,71 @@ public sealed class UsuariosController : ControllerBase
 
     [HttpDelete("{id:long}")]
     [Authorize(Roles = "SUPER_ADMIN")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Eliminar(
         long id,
         [FromQuery] long? usuarioId,
         CancellationToken cancellationToken)
     {
+        // Compatibilidad con versiones anteriores de Flutter.
+        // Este valor NO se usa para auditoría.
+        _ = usuarioId;
+
         if (id <= 0)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "El identificador del usuario no es válido."
+                mensaje = "El identificador del usuario no es válido."
             });
         }
 
-        Usuario? usuario =
-            await _dbContext.Usuarios
-                .FirstOrDefaultAsync(
-                    item =>
-                        item.Id == id &&
-                        item.Estado,
-                    cancellationToken);
+        if (!TryObtenerUsuarioAutenticadoId(out long usuarioActualizacionId))
+        {
+            return UsuarioNoIdentificado();
+        }
+
+        Usuario? usuario = await _dbContext.Usuarios
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Estado,
+                cancellationToken);
 
         if (usuario is null)
         {
             return NotFound(new
             {
-                mensaje =
-                    "No se encontró el usuario que se desea eliminar."
+                mensaje = "No se encontró el usuario que se desea eliminar."
             });
         }
 
-        long usuarioActualizacionId =
-            ObtenerUsuarioId(
-                usuarioId);
-
-        DateTime fecha =
-            DateTime.UtcNow;
+        DateTime fecha = DateTime.UtcNow;
 
         usuario.Desactivar();
+        usuario.Estado = false;
+        usuario.FechaActualizacion = fecha;
+        usuario.UsuarioActualizacionId = usuarioActualizacionId;
 
-        usuario.Estado =
-            false;
+        List<UsuarioRol> relaciones = await _dbContext.UsuariosRoles
+            .Where(relacion =>
+                relacion.UsuarioId == id &&
+                relacion.Estado)
+            .ToListAsync(cancellationToken);
 
-        usuario.FechaActualizacion =
-            fecha;
-
-        usuario.UsuarioActualizacionId =
-            usuarioActualizacionId;
-
-        List<UsuarioRol> relaciones =
-            await _dbContext.UsuariosRoles
-                .Where(
-                    relacion =>
-                        relacion.UsuarioId ==
-                            id &&
-                        relacion.Estado)
-                .ToListAsync(
-                    cancellationToken);
-
-        foreach (UsuarioRol relacion
-            in relaciones)
+        foreach (UsuarioRol relacion in relaciones)
         {
-            relacion.Activo =
-                false;
-
-            relacion.Estado =
-                false;
-
-            relacion.FechaActualizacion =
-                fecha;
-
-            relacion.UsuarioActualizacionId =
-                usuarioActualizacionId;
+            relacion.Activo = false;
+            relacion.Estado = false;
+            relacion.FechaActualizacion = fecha;
+            relacion.UsuarioActualizacionId = usuarioActualizacionId;
         }
 
-        await _dbContext.SaveChangesAsync(
-            cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            mensaje =
-                "Usuario eliminado correctamente."
+            mensaje = "Usuario eliminado correctamente."
         });
     }
 
@@ -1022,200 +791,114 @@ public sealed class UsuariosController : ControllerBase
     // MÉTODOS PRIVADOS
     // =========================================================
 
-    private async Task<UsuarioResponseDto?>
-        ObtenerUsuarioResponseAsync(
-            long usuarioId,
-            CancellationToken cancellationToken)
+    private async Task<UsuarioResponseDto?> ObtenerUsuarioResponseAsync(
+        long usuarioId,
+        CancellationToken cancellationToken)
     {
         return await _dbContext.Usuarios
             .AsNoTracking()
-            .Where(
-                usuario =>
-                    usuario.Id ==
-                        usuarioId &&
-                    usuario.Estado)
-            .Select(
-                usuario =>
-                    new UsuarioResponseDto
+            .Where(usuario =>
+                usuario.Id == usuarioId &&
+                usuario.Estado)
+            .Select(usuario => new UsuarioResponseDto
+            {
+                Id = usuario.Id,
+                Nombres = usuario.Nombres,
+                Apellidos = usuario.Apellidos,
+                NombreCompleto = usuario.Nombres + " " + usuario.Apellidos,
+                NumeroDocumento = usuario.NumeroDocumento,
+                TipoDocumento = usuario.TipoDocumento,
+                Correo = usuario.Correo,
+                Telefono = usuario.Telefono,
+                NombreUsuario = usuario.NombreUsuario,
+                DebeCambiarPassword = usuario.DebeCambiarPassword,
+                UltimoAcceso = usuario.UltimoAcceso,
+                InstitucionId = usuario.InstitucionId,
+                SedeId = usuario.SedeId,
+                AreaId = usuario.AreaId,
+                Activo = usuario.Activo,
+                FechaRegistro = usuario.FechaRegistro,
+                FechaActualizacion = usuario.FechaActualizacion,
+                Roles = usuario.UsuariosRoles
+                    .Where(relacion =>
+                        relacion.Estado &&
+                        relacion.Activo &&
+                        relacion.Rol.Estado &&
+                        relacion.Rol.Activo)
+                    .OrderBy(relacion => relacion.Rol.Nombre)
+                    .Select(relacion => new UsuarioRolResponseDto
                     {
-                        Id =
-                            usuario.Id,
-
-                        Nombres =
-                            usuario.Nombres,
-
-                        Apellidos =
-                            usuario.Apellidos,
-
-                        NombreCompleto =
-                            usuario.Nombres +
-                            " " +
-                            usuario.Apellidos,
-
-                        NumeroDocumento =
-                            usuario.NumeroDocumento,
-
-                        TipoDocumento =
-                            usuario.TipoDocumento,
-
-                        Correo =
-                            usuario.Correo,
-
-                        Telefono =
-                            usuario.Telefono,
-
-                        NombreUsuario =
-                            usuario.NombreUsuario,
-
-                        DebeCambiarPassword =
-                            usuario
-                                .DebeCambiarPassword,
-
-                        UltimoAcceso =
-                            usuario.UltimoAcceso,
-
-                        InstitucionId =
-                            usuario.InstitucionId,
-
-                        SedeId =
-                            usuario.SedeId,
-
-                        AreaId =
-                            usuario.AreaId,
-
-                        Activo =
-                            usuario.Activo,
-
-                        FechaRegistro =
-                            usuario.FechaRegistro,
-
-                        FechaActualizacion =
-                            usuario
-                                .FechaActualizacion,
-
-                        Roles =
-                            usuario
-                                .UsuariosRoles
-                                .Where(
-                                    relacion =>
-                                        relacion
-                                            .Estado &&
-                                        relacion
-                                            .Activo &&
-                                        relacion
-                                            .Rol
-                                            .Estado &&
-                                        relacion
-                                            .Rol
-                                            .Activo)
-                                .OrderBy(
-                                    relacion =>
-                                        relacion
-                                            .Rol
-                                            .Nombre)
-                                .Select(
-                                    relacion =>
-                                        new UsuarioRolResponseDto
-                                        {
-                                            Id =
-                                                relacion
-                                                    .Rol
-                                                    .Id,
-
-                                            Codigo =
-                                                relacion
-                                                    .Rol
-                                                    .Codigo,
-
-                                            Nombre =
-                                                relacion
-                                                    .Rol
-                                                    .Nombre,
-
-                                            EsGlobal =
-                                                relacion
-                                                    .Rol
-                                                    .EsGlobal
-                                        })
-                                .ToList()
+                        Id = relacion.Rol.Id,
+                        Codigo = relacion.Rol.Codigo,
+                        Nombre = relacion.Rol.Nombre,
+                        EsGlobal = relacion.Rol.EsGlobal
                     })
-            .FirstOrDefaultAsync(
-                cancellationToken);
+                    .ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private async Task<IActionResult?>
-        ValidarOrganizacionAsync(
-            long institucionId,
-            long? sedeId,
-            long? areaId,
-            CancellationToken cancellationToken)
+    private async Task<IActionResult?> ValidarOrganizacionAsync(
+        long institucionId,
+        long? sedeId,
+        long? areaId,
+        CancellationToken cancellationToken)
     {
-        bool institucionExiste =
-            await _dbContext.Instituciones
-                .AsNoTracking()
-                .AnyAsync(
-                    institucion =>
-                        institucion.Id ==
-                            institucionId &&
-                        institucion.Estado &&
-                        institucion.Activo,
-                    cancellationToken);
+        bool institucionExiste = await _dbContext.Instituciones
+            .AsNoTracking()
+            .AnyAsync(
+                institucion =>
+                    institucion.Id == institucionId &&
+                    institucion.Estado &&
+                    institucion.Activo,
+                cancellationToken);
 
         if (!institucionExiste)
         {
             return BadRequest(new
             {
-                mensaje =
-                    "La institución seleccionada no existe o está inactiva."
+                mensaje = "La institución seleccionada no existe o está inactiva."
             });
         }
 
-        if (sedeId.HasValue &&
-            sedeId.Value > 0)
+        if (sedeId.HasValue && sedeId.Value > 0)
         {
-            bool sedeExiste =
-                await _dbContext.Sedes
-                    .AsNoTracking()
-                    .AnyAsync(
-                        sede =>
-                            sede.Id ==
-                                sedeId.Value &&
-                            sede.InstitucionId ==
-                                institucionId &&
-                            sede.Estado &&
-                            sede.Activo,
-                        cancellationToken);
+            bool sedeExiste = await _dbContext.Sedes
+                .AsNoTracking()
+                .AnyAsync(
+                    sede =>
+                        sede.Id == sedeId.Value &&
+                        sede.InstitucionId == institucionId &&
+                        sede.Estado &&
+                        sede.Activo,
+                    cancellationToken);
 
             if (!sedeExiste)
             {
                 return BadRequest(new
                 {
-                    mensaje =
-                        "La sede seleccionada no pertenece a la institución o está inactiva."
+                    mensaje = "La sede seleccionada no pertenece a la institución o está inactiva."
                 });
             }
         }
 
-        if (areaId.HasValue &&
-            areaId.Value > 0)
+        if (areaId.HasValue && areaId.Value > 0)
         {
-            bool areaExiste =
-                await _dbContext.Areas
-                    .AsNoTracking()
-                    .AnyAsync(
-                        area =>
-                            area.Id ==
-                                areaId.Value &&
-                            area.Estado &&
-                            area.Activo,
-                        cancellationToken);
+            bool areaExiste = await _dbContext.Areas
+                .AsNoTracking()
+                .AnyAsync(
+                    area =>
+                        area.Id == areaId.Value &&
+                        area.InstitucionId == institucionId &&
+                        area.Estado &&
+                        area.Activo,
+                    cancellationToken);
 
             if (!areaExiste)
             {
                 return BadRequest(new
                 {
-                    mensaje =
-                        "El área seleccionada no existe o está inactiva."
+                    mensaje = "El área seleccionada no pertenece a la institución o está inactiva."
                 });
             }
         }
@@ -1223,31 +906,70 @@ public sealed class UsuariosController : ControllerBase
         return null;
     }
 
-    private static long ObtenerUsuarioId(
-        long? usuarioId)
+    /// <summary>
+    /// Obtiene el ID real del usuario autenticado desde el JWT.
+    /// Nunca usa IDs enviados por Flutter para auditoría.
+    /// </summary>
+    private bool TryObtenerUsuarioAutenticadoId(
+        out long usuarioId)
     {
-        return usuarioId.HasValue &&
-               usuarioId.Value > 0
-            ? usuarioId.Value
-            : 1;
+        usuarioId = 0;
+
+        string? valor = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(valor))
+        {
+            valor = User.FindFirstValue("sub");
+        }
+
+        return long.TryParse(valor, out usuarioId) &&
+               usuarioId > 0;
+    }
+
+    private UnauthorizedObjectResult UsuarioNoIdentificado()
+    {
+        return Unauthorized(new
+        {
+            mensaje =
+                "No se pudo identificar al usuario autenticado. " +
+                "Inicia sesión nuevamente."
+        });
+    }
+
+    /// <summary>
+    /// Reinicia el contador de sesiones si Usuario ya contiene la propiedad
+    /// SesionesDesdeCambioPassword. Esto mantiene compatibilidad con la
+    /// política de cambio de contraseña cada 30 sesiones.
+    /// </summary>
+    private static void ReiniciarContadorPasswordSiExiste(
+        Usuario usuario)
+    {
+        var propiedad = typeof(Usuario).GetProperty(
+            "SesionesDesdeCambioPassword");
+
+        if (propiedad is null ||
+            !propiedad.CanWrite ||
+            propiedad.PropertyType != typeof(int))
+        {
+            return;
+        }
+
+        propiedad.SetValue(usuario, 0);
     }
 
     private static string? LimpiarCorreo(
         string? correo)
     {
-        return string.IsNullOrWhiteSpace(
-            correo)
+        return string.IsNullOrWhiteSpace(correo)
             ? null
-            : correo
-                .Trim()
-                .ToLowerInvariant();
+            : correo.Trim().ToLowerInvariant();
     }
 
     private static string? LimpiarTextoOpcional(
         string? texto)
     {
-        return string.IsNullOrWhiteSpace(
-            texto)
+        return string.IsNullOrWhiteSpace(texto)
             ? null
             : texto.Trim();
     }
@@ -1259,23 +981,13 @@ public sealed class UsuariosController : ControllerBase
 
 public sealed class CrearUsuarioDto
 {
-    [Required(
-        ErrorMessage =
-            "Los nombres son obligatorios.")]
-    [StringLength(
-        100,
-        MinimumLength = 2)]
-    public string Nombres { get; set; } =
-        string.Empty;
+    [Required(ErrorMessage = "Los nombres son obligatorios.")]
+    [StringLength(100, MinimumLength = 2)]
+    public string Nombres { get; set; } = string.Empty;
 
-    [Required(
-        ErrorMessage =
-            "Los apellidos son obligatorios.")]
-    [StringLength(
-        100,
-        MinimumLength = 2)]
-    public string Apellidos { get; set; } =
-        string.Empty;
+    [Required(ErrorMessage = "Los apellidos son obligatorios.")]
+    [StringLength(100, MinimumLength = 2)]
+    public string Apellidos { get; set; } = string.Empty;
 
     [StringLength(20)]
     public string? NumeroDocumento { get; set; }
@@ -1283,52 +995,40 @@ public sealed class CrearUsuarioDto
     [StringLength(20)]
     public string? TipoDocumento { get; set; }
 
-    [EmailAddress(
-        ErrorMessage =
-            "El correo electrónico no es válido.")]
+    [EmailAddress(ErrorMessage = "El correo electrónico no es válido.")]
     [StringLength(150)]
     public string? Correo { get; set; }
 
     [StringLength(20)]
     public string? Telefono { get; set; }
 
-    [Required(
-        ErrorMessage =
-            "El nombre de usuario es obligatorio.")]
-    [StringLength(
-        80,
-        MinimumLength = 4)]
-    public string NombreUsuario { get; set; } =
-        string.Empty;
+    [Required(ErrorMessage = "El nombre de usuario es obligatorio.")]
+    [StringLength(80, MinimumLength = 4)]
+    public string NombreUsuario { get; set; } = string.Empty;
 
-    [Required(
-        ErrorMessage =
-            "La contraseña es obligatoria.")]
+    [Required(ErrorMessage = "La contraseña es obligatoria.")]
     [StringLength(
         100,
         MinimumLength = 8,
-        ErrorMessage =
-            "La contraseña debe tener al menos 8 caracteres.")]
-    public string Password { get; set; } =
-        string.Empty;
+        ErrorMessage = "La contraseña debe tener al menos 8 caracteres.")]
+    public string Password { get; set; } = string.Empty;
 
     [Range(
         1,
         long.MaxValue,
-        ErrorMessage =
-            "Debe seleccionar una institución válida.")]
+        ErrorMessage = "Debe seleccionar una institución válida.")]
     public long InstitucionId { get; set; }
 
     public long? SedeId { get; set; }
 
     public long? AreaId { get; set; }
 
-    public List<long> RolIds { get; set; } =
-        new();
+    public List<long> RolIds { get; set; } = new();
 
-    public bool DebeCambiarPassword { get; set; } =
-        true;
+    public bool DebeCambiarPassword { get; set; } = true;
 
+    // Compatibilidad temporal con Flutter anterior.
+    // El backend NO usa este valor para auditoría.
     public long? UsuarioRegistroId { get; set; }
 }
 
@@ -1339,18 +1039,12 @@ public sealed class CrearUsuarioDto
 public sealed class ActualizarUsuarioDto
 {
     [Required]
-    [StringLength(
-        100,
-        MinimumLength = 2)]
-    public string Nombres { get; set; } =
-        string.Empty;
+    [StringLength(100, MinimumLength = 2)]
+    public string Nombres { get; set; } = string.Empty;
 
     [Required]
-    [StringLength(
-        100,
-        MinimumLength = 2)]
-    public string Apellidos { get; set; } =
-        string.Empty;
+    [StringLength(100, MinimumLength = 2)]
+    public string Apellidos { get; set; } = string.Empty;
 
     [StringLength(20)]
     public string? NumeroDocumento { get; set; }
@@ -1366,29 +1060,21 @@ public sealed class ActualizarUsuarioDto
     public string? Telefono { get; set; }
 
     [Required]
-    [StringLength(
-        80,
-        MinimumLength = 4)]
-    public string NombreUsuario { get; set; } =
-        string.Empty;
+    [StringLength(80, MinimumLength = 4)]
+    public string NombreUsuario { get; set; } = string.Empty;
 
-    [Range(
-        1,
-        long.MaxValue)]
+    [Range(1, long.MaxValue)]
     public long InstitucionId { get; set; }
 
     public long? SedeId { get; set; }
 
     public long? AreaId { get; set; }
 
-    public bool Activo { get; set; } =
-        true;
+    public bool Activo { get; set; } = true;
 
-    public long? UsuarioActualizacionId
-    {
-        get;
-        set;
-    }
+    // Compatibilidad temporal con Flutter anterior.
+    // El backend NO usa este valor para auditoría.
+    public long? UsuarioActualizacionId { get; set; }
 }
 
 // =============================================================
@@ -1401,19 +1087,14 @@ public sealed class CambiarPasswordUsuarioDto
     [StringLength(
         100,
         MinimumLength = 8,
-        ErrorMessage =
-            "La contraseña debe tener al menos 8 caracteres.")]
-    public string NuevaPassword { get; set; } =
-        string.Empty;
+        ErrorMessage = "La contraseña debe tener al menos 8 caracteres.")]
+    public string NuevaPassword { get; set; } = string.Empty;
 
-    public bool DebeCambiarPassword { get; set; } =
-        true;
+    public bool DebeCambiarPassword { get; set; } = true;
 
-    public long? UsuarioActualizacionId
-    {
-        get;
-        set;
-    }
+    // Compatibilidad temporal con Flutter anterior.
+    // El backend NO usa este valor para auditoría.
+    public long? UsuarioActualizacionId { get; set; }
 }
 
 // =============================================================
@@ -1422,14 +1103,11 @@ public sealed class CambiarPasswordUsuarioDto
 
 public sealed class ActualizarRolesUsuarioDto
 {
-    public List<long> RolIds { get; set; } =
-        new();
+    public List<long> RolIds { get; set; } = new();
 
-    public long? UsuarioActualizacionId
-    {
-        get;
-        set;
-    }
+    // Compatibilidad temporal con Flutter anterior.
+    // El backend NO usa este valor para auditoría.
+    public long? UsuarioActualizacionId { get; set; }
 }
 
 // =============================================================
@@ -1440,11 +1118,9 @@ public sealed class CambiarEstadoUsuarioDto
 {
     public bool Activo { get; set; }
 
-    public long? UsuarioActualizacionId
-    {
-        get;
-        set;
-    }
+    // Compatibilidad temporal con Flutter anterior.
+    // El backend NO usa este valor para auditoría.
+    public long? UsuarioActualizacionId { get; set; }
 }
 
 // =============================================================
@@ -1455,11 +1131,9 @@ public sealed class UsuarioRolResponseDto
 {
     public long Id { get; set; }
 
-    public string Codigo { get; set; } =
-        string.Empty;
+    public string Codigo { get; set; } = string.Empty;
 
-    public string Nombre { get; set; } =
-        string.Empty;
+    public string Nombre { get; set; } = string.Empty;
 
     public bool EsGlobal { get; set; }
 }
@@ -1472,14 +1146,11 @@ public sealed class UsuarioResponseDto
 {
     public long Id { get; set; }
 
-    public string Nombres { get; set; } =
-        string.Empty;
+    public string Nombres { get; set; } = string.Empty;
 
-    public string Apellidos { get; set; } =
-        string.Empty;
+    public string Apellidos { get; set; } = string.Empty;
 
-    public string NombreCompleto { get; set; } =
-        string.Empty;
+    public string NombreCompleto { get; set; } = string.Empty;
 
     public string? NumeroDocumento { get; set; }
 
@@ -1489,8 +1160,7 @@ public sealed class UsuarioResponseDto
 
     public string? Telefono { get; set; }
 
-    public string NombreUsuario { get; set; } =
-        string.Empty;
+    public string NombreUsuario { get; set; } = string.Empty;
 
     public bool DebeCambiarPassword { get; set; }
 
@@ -1508,9 +1178,5 @@ public sealed class UsuarioResponseDto
 
     public DateTime? FechaActualizacion { get; set; }
 
-    public List<UsuarioRolResponseDto> Roles
-    {
-        get;
-        set;
-    } = new();
+    public List<UsuarioRolResponseDto> Roles { get; set; } = new();
 }

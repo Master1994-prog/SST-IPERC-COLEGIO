@@ -1,11 +1,11 @@
 ﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using SST.Domain.Security.Entities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SST.Application.Security.DTOs;
 using SST.Application.Security.Interfaces;
+using SST.Domain.Security.Entities;
 using SST.Infrastructure.Persistence;
 
 namespace SST.Api.Controllers;
@@ -16,13 +16,12 @@ public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly SSTDbContext _dbContext;
-
     private readonly IPasswordHasher<Usuario> _passwordHasher;
 
     public AuthController(
-    IAuthService authService,
-    SSTDbContext dbContext,
-    IPasswordHasher<Usuario> passwordHasher)
+        IAuthService authService,
+        SSTDbContext dbContext,
+        IPasswordHasher<Usuario> passwordHasher)
     {
         _authService = authService;
         _dbContext = dbContext;
@@ -82,7 +81,7 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult>
         CambiarPasswordPropio(
             [FromBody]
-        CambiarPasswordPropioRequest solicitud,
+            CambiarPasswordPropioRequest solicitud,
             CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -91,7 +90,7 @@ public sealed class AuthController : ControllerBase
         }
 
         // -----------------------------------------------------
-        // OBTENER USUARIO DESDE EL TOKEN
+        // OBTENER USUARIO DESDE EL JWT
         // -----------------------------------------------------
 
         string? usuarioIdTexto =
@@ -150,6 +149,22 @@ public sealed class AuthController : ControllerBase
         }
 
         // -----------------------------------------------------
+        // VALIDAR CONFIRMACIÓN
+        // -----------------------------------------------------
+
+        if (!string.Equals(
+                solicitud.NuevaPassword,
+                solicitud.ConfirmarPassword,
+                StringComparison.Ordinal))
+        {
+            return BadRequest(new
+            {
+                mensaje =
+                    "La confirmación de la nueva contraseña no coincide."
+            });
+        }
+
+        // -----------------------------------------------------
         // EVITAR REUTILIZAR LA MISMA CONTRASEÑA
         // -----------------------------------------------------
 
@@ -173,13 +188,23 @@ public sealed class AuthController : ControllerBase
         // -----------------------------------------------------
         // ACTUALIZAR PASSWORD
         // -----------------------------------------------------
+        //
+        // IMPORTANTE:
+        // Usuario.CambiarPassword(...) también:
+        //
+        // - pone DebeCambiarPassword = false;
+        // - reinicia SesionesDesdeCambioPassword = 0.
+        //
+        // Así se mantiene correctamente la política de 30 sesiones.
+        // -----------------------------------------------------
 
-        usuario.PasswordHash =
+        string nuevoHash =
             _passwordHasher.HashPassword(
                 usuario,
                 solicitud.NuevaPassword);
 
-        usuario.DebeCambiarPassword = false;
+        usuario.CambiarPassword(
+            nuevoHash);
 
         usuario.FechaActualizacion =
             DateTime.UtcNow;
@@ -193,7 +218,11 @@ public sealed class AuthController : ControllerBase
         return Ok(new
         {
             mensaje =
-                "Contraseña actualizada correctamente."
+                "Contraseña actualizada correctamente.",
+            debeCambiarPassword =
+                usuario.DebeCambiarPassword,
+            sesionesDesdeCambioPassword =
+                usuario.SesionesDesdeCambioPassword
         });
     }
 
@@ -370,10 +399,6 @@ public sealed class AuthController : ControllerBase
 
         // -----------------------------------------------------
         // NO REVELAR SI LA CUENTA EXISTE O NO
-        // -----------------------------------------------------
-        //
-        // Solo registramos solicitud cuando encontramos usuario,
-        // pero siempre devolvemos el mismo mensaje.
         // -----------------------------------------------------
 
         if (usuario is not null)

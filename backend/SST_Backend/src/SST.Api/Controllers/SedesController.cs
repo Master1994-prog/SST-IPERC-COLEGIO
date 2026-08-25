@@ -12,38 +12,54 @@ public sealed class SedesController : ControllerBase
 {
     private readonly SSTDbContext _dbContext;
 
-    public SedesController(SSTDbContext dbContext)
+    public SedesController(
+        SSTDbContext dbContext)
     {
         _dbContext = dbContext;
     }
 
     /// <summary>
-    /// Obtiene las sedes activas. Permite filtrar por institución.
+    /// Obtiene las sedes activas.
+    /// Puede filtrarse por institución.
+    ///
+    /// IMPORTANTE:
+    /// Se devuelve InstitucionId porque Flutter lo necesita
+    /// para el dropdown dependiente Institución -> Sede.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> ObtenerTodas(
         [FromQuery] long? institucionId,
         CancellationToken cancellationToken)
     {
-        var consulta = _dbContext.Sedes
-            .AsNoTracking()
-            .Where(x => x.Estado);
+        var consulta =
+            _dbContext.Sedes
+                .AsNoTracking()
+                .Where(x =>
+                    x.Estado &&
+                    x.Activo);
 
         if (institucionId.HasValue &&
             institucionId.Value > 0)
         {
             consulta = consulta.Where(
-                x => x.InstitucionId == institucionId.Value);
+                x =>
+                    x.InstitucionId ==
+                    institucionId.Value);
         }
 
-        var sedes = await consulta
-            .OrderBy(x => x.Nombre)
-            .Select(x => new
-            {
-                x.Id,
-                x.Nombre
-            })
-            .ToListAsync(cancellationToken);
+        var sedes =
+            await consulta
+                .OrderBy(x => x.Nombre)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Nombre,
+                    x.Direccion,
+                    x.InstitucionId,
+                    x.Activo
+                })
+                .ToListAsync(
+                    cancellationToken);
 
         return Ok(sedes);
     }

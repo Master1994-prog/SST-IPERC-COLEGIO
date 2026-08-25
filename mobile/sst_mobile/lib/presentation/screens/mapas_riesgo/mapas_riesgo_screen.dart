@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/network/network_info.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/datasources/local/detalle_iperc_local_datasource.dart';
 import '../../../data/datasources/local/matriz_iperc_local_datasource.dart';
 import '../../../data/models/detalle_iperc_local_model.dart';
@@ -18,6 +20,7 @@ import '../../../data/repositories/detalle_iperc_repository.dart';
 import '../../../data/repositories/matriz_iperc_repository.dart';
 import '../../../data/repositories/mapa_riesgo_repository.dart';
 import '../../../data/models/mapa_riesgo_local_model.dart';
+import '../../providers/sync_provider.dart';
 import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 
 /// ===============================================================
@@ -395,6 +398,12 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           _editandoPlano = false;
         });
 
+        await _notificarCambioLocal();
+
+        if (!mounted) {
+          return;
+        }
+
         _mostrarMensaje('Mapa guardado offline. Pendiente de sincronizar.');
       } catch (error) {
         _mostrarMensaje(
@@ -473,6 +482,19 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
   // =============================================================
   // CONFIGURACIÓN DEL PLANO REAL
   // =============================================================
+
+  Future<void> _notificarCambioLocal() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      await context.read<SyncProvider>().notifyLocalChange();
+    } catch (_) {
+      // Local data and queue are already persisted.
+      // A later refresh or connectivity change will retry.
+    }
+  }
 
   Future<void> _cargarConfiguracionPlano() async {
     try {
@@ -597,19 +619,55 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Eliminar plano'),
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          icon: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.riskOrange.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.delete_outline,
+              color: AppColors.riskOrange,
+              size: 32,
+            ),
+          ),
+          title: const Text(
+            'Quitar plano',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           content: const Text(
-            'Se eliminará la imagen del plano y las posiciones '
-            'guardadas de los marcadores.',
+            'Se quitara la imagen del plano y las posiciones de los '
+            'marcadores. Si el mapa ya existe en el servidor, el cambio '
+            'tambien se aplicara al sincronizar.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
           ),
           actions: <Widget>[
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
               child: const Text('Cancelar'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Eliminar'),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.riskOrange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Quitar'),
             ),
           ],
         );
@@ -623,7 +681,20 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
     try {
       final String? ruta = _rutaPlano;
 
-      if (ruta != null) {
+      final MapaRiesgoLocalModel? actual = _mapaPersistido;
+
+      MapaRiesgoLocalModel? limpio;
+
+      if (actual != null) {
+        limpio = await _mapaRiesgoRepository.quitarPlano(
+          existente: actual,
+          conectado: _conectado,
+        );
+      }
+
+      // El archivo local se elimina solamente despues de que SQLite /
+      // backend / cola hayan quedado en un estado coherente.
+      if (ruta != null && ruta.trim().isNotEmpty) {
         final File archivo = File(ruta);
 
         if (await archivo.exists()) {
@@ -641,14 +712,37 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       }
 
       setState(() {
+        _mapaPersistido = limpio ?? _mapaPersistido;
         _rutaPlano = null;
         _posicionesMarcadores.clear();
         _editandoPlano = false;
         _planoServidorNoDisponible = false;
       });
+
+      if (actual != null) {
+        await _notificarCambioLocal();
+
+        if (!mounted) {
+          return;
+        }
+      }
+
+      final bool pendienteServidor =
+          actual?.idServidor != null && actual!.idServidor! > 0 && !_conectado;
+
+      if (pendienteServidor) {
+        _mostrarMensaje(
+          'Plano quitado del dispositivo. '
+          'La eliminacion visual se sincronizara al recuperar Internet.',
+        );
+      } else if (actual?.idServidor != null && actual!.idServidor! > 0) {
+        _mostrarMensaje('Plano y marcadores retirados correctamente.');
+      } else {
+        _mostrarMensaje('Plano local retirado correctamente.');
+      }
     } catch (error) {
       _mostrarMensaje(
-        'No se pudo eliminar el plano: ${_mensajeError(error)}',
+        'No se pudo quitar el plano: ${_mensajeError(error)}',
         esError: true,
       );
     }
@@ -665,7 +759,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
         SnackBar(
           content: Text(mensaje),
           behavior: SnackBarBehavior.floating,
-          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
+          backgroundColor: esError ? AppColors.riskOrange : AppColors.green,
         ),
       );
   }
@@ -1089,7 +1183,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         title: const Text('Mapa de riesgos'),
         actions: <Widget>[
           IconButton(
@@ -1099,7 +1196,11 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(onRefresh: _cargar, child: _contenido()),
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: _cargar,
+        child: _contenido(),
+      ),
     );
   }
 
@@ -1159,27 +1260,61 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
   // =============================================================
 
   Widget _construirEstadoConexion() {
-    final Color color = _conectado
-        ? Colors.green.shade700
-        : Colors.orange.shade800;
+    final bool online = _conectado;
 
-    return Row(
-      children: <Widget>[
-        Icon(
-          _conectado ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-          size: 19,
-          color: color,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            _conectado
-                ? 'Online · datos locales + servidor'
-                : 'Offline · mostrando datos guardados en el dispositivo',
-            style: TextStyle(color: color, fontWeight: FontWeight.w600),
+    final Color baseColor = online ? AppColors.green : AppColors.yellow;
+
+    final Color foreground = online ? AppColors.green : AppColors.navyDark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: baseColor.withValues(alpha: online ? 0.08 : 0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: baseColor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: baseColor.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(
+              online ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+              color: foreground,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  online ? 'Online' : 'Offline',
+                  style: TextStyle(
+                    color: foreground,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  online
+                      ? 'Datos locales + servidor'
+                      : 'Mostrando datos guardados en el dispositivo',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1187,14 +1322,14 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.shade50,
-        border: Border.all(color: Colors.amber.shade300),
+        color: AppColors.yellow.withValues(alpha: 0.14),
+        border: Border.all(color: AppColors.yellow.withValues(alpha: 0.50)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.info_outline, color: Colors.amber.shade900),
+          const Icon(Icons.info_outline, color: AppColors.navyDark),
           const SizedBox(width: 10),
           Expanded(child: Text(_advertencia!)),
         ],
@@ -1229,6 +1364,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
               titulo: 'Riesgos',
               valor: _totalRiesgos,
               icono: Icons.warning_amber_rounded,
+              color: AppColors.primary,
               onTap: () => _aplicarNivel('TODOS'),
             ),
             _tarjetaResumen(
@@ -1265,7 +1401,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
     required VoidCallback onTap,
     Color? color,
   }) {
-    final Color principal = color ?? Theme.of(context).colorScheme.primary;
+    final Color principal = color ?? AppColors.primary;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -1319,7 +1455,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       decoration: InputDecoration(
         labelText: 'Buscar peligro, tarea o zona',
         hintText: 'Ej.: electricidad, caída, almacén',
-        prefixIcon: const Icon(Icons.search),
+        prefixIcon: const Icon(Icons.search, color: AppColors.primary),
         suffixIcon: _busqueda.isEmpty
             ? null
             : IconButton(
@@ -1331,7 +1467,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                     _busqueda = '';
                   });
                 },
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close, color: AppColors.primary),
               ),
         border: const OutlineInputBorder(),
       ),
@@ -1348,7 +1484,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Zona / área',
-            prefixIcon: Icon(Icons.location_on_outlined),
+            prefixIcon: Icon(
+              Icons.location_on_outlined,
+              color: AppColors.primary,
+            ),
             border: OutlineInputBorder(),
           ),
           items: <DropdownMenuItem<String>>[
@@ -1477,7 +1616,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
               _rutaPlano == null
                   ? Icons.touch_app_outlined
                   : Icons.location_on_outlined,
-              color: Theme.of(context).colorScheme.primary,
+              color: AppColors.primary,
             ),
           ],
         ),
@@ -1541,6 +1680,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           runSpacing: 8,
           children: <Widget>[
             FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
               onPressed: _seleccionarPlano,
               icon: const Icon(Icons.image_outlined),
               label: Text(
@@ -1590,6 +1733,9 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
               ),
             if (_rutaPlano != null)
               TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.riskOrange,
+                ),
                 onPressed: _eliminarPlano,
                 icon: const Icon(Icons.delete_outline),
                 label: const Text('Quitar plano'),
@@ -1720,16 +1866,16 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).dividerColor),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: <Widget>[
           Icon(
             Icons.image_not_supported_outlined,
             size: 48,
-            color: Theme.of(context).colorScheme.outline,
+            color: AppColors.textSecondary,
           ),
           const SizedBox(height: 10),
           Text(
@@ -1760,8 +1906,8 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLowest,
-        border: Border.all(color: Theme.of(context).dividerColor),
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -1789,9 +1935,9 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           height: alto,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
+            color: AppColors.background,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Theme.of(context).dividerColor),
+            border: Border.all(color: AppColors.border),
           ),
           child: Stack(
             fit: StackFit.expand,
@@ -1967,17 +2113,12 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(
-          context,
-        ).colorScheme.primaryContainer.withValues(alpha: 0.45),
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: <Widget>[
-          Icon(
-            Icons.apartment_outlined,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          Icon(Icons.apartment_outlined, color: AppColors.primary),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
@@ -2096,7 +2237,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                       zona.nombre,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -2150,20 +2294,24 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       width: double.infinity,
       height: 34,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: AppColors.background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade400),
+        border: Border.all(color: AppColors.border),
       ),
       child: Center(
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.directions_walk, size: 17, color: Colors.grey.shade700),
+            const Icon(
+              Icons.directions_walk,
+              size: 17,
+              color: AppColors.textSecondary,
+            ),
             const SizedBox(width: 7),
             Text(
               'PASILLO / CIRCULACIÓN',
               style: TextStyle(
-                color: Colors.grey.shade700,
+                color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
                 fontSize: 11,
                 letterSpacing: 0.5,
@@ -2260,7 +2408,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                       zona.nombre,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
@@ -2356,12 +2507,18 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
           foregroundColor: Colors.white,
           child: Text(
             '$posicion',
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         title: Text(
           zona.nombre,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         subtitle: Text('${zona.riesgos.length} riesgos identificados'),
         trailing: Column(
@@ -2451,7 +2608,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                     foregroundColor: Colors.white,
                     child: Text(
                       '${item.valorRiesgoActual}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2461,7 +2621,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                       children: <Widget>[
                         Text(
                           item.peligro,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 3),
                         Text(
@@ -2472,7 +2635,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade600),
+                  const Icon(Icons.chevron_right, color: AppColors.primary),
                 ],
               ),
               const SizedBox(height: 12),
@@ -2503,7 +2666,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
               Text(
                 item.zona,
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
+                  color: AppColors.primary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -2540,7 +2703,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                       foregroundColor: Colors.white,
                       child: Text(
                         '${item.valorRiesgoActual}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -2644,7 +2810,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(icono, size: 20, color: Theme.of(context).colorScheme.primary),
+          Icon(icono, size: 20, color: AppColors.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text.rich(
@@ -2652,7 +2818,10 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
                 children: <InlineSpan>[
                   TextSpan(
                     text: '$titulo: ',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   TextSpan(text: valor),
                 ],
@@ -2768,7 +2937,11 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       padding: const EdgeInsets.symmetric(vertical: 50),
       child: Column(
         children: <Widget>[
-          Icon(Icons.map_outlined, size: 72, color: Colors.grey.shade400),
+          const Icon(
+            Icons.map_outlined,
+            size: 72,
+            color: AppColors.textSecondary,
+          ),
           const SizedBox(height: 14),
           Text(
             mensaje ??
@@ -2806,7 +2979,7 @@ class _MapasRiesgoScreenState extends State<MapasRiesgoScreen> {
       padding: const EdgeInsets.all(24),
       children: <Widget>[
         const SizedBox(height: 80),
-        Icon(Icons.error_outline, size: 80, color: Colors.red.shade400),
+        const Icon(Icons.error_outline, size: 80, color: AppColors.riskOrange),
         const SizedBox(height: 16),
         Text(
           'No se pudo cargar el mapa de riesgos',

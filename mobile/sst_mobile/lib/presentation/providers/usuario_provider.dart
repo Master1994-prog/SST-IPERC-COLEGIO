@@ -1,42 +1,50 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/services/secure_storage_service.dart';
 import '../../data/models/rol_model.dart';
 import '../../data/models/usuario_model.dart';
 import '../../data/repositories/rol_repository.dart';
 import '../../data/repositories/usuario_repository.dart';
 
 /// ===============================================================
-/// PROVIDER DE USUARIOS
+/// PROVIDER DE USUARIOS - SST EDURISK
 /// ===============================================================
 ///
 /// Maneja:
+/// - listado de usuarios;
+/// - búsqueda;
+/// - filtros;
+/// - creación;
+/// - edición;
+/// - activar / desactivar;
+/// - eliminación lógica;
+/// - cambio de contraseña;
+/// - asignación de roles;
+/// - carga de roles;
+/// - auditoría con el ID real del usuario autenticado.
 ///
-/// - Listado de usuarios.
-/// - Búsqueda.
-/// - Filtros.
-/// - Creación.
-/// - Edición.
-/// - Activar / desactivar.
-/// - Eliminar.
-/// - Cambio de contraseña.
-/// - Asignación de roles.
-/// - Carga de roles.
+/// IMPORTANTE:
+/// Ya no se utilizan IDs fijos como `1`.
+/// El identificador de auditoría se obtiene desde SecureStorageService.
 /// ===============================================================
 class UsuarioProvider extends ChangeNotifier {
-  UsuarioProvider({UsuarioRepository? repository, RolRepository? rolRepository})
-    : _repository = repository ?? UsuarioRepository(),
-      _rolRepository = rolRepository ?? RolRepository();
+  UsuarioProvider({
+    UsuarioRepository? repository,
+    RolRepository? rolRepository,
+    SecureStorageService? secureStorage,
+  }) : _repository = repository ?? UsuarioRepository(),
+       _rolRepository = rolRepository ?? RolRepository(),
+       _secureStorage = secureStorage ?? SecureStorageService.instance;
 
   final UsuarioRepository _repository;
-
   final RolRepository _rolRepository;
+  final SecureStorageService _secureStorage;
 
   // =============================================================
   // USUARIOS
   // =============================================================
 
   final List<UsuarioModel> _usuarios = <UsuarioModel>[];
-
   final List<UsuarioModel> _usuariosFiltrados = <UsuarioModel>[];
 
   // =============================================================
@@ -50,28 +58,23 @@ class UsuarioProvider extends ChangeNotifier {
   // =============================================================
 
   bool _cargando = false;
-
   bool _guardando = false;
 
   String? _error;
-
   String _textoBusqueda = '';
+
+  int? _rolFiltroId;
 
   // =============================================================
   // GETTERS
   // =============================================================
 
-  List<UsuarioModel> get usuarios {
-    return List<UsuarioModel>.unmodifiable(_usuarios);
-  }
+  List<UsuarioModel> get usuarios => List<UsuarioModel>.unmodifiable(_usuarios);
 
-  List<UsuarioModel> get usuariosFiltrados {
-    return List<UsuarioModel>.unmodifiable(_usuariosFiltrados);
-  }
+  List<UsuarioModel> get usuariosFiltrados =>
+      List<UsuarioModel>.unmodifiable(_usuariosFiltrados);
 
-  List<RolModel> get roles {
-    return List<RolModel>.unmodifiable(_roles);
-  }
+  List<RolModel> get roles => List<RolModel>.unmodifiable(_roles);
 
   bool get cargando => _cargando;
 
@@ -81,12 +84,29 @@ class UsuarioProvider extends ChangeNotifier {
 
   String get textoBusqueda => _textoBusqueda;
 
-  bool get tieneUsuarios {
-    return _usuariosFiltrados.isNotEmpty;
-  }
+  int? get rolFiltroId => _rolFiltroId;
 
-  bool get tieneRoles {
-    return _roles.isNotEmpty;
+  bool get tieneUsuarios => _usuariosFiltrados.isNotEmpty;
+
+  bool get tieneRoles => _roles.isNotEmpty;
+
+  // =============================================================
+  // ID DEL USUARIO AUTENTICADO
+  // =============================================================
+
+  Future<int> _obtenerUsuarioAutenticadoId() async {
+    final String? usuarioIdTexto = await _secureStorage.getUsuarioId();
+
+    final int? usuarioId = int.tryParse(usuarioIdTexto?.trim() ?? '');
+
+    if (usuarioId == null || usuarioId <= 0) {
+      throw StateError(
+        'No se pudo identificar al usuario autenticado. '
+        'Cierra sesión y vuelve a ingresar.',
+      );
+    }
+
+    return usuarioId;
   }
 
   // =============================================================
@@ -104,7 +124,6 @@ class UsuarioProvider extends ChangeNotifier {
     }
 
     _cargando = true;
-
     _error = null;
 
     notifyListeners();
@@ -130,7 +149,6 @@ class UsuarioProvider extends ChangeNotifier {
       _error = _limpiarMensaje(error);
 
       _usuarios.clear();
-
       _usuariosFiltrados.clear();
     } finally {
       _cargando = false;
@@ -170,9 +188,7 @@ class UsuarioProvider extends ChangeNotifier {
   // =============================================================
 
   Future<void> cargarTodo() async {
-    await cargarRoles();
-
-    await cargarUsuarios();
+    await Future.wait<void>(<Future<void>>[cargarRoles(), cargarUsuarios()]);
   }
 
   // =============================================================
@@ -219,19 +235,19 @@ class UsuarioProvider extends ChangeNotifier {
     int? areaId,
     required List<int> rolIds,
     bool debeCambiarPassword = true,
-    int usuarioRegistroId = 1,
   }) async {
     if (_guardando) {
       return false;
     }
 
     _guardando = true;
-
     _error = null;
 
     notifyListeners();
 
     try {
+      final int usuarioRegistroId = await _obtenerUsuarioAutenticadoId();
+
       await _repository.crear(
         nombres: nombres,
         apellidos: apellidos,
@@ -280,19 +296,19 @@ class UsuarioProvider extends ChangeNotifier {
     int? sedeId,
     int? areaId,
     required bool activo,
-    int usuarioActualizacionId = 1,
   }) async {
     if (_guardando) {
       return false;
     }
 
     _guardando = true;
-
     _error = null;
 
     notifyListeners();
 
     try {
+      final int usuarioActualizacionId = await _obtenerUsuarioAutenticadoId();
+
       await _repository.actualizar(
         id: id,
         nombres: nombres,
@@ -330,9 +346,19 @@ class UsuarioProvider extends ChangeNotifier {
   Future<bool> actualizarRoles({
     required int usuarioId,
     required List<int> rolIds,
-    int usuarioActualizacionId = 1,
   }) async {
+    if (_guardando) {
+      return false;
+    }
+
+    _guardando = true;
+    _error = null;
+
+    notifyListeners();
+
     try {
+      final int usuarioActualizacionId = await _obtenerUsuarioAutenticadoId();
+
       await _repository.actualizarRoles(
         id: usuarioId,
         rolIds: rolIds,
@@ -345,9 +371,11 @@ class UsuarioProvider extends ChangeNotifier {
     } catch (error) {
       _error = _limpiarMensaje(error);
 
-      notifyListeners();
-
       return false;
+    } finally {
+      _guardando = false;
+
+      notifyListeners();
     }
   }
 
@@ -359,9 +387,19 @@ class UsuarioProvider extends ChangeNotifier {
     required int usuarioId,
     required String nuevaPassword,
     bool debeCambiarPassword = true,
-    int usuarioActualizacionId = 1,
   }) async {
+    if (_guardando) {
+      return false;
+    }
+
+    _guardando = true;
+    _error = null;
+
+    notifyListeners();
+
     try {
+      final int usuarioActualizacionId = await _obtenerUsuarioAutenticadoId();
+
       await _repository.cambiarPassword(
         id: usuarioId,
         nuevaPassword: nuevaPassword,
@@ -369,13 +407,17 @@ class UsuarioProvider extends ChangeNotifier {
         usuarioActualizacionId: usuarioActualizacionId,
       );
 
+      await cargarUsuarios();
+
       return true;
     } catch (error) {
       _error = _limpiarMensaje(error);
 
-      notifyListeners();
-
       return false;
+    } finally {
+      _guardando = false;
+
+      notifyListeners();
     }
   }
 
@@ -386,9 +428,19 @@ class UsuarioProvider extends ChangeNotifier {
   Future<bool> cambiarEstado({
     required int usuarioId,
     required bool activo,
-    int usuarioActualizacionId = 1,
   }) async {
+    if (_guardando) {
+      return false;
+    }
+
+    _guardando = true;
+    _error = null;
+
+    notifyListeners();
+
     try {
+      final int usuarioActualizacionId = await _obtenerUsuarioAutenticadoId();
+
       await _repository.cambiarEstado(
         id: usuarioId,
         activo: activo,
@@ -401,22 +453,35 @@ class UsuarioProvider extends ChangeNotifier {
     } catch (error) {
       _error = _limpiarMensaje(error);
 
-      notifyListeners();
-
       return false;
+    } finally {
+      _guardando = false;
+
+      notifyListeners();
     }
   }
 
   // =============================================================
-  // ELIMINAR
+  // ELIMINAR USUARIO
   // =============================================================
 
-  Future<bool> eliminarUsuario({
-    required int usuarioId,
-    int usuarioRegistroId = 1,
-  }) async {
+  Future<bool> eliminarUsuario({required int usuarioId}) async {
+    if (_guardando) {
+      return false;
+    }
+
+    _guardando = true;
+    _error = null;
+
+    notifyListeners();
+
     try {
-      await _repository.eliminar(id: usuarioId, usuarioId: usuarioRegistroId);
+      final int usuarioAutenticadoId = await _obtenerUsuarioAutenticadoId();
+
+      await _repository.eliminar(
+        id: usuarioId,
+        usuarioId: usuarioAutenticadoId,
+      );
 
       await cargarUsuarios();
 
@@ -424,9 +489,11 @@ class UsuarioProvider extends ChangeNotifier {
     } catch (error) {
       _error = _limpiarMensaje(error);
 
-      notifyListeners();
-
       return false;
+    } finally {
+      _guardando = false;
+
+      notifyListeners();
     }
   }
 
@@ -459,14 +526,21 @@ class UsuarioProvider extends ChangeNotifier {
   // =============================================================
 
   void filtrarPorRol({int? rolId}) {
-    final List<UsuarioModel> resultado = _repository.filtrarPorRol(
-      _usuarios,
-      rolId: rolId,
-    );
+    _rolFiltroId = rolId;
 
-    _usuariosFiltrados
-      ..clear()
-      ..addAll(resultado);
+    _aplicarFiltro();
+
+    notifyListeners();
+  }
+
+  void limpiarFiltroRol() {
+    if (_rolFiltroId == null) {
+      return;
+    }
+
+    _rolFiltroId = null;
+
+    _aplicarFiltro();
 
     notifyListeners();
   }
@@ -486,14 +560,18 @@ class UsuarioProvider extends ChangeNotifier {
   }
 
   // =============================================================
-  // FILTRAR BÚSQUEDA
+  // FILTRAR BÚSQUEDA + ROL
   // =============================================================
 
   void _aplicarFiltro() {
-    final List<UsuarioModel> resultado = _repository.buscarEnLista(
+    List<UsuarioModel> resultado = _repository.buscarEnLista(
       _usuarios,
       _textoBusqueda,
     );
+
+    resultado = _repository.filtrarPorRol(resultado, rolId: _rolFiltroId);
+
+    resultado = _repository.ordenarPorNombre(resultado);
 
     _usuariosFiltrados
       ..clear()
@@ -505,6 +583,21 @@ class UsuarioProvider extends ChangeNotifier {
   // =============================================================
 
   String _limpiarMensaje(Object error) {
-    return error.toString().replaceFirst('Exception: ', '').trim();
+    String mensaje = error.toString().trim();
+
+    const List<String> prefijos = <String>[
+      'Exception: ',
+      'StateError: ',
+      'Bad state: ',
+      'ArgumentError: ',
+    ];
+
+    for (final String prefijo in prefijos) {
+      if (mensaje.startsWith(prefijo)) {
+        mensaje = mensaje.substring(prefijo.length);
+      }
+    }
+
+    return mensaje.isEmpty ? 'Ocurrió un error inesperado.' : mensaje;
   }
 }

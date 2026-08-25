@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../core/services/iperc_catalog_preload_service.dart';
+import '../../core/services/offline_credential_service.dart';
 import '../../core/services/secure_storage_service.dart';
 import '../datasources/remote/auth_remote_datasource.dart';
 import '../models/login_response_model.dart';
@@ -19,36 +20,45 @@ class OfflineSession {
   final String usuarioId;
   final String nombreUsuario;
   final String rol;
-
   final bool debeCambiarPassword;
 }
 
 /// ===============================================================
-/// REPOSITORIO DE AUTENTICACIÓN
+/// AUTH REPOSITORY - SST EDURISK
 /// ===============================================================
 ///
-/// Además de autenticar al usuario:
+/// Separa:
+/// - sesión activa online;
+/// - acceso offline autorizado.
 ///
-/// 1. Guarda la sesión segura.
-/// 2. Inicia silenciosamente la precarga de catálogos IPERC.
+/// "Cerrar sesión":
+/// - elimina JWT y sesión online;
+/// - conserva autorización offline.
 ///
-/// La precarga NO bloquea el ingreso a la aplicación.
+/// "Eliminar acceso offline":
+/// - elimina identidad offline;
+/// - elimina verificador local de contraseña.
 /// ===============================================================
 class AuthRepository {
   AuthRepository({
     AuthRemoteDatasource? remoteDatasource,
     SecureStorageService? secureStorage,
     IpercCatalogPreloadService? catalogPreloadService,
+    OfflineCredentialService? offlineCredentialService,
   }) : _remoteDatasource = remoteDatasource ?? AuthRemoteDatasource(),
        _secureStorage = secureStorage ?? SecureStorageService.instance,
        _catalogPreloadService =
-           catalogPreloadService ?? IpercCatalogPreloadService();
+           catalogPreloadService ?? IpercCatalogPreloadService(),
+       _offlineCredentialService =
+           offlineCredentialService ?? OfflineCredentialService();
 
   final AuthRemoteDatasource _remoteDatasource;
 
   final SecureStorageService _secureStorage;
 
   final IpercCatalogPreloadService _catalogPreloadService;
+
+  final OfflineCredentialService _offlineCredentialService;
 
   // =============================================================
   // LOGIN ONLINE
@@ -58,21 +68,13 @@ class AuthRepository {
     required String usuario,
     required String password,
   }) async {
-    // -----------------------------------------------------------
-    // AUTENTICAR CONTRA EL BACKEND
-    // -----------------------------------------------------------
-
     final LoginResponseModel response = await _remoteDatasource.login(
       usuario: usuario,
       password: password,
     );
 
     // -----------------------------------------------------------
-    // GUARDAR SESIÓN ANTES DE CUALQUIER OTRA LLAMADA API
-    // -----------------------------------------------------------
-    //
-    // De esta forma ApiClient ya puede recuperar el token para
-    // descargar los catálogos protegidos.
+    // SESIÓN ACTIVA
     // -----------------------------------------------------------
 
     await _secureStorage.saveSession(
@@ -85,18 +87,27 @@ class AuthRepository {
     );
 
     // -----------------------------------------------------------
-    // PRECARGA AUTOMÁTICA DE CATÁLOGOS IPERC
+    // AUTORIZACIÓN OFFLINE
     // -----------------------------------------------------------
-    //
-    // No usamos await porque:
-    //
-    // - No queremos retrasar la apertura de la pantalla principal.
-    // - La descarga puede seguir ejecutándose en segundo plano
-    //   mientras el usuario entra al sistema.
-    //
-    // El propio servicio captura los errores individuales de cada
-    // catálogo y conserva la última copia SQLite válida.
-    // -----------------------------------------------------------
+
+    if (response.debeCambiarPassword) {
+      // Contraseña temporal o sesión 30:
+      // no se permite reutilizar una autorización offline anterior.
+      await _secureStorage.clearOfflineSession();
+
+      await _offlineCredentialService.eliminarPasswordOffline();
+    } else {
+      // Login online válido:
+      // renovamos la identidad y el verificador offline.
+      await _secureStorage.saveOfflineSession(
+        usuarioId: response.usuarioId,
+        nombreUsuario: response.nombreUsuario,
+        rol: response.rol,
+        debeCambiarPassword: false,
+      );
+
+      await _offlineCredentialService.guardarPasswordOffline(password);
+    }
 
     if (!response.debeCambiarPassword) {
       unawaited(_precargarCatalogosSilenciosamente());
@@ -106,15 +117,14 @@ class AuthRepository {
   }
 
   // =============================================================
-  // PRECARGA SILENCIOSA
+  // PRECARGA
   // =============================================================
 
   Future<void> _precargarCatalogosSilenciosamente() async {
     try {
       await _catalogPreloadService.preload();
     } catch (_) {
-      // El login ya fue correcto.
-      // Un fallo de precarga nunca debe cerrar ni impedir la sesión.
+      // La precarga nunca debe bloquear el ingreso.
     }
   }
 
@@ -129,18 +139,24 @@ class AuthRepository {
       return null;
     }
 
-    final String? usuarioId = await _secureStorage.getUsuarioId();
+    final String? usuarioId = await _secureStorage.getOfflineUsuarioId();
 
-    final String? nombreUsuario = await _secureStorage.getNombreUsuario();
+    final String? nombreUsuario = await _secureStorage
+        .getOfflineNombreUsuario();
 
-    final String? rol = await _secureStorage.getRol();
+    final String? rol = await _secureStorage.getOfflineRol();
 
-    if (usuarioId == null || nombreUsuario == null || rol == null) {
+    if (usuarioId == null ||
+        usuarioId.trim().isEmpty ||
+        nombreUsuario == null ||
+        nombreUsuario.trim().isEmpty ||
+        rol == null ||
+        rol.trim().isEmpty) {
       return null;
     }
 
     final bool debeCambiarPassword = await _secureStorage
-        .getDebeCambiarPassword();
+        .getOfflineDebeCambiarPassword();
 
     return OfflineSession(
       usuarioId: usuarioId,
@@ -148,6 +164,30 @@ class AuthRepository {
       rol: rol,
       debeCambiarPassword: debeCambiarPassword,
     );
+  }
+
+  Future<bool> validarPasswordOffline({required String password}) {
+    return _offlineCredentialService.validarPasswordOffline(password);
+  }
+
+  Future<bool> tieneAccesoOffline() async {
+    final bool tieneSesion = await _secureStorage.hasOfflineSession();
+
+    if (!tieneSesion) {
+      return false;
+    }
+
+    return _offlineCredentialService.tienePasswordOffline();
+  }
+
+  // =============================================================
+  // ELIMINAR ACCESO OFFLINE
+  // =============================================================
+
+  Future<void> eliminarAccesoOffline() async {
+    await _secureStorage.clearOfflineSession();
+
+    await _offlineCredentialService.eliminarPasswordOffline();
   }
 
   // =============================================================
@@ -181,12 +221,8 @@ class AuthRepository {
   }
 
   // =============================================================
-  // LOGOUT
+  // CAMBIAR CONTRASEÑA PROPIA
   // =============================================================
-
-  Future<void> logout() {
-    return _secureStorage.clearSession();
-  }
 
   Future<String> cambiarPasswordPropio({
     required String passwordActual,
@@ -199,10 +235,44 @@ class AuthRepository {
       confirmarPassword: confirmarPassword,
     );
 
+    // Backend:
+    // DebeCambiarPassword = false
+    // SesionesDesdeCambioPassword = 0
     await _secureStorage.setDebeCambiarPassword(false);
+
+    // Si el acceso offline fue eliminado al llegar a la sesión 30,
+    // lo volvemos a habilitar con la nueva contraseña.
+    final bool sesionDisponible = await _secureStorage
+        .habilitarOfflineDesdeSesionActual();
+
+    if (sesionDisponible) {
+      await _offlineCredentialService.guardarPasswordOffline(nuevaPassword);
+    }
 
     unawaited(_precargarCatalogosSilenciosamente());
 
     return mensaje;
+  }
+
+  // =============================================================
+  // CERRAR SESIÓN
+  // =============================================================
+
+  /// Cierra únicamente la sesión activa.
+  ///
+  /// Conserva el acceso offline autorizado.
+  Future<void> logout() {
+    return _secureStorage.clearCurrentSession();
+  }
+
+  // =============================================================
+  // DESVINCULAR DISPOSITIVO
+  // =============================================================
+
+  /// Elimina tanto la sesión activa como el acceso offline.
+  Future<void> desvincularDispositivo() async {
+    await _offlineCredentialService.eliminarPasswordOffline();
+
+    await _secureStorage.clearAll();
   }
 }

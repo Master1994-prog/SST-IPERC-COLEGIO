@@ -5,13 +5,18 @@ using SST.Domain.Security.Entities;
 namespace SST.Infrastructure.Persistence.Seed;
 
 /// <summary>
-/// Bootstrap opcional para crear o restablecer el acceso SUPER_ADMIN.
+/// Bootstrap opcional del SUPER_ADMIN.
 ///
-/// Solo se ejecuta cuando existen las variables de entorno:
+/// Variables:
 /// SST_SUPERADMIN_USER
 /// SST_SUPERADMIN_PASSWORD
 ///
-/// Esto evita dejar una contraseña fija escrita en el código.
+/// IMPORTANTE:
+/// Un usuario SUPER_ADMIN existente YA NO recibe una contraseña
+/// nueva cada vez que arranca la API.
+///
+/// Para un restablecimiento de emergencia se puede usar:
+/// SST_SUPERADMIN_FORCE_RESET=true
 /// </summary>
 public static class SuperAdminBootstrap
 {
@@ -20,10 +25,12 @@ public static class SuperAdminBootstrap
         CancellationToken cancellationToken = default)
     {
         string? nombreUsuario =
-            Environment.GetEnvironmentVariable("SST_SUPERADMIN_USER");
+            Environment.GetEnvironmentVariable(
+                "SST_SUPERADMIN_USER");
 
         string? password =
-            Environment.GetEnvironmentVariable("SST_SUPERADMIN_PASSWORD");
+            Environment.GetEnvironmentVariable(
+                "SST_SUPERADMIN_PASSWORD");
 
         if (string.IsNullOrWhiteSpace(nombreUsuario) ||
             string.IsNullOrWhiteSpace(password))
@@ -31,11 +38,23 @@ public static class SuperAdminBootstrap
             return;
         }
 
-        nombreUsuario = nombreUsuario.Trim().ToLowerInvariant();
+        nombreUsuario =
+            nombreUsuario.Trim().ToLowerInvariant();
 
-        // =========================================================
+        string? forzarResetTexto =
+            Environment.GetEnvironmentVariable(
+                "SST_SUPERADMIN_FORCE_RESET");
+
+        bool forzarReset =
+            string.Equals(
+                forzarResetTexto,
+                "true",
+                StringComparison.OrdinalIgnoreCase) ||
+            forzarResetTexto == "1";
+
+        // =====================================================
         // 1. GARANTIZAR ROL SUPER_ADMIN
-        // =========================================================
+        // =====================================================
 
         Rol? rolSuperAdmin =
             await context.Roles
@@ -62,7 +81,8 @@ public static class SuperAdminBootstrap
 
             context.Roles.Add(rolSuperAdmin);
 
-            await context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(
+                cancellationToken);
         }
         else
         {
@@ -70,22 +90,26 @@ public static class SuperAdminBootstrap
             rolSuperAdmin.EsGlobal = true;
         }
 
-        // =========================================================
+        // =====================================================
         // 2. BUSCAR USUARIO
-        // =========================================================
+        // =====================================================
 
         Usuario? usuario =
             await context.Usuarios
                 .Include(x => x.UsuariosRoles)
                 .FirstOrDefaultAsync(
                     x =>
-                        x.NombreUsuario.ToLower() == nombreUsuario &&
+                        x.NombreUsuario.ToLower() ==
+                            nombreUsuario &&
                         x.Estado,
                     cancellationToken);
 
-        // =========================================================
-        // 3. CREAR USUARIO SI NO EXISTE
-        // =========================================================
+        var hasher =
+            new PasswordHasher<Usuario>();
+
+        // =====================================================
+        // 3. CREAR SI NO EXISTE
+        // =====================================================
 
         if (usuario is null)
         {
@@ -98,52 +122,57 @@ public static class SuperAdminBootstrap
                 TipoDocumento = null,
                 NumeroDocumento = null,
                 Telefono = null,
-
-                // Se mantiene InstitucionId = 1 porque el proyecto
-                // actual utiliza esa institución base.
                 InstitucionId = 1,
-
                 Activo = true,
                 Estado = true,
-                DebeCambiarPassword = true,
                 FechaRegistro = DateTime.UtcNow,
-                UsuarioRegistroId = 1
+                UsuarioRegistroId = 1,
+                SesionesDesdeCambioPassword = 0
             };
 
-            var hasher = new PasswordHasher<Usuario>();
-
-            usuario.PasswordHash =
+            string passwordHash =
                 hasher.HashPassword(
                     usuario,
                     password);
+
+            usuario.EstablecerPassword(
+                passwordHash,
+                debeCambiarPassword: true);
 
             context.Usuarios.Add(usuario);
 
-            await context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(
+                cancellationToken);
         }
         else
         {
-            // =====================================================
-            // 4. RESTABLECER CONTRASEÑA Y ACTIVAR
-            // =====================================================
-
+            // Activar y mantener la contraseña personal actual.
             usuario.Activo = true;
             usuario.Estado = true;
-            usuario.DebeCambiarPassword = true;
-            usuario.FechaActualizacion = DateTime.UtcNow;
-            usuario.UsuarioActualizacionId = usuario.Id;
 
-            var hasher = new PasswordHasher<Usuario>();
+            // Solo restablecer si se solicita explícitamente.
+            if (forzarReset)
+            {
+                string passwordHash =
+                    hasher.HashPassword(
+                        usuario,
+                        password);
 
-            usuario.PasswordHash =
-                hasher.HashPassword(
-                    usuario,
-                    password);
+                usuario.EstablecerPassword(
+                    passwordHash,
+                    debeCambiarPassword: true);
+
+                usuario.FechaActualizacion =
+                    DateTime.UtcNow;
+
+                usuario.UsuarioActualizacionId =
+                    usuario.Id;
+            }
         }
 
-        // =========================================================
-        // 5. GARANTIZAR RELACIÓN USUARIO -> SUPER_ADMIN
-        // =========================================================
+        // =====================================================
+        // 4. GARANTIZAR RELACIÓN -> SUPER_ADMIN
+        // =====================================================
 
         UsuarioRol? relacion =
             await context.UsuariosRoles
@@ -171,10 +200,13 @@ public static class SuperAdminBootstrap
         {
             relacion.Activo = true;
             relacion.Estado = true;
-            relacion.FechaActualizacion = DateTime.UtcNow;
-            relacion.UsuarioActualizacionId = usuario.Id;
+            relacion.FechaActualizacion =
+                DateTime.UtcNow;
+            relacion.UsuarioActualizacionId =
+                usuario.Id;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(
+            cancellationToken);
     }
 }

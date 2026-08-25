@@ -237,6 +237,169 @@ class MapaRiesgoRepository {
     return local;
   }
 
+  /// Quita la imagen y los marcadores sin eliminar la entidad MapaRiesgo.
+  ///
+  /// - Si existe servidor y hay Internet, hace PUT con ArchivoUrl = null.
+  /// - Si existe servidor y no hay Internet, guarda un UPDATE pendiente.
+  /// - Si el mapa nunca llego al servidor, cancela CREATE/UPDATE pendientes.
+  ///
+  /// De esta forma el plano no vuelve a aparecer al refrescar desde backend.
+  Future<MapaRiesgoLocalModel> quitarPlano({
+    required MapaRiesgoLocalModel existente,
+    required bool conectado,
+  }) async {
+    final String idLocal = existente.idLocal.trim();
+
+    if (idLocal.isEmpty) {
+      throw const FormatException(
+        'El mapa local no tiene un identificador valido.',
+      );
+    }
+
+    final DateTime ahora = DateTime.now().toUtc();
+
+    final int? idServidor = existente.idServidor;
+
+    final bool tieneServidor = idServidor != null && idServidor > 0;
+
+    if (await _syncQueue.hasSynchronizingOperation(
+      entidad: SyncConstants.mapaRiesgo,
+      entidadIdLocal: idLocal,
+    )) {
+      throw StateError(
+        'El mapa se esta sincronizando. '
+        'Espera a que termine antes de quitar el plano.',
+      );
+    }
+
+    // Quitamos CREATE / UPDATE reemplazables anteriores.
+    await _syncQueue.deletePendingByEntityAndLocalId(
+      entidad: SyncConstants.mapaRiesgo,
+      entidadIdLocal: idLocal,
+    );
+
+    MapaRiesgoLocalModel construirLocal({
+      required bool sincronizado,
+      DateTime? fechaSincronizacion,
+    }) {
+      return MapaRiesgoLocalModel(
+        idLocal: existente.idLocal,
+        idServidor: existente.idServidor,
+        matrizIpercIdServidor: existente.matrizIpercIdServidor,
+        nombre: existente.nombre,
+        codigo: existente.codigo,
+        descripcion: existente.descripcion,
+        ubicacion: existente.ubicacion,
+        archivoUrlServidor: null,
+        archivoLocal: null,
+        tipoArchivo: null,
+        marcadoresJson: '{}',
+        fechaElaboracion: existente.fechaElaboracion,
+        fechaRevision: ahora,
+        version: existente.version,
+        estadoMapa: existente.estadoMapa,
+        activo: existente.activo,
+        sincronizado: sincronizado,
+        eliminado: false,
+        fechaRegistro: existente.fechaRegistro,
+        fechaActualizacion: ahora,
+        fechaSincronizacion: fechaSincronizacion,
+      );
+    }
+
+    // ------------------------------------------------------------
+    // MAPA QUE NUNCA LLEGO AL SERVIDOR
+    // ------------------------------------------------------------
+    //
+    // No hay nada que enviar. Cancelamos su CREATE/UPDATE pendiente
+    // y dejamos una fila local vacia que puede reutilizarse si el
+    // usuario carga un nuevo plano mas adelante.
+    // ------------------------------------------------------------
+
+    if (!tieneServidor) {
+      final MapaRiesgoLocalModel local = construirLocal(
+        sincronizado: true,
+        fechaSincronizacion: ahora,
+      );
+
+      await _local.guardar(local);
+
+      return local;
+    }
+
+    // ------------------------------------------------------------
+    // ONLINE: LIMPIAR TAMBIEN EN BACKEND
+    // ------------------------------------------------------------
+
+    if (conectado) {
+      final MapaRiesgoModel model = MapaRiesgoModel(
+        id: idServidor,
+        codigo: existente.codigo ?? '',
+        nombre: existente.nombre,
+        descripcion: existente.descripcion,
+        ubicacion: existente.ubicacion,
+        archivoUrl: null,
+        tipoArchivo: null,
+        marcadoresJson: '{}',
+        fechaElaboracion: existente.fechaElaboracion,
+        fechaRevision: ahora,
+        version: existente.version,
+        estadoMapa: existente.estadoMapa,
+        activo: existente.activo,
+        matrizIpercId: existente.matrizIpercIdServidor,
+      );
+
+      await _remote.actualizar(model);
+
+      final MapaRiesgoLocalModel local = construirLocal(
+        sincronizado: true,
+        fechaSincronizacion: ahora,
+      );
+
+      await _local.guardar(local);
+
+      return local;
+    }
+
+    // ------------------------------------------------------------
+    // OFFLINE: LIMPIAR SQLITE + ENCOLAR UPDATE
+    // ------------------------------------------------------------
+
+    final MapaRiesgoLocalModel pendiente = construirLocal(
+      sincronizado: false,
+      fechaSincronizacion: existente.fechaSincronizacion,
+    );
+
+    await _local.guardar(pendiente);
+
+    final Map<String, dynamic> queueData = <String, dynamic>{
+      'matrizIpercId': existente.matrizIpercIdServidor,
+      'nombre': existente.nombre,
+      'descripcion': existente.descripcion,
+      'ubicacion': existente.ubicacion,
+      'marcadoresJson': '{}',
+      'archivoLocal': null,
+      'mapaIdServidor': idServidor,
+      'codigo': existente.codigo,
+      'archivoUrlServidor': null,
+      'tipoArchivo': null,
+      'version': existente.version,
+      'estadoMapa': existente.estadoMapa,
+    };
+
+    await _syncQueue.insert(
+      SyncQueueModel(
+        entidad: SyncConstants.mapaRiesgo,
+        entidadIdLocal: idLocal,
+        operacion: SyncConstants.actualizar,
+        datosJson: jsonEncode(queueData),
+        fechaCreacion: ahora,
+      ),
+    );
+
+    return pendiente;
+  }
+
   Future<String?> _descargarPlano({
     required MapaRiesgoModel remoto,
     required MapaRiesgoLocalModel? existente,
