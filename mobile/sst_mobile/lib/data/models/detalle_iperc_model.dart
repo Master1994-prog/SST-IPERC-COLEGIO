@@ -450,28 +450,28 @@ class DetalleIpercModel {
 ///
 /// Backend:
 ///
-/// 0 = Pendiente
-/// 1 = EnProceso
-/// 2 = Implementado
-/// 3 = Verificado
-/// 4 = Cerrado
+/// 1 = Pendiente
+/// 2 = EnProceso
+/// 3 = Implementado
+/// 4 = Verificado
+/// 5 = Cerrado
 class EstadoImplementacionIperc {
   EstadoImplementacionIperc._();
 
   /// Medidas todavía no iniciadas.
-  static const int pendiente = 0;
+  static const int pendiente = 1;
 
   /// Medidas actualmente en ejecución.
-  static const int enProceso = 1;
+  static const int enProceso = 2;
 
   /// Medidas ya implementadas.
-  static const int implementado = 2;
+  static const int implementado = 3;
 
   /// Medidas implementadas y verificadas.
-  static const int verificado = 3;
+  static const int verificado = 4;
 
   /// Registro cerrado.
-  static const int cerrado = 4;
+  static const int cerrado = 5;
 
   /// Lista utilizada por DropdownButton y formularios.
   static const List<int> valores = <int>[
@@ -548,7 +548,7 @@ class CrearDetalleIpercRequest {
     this.responsableImplementacionId,
     this.fechaCompromiso,
     this.fechaImplementacion,
-    this.estadoImplementacion = 0,
+    this.estadoImplementacion = 1,
   });
 
   final int matrizIpercId;
@@ -646,7 +646,7 @@ class ActualizarDetalleIpercRequest {
     this.responsableImplementacionId,
     this.fechaCompromiso,
     this.fechaImplementacion,
-    this.estadoImplementacion = 0,
+    this.estadoImplementacion = 1,
   });
 
   final int id;

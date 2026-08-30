@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../core/services/iperc_catalog_preload_service.dart';
 import '../../core/services/offline_credential_service.dart';
+import '../../core/services/organizacion_catalog_preload_service.dart';
 import '../../core/services/secure_storage_service.dart';
 import '../datasources/remote/auth_remote_datasource.dart';
 import '../models/login_response_model.dart';
@@ -31,24 +32,28 @@ class OfflineSession {
 /// - sesión activa online;
 /// - acceso offline autorizado.
 ///
-/// "Cerrar sesión":
-/// - elimina JWT y sesión online;
-/// - conserva autorización offline.
+/// Además, después de un login online válido prepara SQLite para:
+/// - catálogos IPERC: peligros, consecuencias, probabilidad, severidad;
+/// - catálogos organizacionales: instituciones, sedes, áreas,
+///   puestos de trabajo, procesos y actividades.
 ///
-/// "Eliminar acceso offline":
-/// - elimina identidad offline;
-/// - elimina verificador local de contraseña.
+/// De esta manera "Nueva matriz IPERC" puede abrirse sin Internet
+/// después de haber realizado al menos un login online correcto.
 /// ===============================================================
 class AuthRepository {
   AuthRepository({
     AuthRemoteDatasource? remoteDatasource,
     SecureStorageService? secureStorage,
     IpercCatalogPreloadService? catalogPreloadService,
+    OrganizacionCatalogPreloadService? organizacionCatalogPreloadService,
     OfflineCredentialService? offlineCredentialService,
   }) : _remoteDatasource = remoteDatasource ?? AuthRemoteDatasource(),
        _secureStorage = secureStorage ?? SecureStorageService.instance,
        _catalogPreloadService =
            catalogPreloadService ?? IpercCatalogPreloadService(),
+       _organizacionCatalogPreloadService =
+           organizacionCatalogPreloadService ??
+           OrganizacionCatalogPreloadService(),
        _offlineCredentialService =
            offlineCredentialService ?? OfflineCredentialService();
 
@@ -57,6 +62,8 @@ class AuthRepository {
   final SecureStorageService _secureStorage;
 
   final IpercCatalogPreloadService _catalogPreloadService;
+
+  final OrganizacionCatalogPreloadService _organizacionCatalogPreloadService;
 
   final OfflineCredentialService _offlineCredentialService;
 
@@ -107,24 +114,30 @@ class AuthRepository {
       );
 
       await _offlineCredentialService.guardarPasswordOffline(password);
-    }
 
-    if (!response.debeCambiarPassword) {
-      unawaited(_precargarCatalogosSilenciosamente());
+      // Esperamos la precarga antes de finalizar el login.
+      // Esto garantiza que, al cortar Internet inmediatamente después,
+      // los catálogos necesarios ya estén persistidos en SQLite.
+      await _precargarCatalogosSilenciosamente();
     }
 
     return response;
   }
 
   // =============================================================
-  // PRECARGA
+  // PRECARGA OFFLINE
   // =============================================================
 
   Future<void> _precargarCatalogosSilenciosamente() async {
     try {
-      await _catalogPreloadService.preload();
+      await Future.wait<bool>(<Future<bool>>[
+        _catalogPreloadService.preload(),
+        _organizacionCatalogPreloadService.preload(),
+      ]);
     } catch (_) {
-      // La precarga nunca debe bloquear el ingreso.
+      // La precarga nunca debe impedir el ingreso del usuario.
+      // Si una rama falla, el formulario seguirá usando la última
+      // copia SQLite válida que exista.
     }
   }
 
@@ -249,6 +262,8 @@ class AuthRepository {
       await _offlineCredentialService.guardarPasswordOffline(nuevaPassword);
     }
 
+    // Aquí sí puede ejecutarse en segundo plano porque el usuario ya
+    // tiene la sesión iniciada.
     unawaited(_precargarCatalogosSilenciosamente());
 
     return mensaje;

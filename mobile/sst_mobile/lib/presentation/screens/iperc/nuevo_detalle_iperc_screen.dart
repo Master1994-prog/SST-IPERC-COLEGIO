@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/network/network_info.dart';
+import '../../../data/datasources/local/matriz_iperc_local_datasource.dart';
 import '../../../data/models/consecuencia_model.dart';
 import '../../../data/models/control_model.dart';
+import '../../../data/models/detalle_iperc_local_model.dart';
 import '../../../data/models/detalle_iperc_model.dart';
 import '../../../data/models/equipo_proteccion_model.dart';
 import '../../../data/models/evaluacion_riesgo_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
+import '../../../data/models/matriz_iperc_local_model.dart';
 import '../../../data/models/peligro_model.dart';
 import '../../../data/models/probabilidad_model.dart';
 import '../../../data/models/severidad_model.dart';
 import '../../../data/repositories/consecuencia_repository.dart';
 import '../../../data/repositories/control_repository.dart';
+import '../../../data/repositories/detalle_iperc_local_repository.dart';
 import '../../../data/repositories/equipo_proteccion_repository.dart';
 import '../../../data/repositories/peligro_repository.dart';
 import '../../../data/repositories/probabilidad_repository.dart';
 import '../../../data/repositories/severidad_repository.dart';
 import '../../providers/detalle_iperc_provider.dart';
+import '../../providers/sync_provider.dart';
 
 /// ===============================================================
 /// NUEVO DETALLE IPERC - SST EDURISK
@@ -261,6 +268,8 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     });
 
     if (!formularioValido ||
+        _peligroSeleccionado == null ||
+        _consecuenciaSeleccionada == null ||
         _probabilidadSeleccionada == null ||
         _severidadSeleccionada == null) {
       return;
@@ -273,6 +282,17 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     });
 
     try {
+      final bool backendDisponible = await NetworkInfo.instance.isConnected;
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!backendDisponible) {
+        await _guardarOffline();
+        return;
+      }
+
       final CrearDetalleIpercRequest request = CrearDetalleIpercRequest(
         matrizIpercId: widget.matriz.id,
         item: int.parse(_itemController.text.trim()),
@@ -280,20 +300,14 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
         peligroId: _peligroSeleccionado!.id,
         consecuenciaId: _consecuenciaSeleccionada!.id,
         descripcionPeligro: _descripcionController.text,
-
-        // IDs REALES de MySQL.
         probabilidadInicialId: _probabilidadSeleccionada!.id,
         severidadInicialId: _severidadSeleccionada!.id,
-
         observacionesEvaluacionInicial:
             'Evaluación inicial registrada desde Detalle IPERC.',
-
         controlIds: _controlIdsSeleccionados.toList(growable: false),
-
         equipoProteccionIds: _equipoProteccionIdsSeleccionados.toList(
           growable: false,
         ),
-
         estadoImplementacion: _estadoImplementacion,
       );
 
@@ -310,15 +324,42 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
         );
 
         Navigator.of(context).pop(true);
-
         return;
       }
 
+      // ---------------------------------------------------------
+      // 3. SI EL SERVIDOR CAYO DURANTE EL POST, GUARDAR EN SQLITE
+      // ---------------------------------------------------------
+
+      final bool servidorSigueDisponible =
+          await NetworkInfo.instance.isConnected;
+
+      if (!servidorSigueDisponible) {
+        await _guardarOffline();
+        return;
+      }
+
+      // Si el backend sigue disponible, no es un problema de red:
+      // mostramos la validación real del servidor.
       _mostrarMensaje(
         provider.error ?? 'No se pudo registrar el detalle IPERC.',
         esError: true,
       );
     } catch (error) {
+      // Un cambio de red puede ocurrir entre la comprobación y el POST.
+      // Antes de mostrar el error intentamos conservar el registro
+      // localmente cuando el backend ya no está disponible.
+      try {
+        final bool backendDisponible = await NetworkInfo.instance.isConnected;
+
+        if (!backendDisponible) {
+          await _guardarOffline();
+          return;
+        }
+      } catch (_) {
+        // Si tampoco puede comprobarse la red, se conserva el error original.
+      }
+
       if (mounted) {
         _mostrarMensaje(_limpiarMensaje(error), esError: true);
       }
@@ -331,6 +372,166 @@ class _NuevoDetalleIpercScreenState extends State<NuevoDetalleIpercScreen> {
     }
   }
 
+  // =============================================================
+  // GUARDAR OFFLINE
+  // =============================================================
+
+  Future<void> _guardarOffline() async {
+    final MatrizIpercLocalDatasource matrizDatasource =
+        MatrizIpercLocalDatasource();
+
+    final DetalleIpercLocalRepository detalleRepository =
+        DetalleIpercLocalRepository();
+
+    final List<MatrizIpercLocalModel> matricesLocales = await matrizDatasource
+        .getAll();
+
+    MatrizIpercLocalModel? matrizLocal;
+
+    // -----------------------------------------------------------
+    // PRIMERO: buscar por ID real del servidor
+    // -----------------------------------------------------------
+
+    if (widget.matriz.id > 0) {
+      for (final MatrizIpercLocalModel item in matricesLocales) {
+        final int? idServidor = int.tryParse(item.idServidor?.trim() ?? '');
+
+        if (idServidor == widget.matriz.id) {
+          matrizLocal = item;
+          break;
+        }
+      }
+    }
+
+    // -----------------------------------------------------------
+    // SEGUNDO: compatibilidad para matrices aun no sincronizadas
+    // -----------------------------------------------------------
+
+    if (matrizLocal == null) {
+      final String codigo = widget.matriz.codigo.trim().toLowerCase();
+      final String nombre = widget.matriz.nombre.trim().toLowerCase();
+
+      for (final MatrizIpercLocalModel item in matricesLocales) {
+        final String codigoLocal = (item.codigo ?? '').trim().toLowerCase();
+        final String nombreLocal = item.nombre.trim().toLowerCase();
+
+        final bool mismoCodigo =
+            codigo.isNotEmpty &&
+            codigoLocal.isNotEmpty &&
+            codigoLocal == codigo;
+
+        final bool mismoNombre =
+            nombre.isNotEmpty &&
+            nombreLocal.isNotEmpty &&
+            nombreLocal == nombre;
+
+        if (mismoCodigo || mismoNombre) {
+          matrizLocal = item;
+          break;
+        }
+      }
+    }
+
+    if (matrizLocal == null) {
+      throw StateError(
+        'No se encontró la copia local de la matriz IPERC. '
+        'Abre la matriz una vez con conexión antes de trabajar offline.',
+      );
+    }
+
+    final ProbabilidadModel probabilidad = _probabilidadSeleccionada!;
+    final SeveridadModel severidad = _severidadSeleccionada!;
+
+    final int valorRiesgo = probabilidad.valor * severidad.valor;
+
+    final NivelRiesgoIpercOption nivelRiesgo = obtenerNivelRiesgoIperc(
+      valorRiesgo,
+    );
+
+    final DateTime ahora = DateTime.now().toUtc();
+
+    final int? matrizIdServidor = widget.matriz.id > 0
+        ? widget.matriz.id
+        : int.tryParse(matrizLocal.idServidor?.trim() ?? '');
+
+    final DetalleIpercLocalModel detalleLocal = DetalleIpercLocalModel(
+      idLocal: const Uuid().v4(),
+      idServidor: null,
+      matrizIdLocal: matrizLocal.idLocal,
+      matrizIdServidor: matrizIdServidor,
+      item: int.parse(_itemController.text.trim()),
+      tarea: _tareaController.text.trim(),
+      actividadId: widget.matriz.actividadId?.toString(),
+      peligroId: _peligroSeleccionado!.id.toString(),
+      consecuenciaId: _consecuenciaSeleccionada!.id.toString(),
+      actividadDescripcion: widget.matriz.actividadNombre,
+      peligroDescripcion: _peligroSeleccionado!.nombreCompleto,
+      consecuenciaDescripcion: _consecuenciaSeleccionada!.nombreCompleto,
+      probabilidadInicialId: probabilidad.id,
+      severidadInicialId: severidad.id,
+      frecuenciaInicial: probabilidad.valor,
+      severidadInicial: severidad.valor,
+      valorRiesgoInicial: valorRiesgo,
+      nivelRiesgoInicial: nivelRiesgo.nombre,
+      controlIds: _controlIdsSeleccionados
+          .map((int id) => id.toString())
+          .toList(growable: false),
+      equipoProteccionIds: _equipoProteccionIdsSeleccionados
+          .map((int id) => id.toString())
+          .toList(growable: false),
+      estadoImplementacion: _estadoImplementacionTexto(_estadoImplementacion),
+      observaciones:
+          'Evaluación inicial registrada offline desde Detalle IPERC.',
+      sincronizado: false,
+      eliminado: false,
+      fechaRegistro: ahora,
+    );
+
+    await detalleRepository.crear(detalleLocal);
+
+    if (!mounted) {
+      return;
+    }
+
+    // Actualiza el contador global de pendientes.
+    try {
+      await context.read<SyncProvider>().notifyLocalChange();
+    } catch (_) {
+      // El registro ya quedó guardado en SQLite y en la cola.
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    _mostrarMensaje(
+      'Peligro evaluado guardado en el dispositivo. '
+      'Se sincronizará automáticamente cuando vuelva el servidor.',
+      esError: false,
+    );
+
+    Navigator.of(context).pop(true);
+  }
+
+  String _estadoImplementacionTexto(int estado) {
+    if (estado == EstadoImplementacionIperc.enProceso) {
+      return 'EN_PROCESO';
+    }
+
+    if (estado == EstadoImplementacionIperc.implementado) {
+      return 'IMPLEMENTADO';
+    }
+
+    if (estado == EstadoImplementacionIperc.verificado) {
+      return 'VERIFICADO';
+    }
+
+    if (estado == EstadoImplementacionIperc.cerrado) {
+      return 'CERRADO';
+    }
+
+    return 'PENDIENTE';
+  }
   // =============================================================
   // BUILD
   // =============================================================

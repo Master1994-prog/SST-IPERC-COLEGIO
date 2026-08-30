@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/login_response_model.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../providers/sync_provider.dart';
 import '../home/main_navigation_screen.dart';
 import 'cambiar_password_obligatorio_screen.dart';
 import 'recuperar_password_screen.dart';
@@ -141,6 +143,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       _mostrarMensaje('Inicio de sesión correcto.', tipo: _TipoMensaje.exito);
 
+      try {
+        await context.read<SyncProvider>().synchronizeAfterLogin();
+      } catch (_) {
+        // Pending rows remain stored in SQLite.
+      }
+
+      if (!mounted) {
+        return;
+      }
       _abrirPantallaPrincipal(
         nombreUsuario: response.nombreUsuario,
         rol: response.rol,

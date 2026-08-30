@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/solicitud_seguridad_repository.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../widgets/sync_status_card.dart';
 import '../actividades/actividades_screen.dart';
 import '../areas/areas_screen.dart';
@@ -62,6 +63,28 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _indiceActual = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _sincronizarPendientesAlEntrar();
+    });
+  }
+
+  Future<void> _sincronizarPendientesAlEntrar() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      await context.read<SyncProvider>().refreshAndSynchronize();
+    } catch (_) {
+      // La cola permanece en SQLite.
+      // SyncStatusCard mostrarÃ¡ el error real si el envÃ­o falla.
+    }
+  }
 
   late final List<Widget> _pantallas = <Widget>[
     ChangeNotifierProvider<DashboardProvider>(

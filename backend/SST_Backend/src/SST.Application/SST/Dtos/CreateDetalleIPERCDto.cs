@@ -207,17 +207,17 @@ public class CreateDetalleIPERCDto
     /// <summary>
     /// Estado de implementación:
     ///
-    /// 0 = Pendiente
-    /// 1 = EnProceso
-    /// 2 = Implementado
-    /// 3 = Verificado
-    /// 4 = Cerrado
+    /// 1 = Pendiente
+    /// 2 = EnProceso
+    /// 3 = Implementado
+    /// 4 = Verificado
+    /// 5 = Cerrado
     /// </summary>
     [Range(
-        0,
-        4,
+        1,
+        5,
         ErrorMessage =
-            "El estado de implementación debe estar entre 0 y 4.")]
+            "El estado de implementación debe estar entre 1 y 5.")]
     public int EstadoImplementacion { get; set; } =
-        0;
+        1;
 }

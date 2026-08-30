@@ -9,8 +9,7 @@ class OrganizacionCatalogPreloadService {
     CatalogosRemoteDatasource? remoteDatasource,
     CatalogosOrganizacionLocalDatasource? localDatasource,
   }) : _networkInfo = networkInfo ?? NetworkInfo.instance,
-       _remoteDatasource =
-           remoteDatasource ?? CatalogosRemoteDatasource(),
+       _remoteDatasource = remoteDatasource ?? CatalogosRemoteDatasource(),
        _localDatasource =
            localDatasource ?? CatalogosOrganizacionLocalDatasource();
 
@@ -39,16 +38,13 @@ class OrganizacionCatalogPreloadService {
       final List<CatalogoItemModel> instituciones;
 
       try {
-        instituciones =
-            await _remoteDatasource.obtenerInstituciones();
+        instituciones = await _remoteDatasource.obtenerInstituciones();
       } catch (_) {
         return _tieneInstitucionesLocales();
       }
 
       if (instituciones.isNotEmpty) {
-        await _localDatasource.guardarInstituciones(
-          instituciones,
-        );
+        await _localDatasource.guardarInstituciones(instituciones);
       }
 
       for (final CatalogoItemModel institucion in instituciones) {
@@ -67,15 +63,10 @@ class OrganizacionCatalogPreloadService {
     }
 
     try {
-      final List<CatalogoItemModel> sedes =
-          await _remoteDatasource.obtenerSedes(
-        institucionId: institucionId,
-      );
+      final List<CatalogoItemModel> sedes = await _remoteDatasource
+          .obtenerSedes(institucionId: institucionId);
 
-      await _localDatasource.guardarSedes(
-        sedes,
-        institucionId: institucionId,
-      );
+      await _localDatasource.guardarSedes(sedes, institucionId: institucionId);
     } catch (_) {}
 
     List<CatalogoItemModel> areas = <CatalogoItemModel>[];
@@ -85,10 +76,7 @@ class OrganizacionCatalogPreloadService {
         institucionId: institucionId,
       );
 
-      await _localDatasource.guardarAreas(
-        areas,
-        institucionId: institucionId,
-      );
+      await _localDatasource.guardarAreas(areas, institucionId: institucionId);
     } catch (_) {
       try {
         areas = await _localDatasource.obtenerAreas(
@@ -110,33 +98,21 @@ class OrganizacionCatalogPreloadService {
     }
 
     try {
-      final List<CatalogoItemModel> puestos =
-          await _remoteDatasource.obtenerPuestosTrabajo(
-        areaId: areaId,
-      );
+      final List<CatalogoItemModel> puestos = await _remoteDatasource
+          .obtenerPuestosTrabajo(areaId: areaId);
 
-      await _localDatasource.guardarPuestosTrabajo(
-        puestos,
-        areaId: areaId,
-      );
+      await _localDatasource.guardarPuestosTrabajo(puestos, areaId: areaId);
     } catch (_) {}
 
     List<CatalogoItemModel> procesos = <CatalogoItemModel>[];
 
     try {
-      procesos = await _remoteDatasource.obtenerProcesos(
-        areaId: areaId,
-      );
+      procesos = await _remoteDatasource.obtenerProcesos(areaId: areaId);
 
-      await _localDatasource.guardarProcesos(
-        procesos,
-        areaId: areaId,
-      );
+      await _localDatasource.guardarProcesos(procesos, areaId: areaId);
     } catch (_) {
       try {
-        procesos = await _localDatasource.obtenerProcesos(
-          areaId: areaId,
-        );
+        procesos = await _localDatasource.obtenerProcesos(areaId: areaId);
       } catch (_) {
         procesos = <CatalogoItemModel>[];
       }
@@ -153,10 +129,8 @@ class OrganizacionCatalogPreloadService {
     }
 
     try {
-      final List<CatalogoItemModel> actividades =
-          await _remoteDatasource.obtenerActividades(
-        procesoId: procesoId,
-      );
+      final List<CatalogoItemModel> actividades = await _remoteDatasource
+          .obtenerActividades(procesoId: procesoId);
 
       await _localDatasource.guardarActividades(
         actividades,
@@ -167,8 +141,8 @@ class OrganizacionCatalogPreloadService {
 
   Future<bool> _tieneInstitucionesLocales() async {
     try {
-      final List<CatalogoItemModel> instituciones =
-          await _localDatasource.obtenerInstituciones();
+      final List<CatalogoItemModel> instituciones = await _localDatasource
+          .obtenerInstituciones();
 
       return instituciones.isNotEmpty;
     } catch (_) {

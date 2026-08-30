@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
+import '../../../core/services/secure_storage_service.dart';
 import '../../../core/theme/app_theme.dart';
 
 import '../../../data/models/seguimiento_iperc_local_model.dart';
@@ -99,12 +100,43 @@ class _SeguimientosIpercView extends StatefulWidget {
 }
 
 class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
+  String _rolEfectivo = '';
+
   bool get _puedeGestionarSeguimientos {
-    return RolePermissions.puedeGestionarSeguimientos(widget.rol);
+    return RolePermissions.puedeGestionarSeguimientos(_rolEfectivo);
   }
 
   bool get _puedeEliminar {
-    return RolePermissions.puedeEliminarRegistros(widget.rol);
+    return RolePermissions.puedeEliminarRegistros(_rolEfectivo);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _rolEfectivo = widget.rol.trim();
+
+    if (_rolEfectivo.isEmpty) {
+      _cargarRolEfectivo();
+    }
+  }
+
+  Future<void> _cargarRolEfectivo() async {
+    final SecureStorageService storage = SecureStorageService.instance;
+
+    String rol = (await storage.getRol())?.trim() ?? '';
+
+    if (rol.isEmpty) {
+      rol = (await storage.getOfflineRol())?.trim() ?? '';
+    }
+
+    if (!mounted || rol.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _rolEfectivo = rol;
+    });
   }
 
   Future<void> _notificarCambioLocal() async {
