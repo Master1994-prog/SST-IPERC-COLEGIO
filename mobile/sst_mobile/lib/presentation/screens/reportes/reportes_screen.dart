@@ -28,7 +28,7 @@ import '../controles/controles_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
 import '../mapas_riesgo/mapas_riesgo_screen.dart';
 import '../matriz_riesgo/matriz_riesgo_screen.dart';
-import '../seguimientos/seguimientos_screen.dart';
+import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 
 /// ===============================================================
 /// REPORTES SST/IPERC - DASHBOARD EJECUTIVO
@@ -904,7 +904,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                     description: 'Avances, verificaciones y observaciones.',
                     onView: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => SeguimientosScreen(rol: widget.rol),
+                        builder: (_) =>
+                            SeguimientosIpercScreen(rol: widget.rol),
                       ),
                     ),
                     onPdf: _exportarSeguimientosPdf,

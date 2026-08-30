@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
@@ -23,7 +23,7 @@ import '../procesos/procesos_screen.dart';
 import '../puestos_trabajo/puestos_trabajo_screen.dart';
 import '../reportes/reportes_screen.dart';
 import '../roles/roles_screen.dart';
-import '../seguimientos/seguimientos_screen.dart';
+import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import '../solicitudes_seguridad/solicitudes_seguridad_screen.dart';
 import '../tipos_equipo_proteccion/tipos_equipo_proteccion_screen.dart';
 import '../tipos_peligro/tipos_peligro_screen.dart';
@@ -482,7 +482,7 @@ class IpercView extends StatelessWidget {
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => SeguimientosScreen(rol: rol),
+                builder: (_) => SeguimientosIpercScreen(rol: rol),
               ),
             );
           },

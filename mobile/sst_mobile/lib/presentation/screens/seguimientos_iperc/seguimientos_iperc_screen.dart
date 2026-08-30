@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/security/role_permissions.dart';
+import '../../../core/theme/app_theme.dart';
+
 import '../../../data/models/seguimiento_iperc_local_model.dart';
 import '../../../data/models/seguimiento_iperc_model.dart';
 import '../../providers/seguimiento_iperc_provider.dart';
+import '../../providers/sync_provider.dart';
 import 'seguimiento_iperc_form_screen.dart';
 
 /// ===============================================================
@@ -27,6 +31,7 @@ class SeguimientosIpercScreen extends StatelessWidget {
     this.detalleIpercId,
     this.detalleIpercIdLocal,
     this.titulo = 'Seguimientos IPERC',
+    this.rol = '',
     super.key,
   });
 
@@ -37,6 +42,8 @@ class SeguimientosIpercScreen extends StatelessWidget {
   final String? detalleIpercIdLocal;
 
   final String titulo;
+
+  final String rol;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +75,7 @@ class SeguimientosIpercScreen extends StatelessWidget {
         detalleIpercId: detalleIpercId,
         detalleIpercIdLocal: detalleIpercIdLocal,
         titulo: titulo,
+        rol: rol,
       ),
     );
   }
@@ -76,6 +84,7 @@ class SeguimientosIpercScreen extends StatelessWidget {
 class _SeguimientosIpercView extends StatefulWidget {
   const _SeguimientosIpercView({
     required this.titulo,
+    required this.rol,
     this.detalleIpercId,
     this.detalleIpercIdLocal,
   });
@@ -83,12 +92,34 @@ class _SeguimientosIpercView extends StatefulWidget {
   final int? detalleIpercId;
   final String? detalleIpercIdLocal;
   final String titulo;
+  final String rol;
 
   @override
   State<_SeguimientosIpercView> createState() => _SeguimientosIpercViewState();
 }
 
 class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
+  bool get _puedeGestionarSeguimientos {
+    return RolePermissions.puedeGestionarSeguimientos(widget.rol);
+  }
+
+  bool get _puedeEliminar {
+    return RolePermissions.puedeEliminarRegistros(widget.rol);
+  }
+
+  Future<void> _notificarCambioLocal() async {
+    if (!mounted) {
+      return;
+    }
+
+    try {
+      await context.read<SyncProvider>().notifyLocalChange();
+    } catch (_) {
+      // El cambio ya esta guardado en SQLite y en la cola.
+      // El siguiente cambio de conectividad volvera a revisarlo.
+    }
+  }
+
   final TextEditingController _busquedaController = TextEditingController();
 
   @override
@@ -106,6 +137,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   // =============================================================
 
   Future<void> _abrirNuevo() async {
+    if (!_puedeGestionarSeguimientos) {
+      return;
+    }
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
@@ -125,6 +159,8 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       return;
     }
 
+    await _notificarCambioLocal();
+
     await _actualizar();
   }
 
@@ -133,6 +169,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   // =============================================================
 
   Future<void> _abrirEditarRemoto(SeguimientoIpercModel seguimiento) async {
+    if (!_puedeGestionarSeguimientos) {
+      return;
+    }
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
@@ -149,6 +188,8 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       return;
     }
 
+    await _notificarCambioLocal();
+
     await _actualizar();
   }
 
@@ -157,6 +198,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   // =============================================================
 
   Future<void> _abrirEditarLocal(SeguimientoIpercLocalModel seguimiento) async {
+    if (!_puedeGestionarSeguimientos) {
+      return;
+    }
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
@@ -173,6 +217,8 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       return;
     }
 
+    await _notificarCambioLocal();
+
     await _actualizar();
   }
 
@@ -183,6 +229,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   Future<void> _confirmarEliminarRemoto(
     SeguimientoIpercModel seguimiento,
   ) async {
+    if (!_puedeEliminar) {
+      return;
+    }
     final bool confirmado = await _preguntarEliminar(
       seguimiento.detalleVisible,
     );
@@ -215,6 +264,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   Future<void> _confirmarEliminarLocal(
     SeguimientoIpercLocalModel seguimiento,
   ) async {
+    if (!_puedeEliminar) {
+      return;
+    }
     final bool confirmado = await _preguntarEliminar(
       seguimiento.detalleVisible,
     );
@@ -229,6 +281,10 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
     final bool eliminado = await provider.eliminarOffline(
       idLocal: seguimiento.idLocal,
     );
+
+    if (eliminado) {
+      await _notificarCambioLocal();
+    }
 
     if (!mounted) {
       return;
@@ -275,6 +331,9 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   // =============================================================
 
   Future<void> _verificarRemoto(SeguimientoIpercModel seguimiento) async {
+    if (!_puedeGestionarSeguimientos) {
+      return;
+    }
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
@@ -297,12 +356,19 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   // =============================================================
 
   Future<void> _verificarLocal(SeguimientoIpercLocalModel seguimiento) async {
+    if (!_puedeGestionarSeguimientos) {
+      return;
+    }
     final SeguimientoIpercProvider provider = context
         .read<SeguimientoIpercProvider>();
 
     final bool verificado = await provider.verificarOffline(
       idLocal: seguimiento.idLocal,
     );
+
+    if (verificado) {
+      await _notificarCambioLocal();
+    }
 
     if (!mounted) {
       return;
@@ -327,7 +393,7 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: esError ? Theme.of(context).colorScheme.error : null,
+          backgroundColor: esError ? AppColors.riskOrange : AppColors.green,
           content: Text(mensaje),
         ),
       );
@@ -340,7 +406,10 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         title: Text(widget.titulo),
         actions: <Widget>[
           Consumer<SeguimientoIpercProvider>(
@@ -364,11 +433,15 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _abrirNuevo,
-        icon: const Icon(Icons.add),
-        label: const Text('Nuevo'),
-      ),
+      floatingActionButton: _puedeGestionarSeguimientos
+          ? FloatingActionButton.extended(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              onPressed: _abrirNuevo,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo'),
+            )
+          : null,
       body: Consumer<SeguimientoIpercProvider>(
         builder:
             (
@@ -452,12 +525,17 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: _SeguimientoLocalCard(
                             seguimiento: seguimiento,
-                            onEditar: () => _abrirEditarLocal(seguimiento),
-                            onEliminar: () =>
-                                _confirmarEliminarLocal(seguimiento),
-                            onVerificar: seguimiento.verificado
-                                ? null
-                                : () => _verificarLocal(seguimiento),
+                            onEditar: _puedeGestionarSeguimientos
+                                ? () => _abrirEditarLocal(seguimiento)
+                                : null,
+                            onEliminar: _puedeEliminar
+                                ? () => _confirmarEliminarLocal(seguimiento)
+                                : null,
+                            onVerificar:
+                                _puedeGestionarSeguimientos &&
+                                    !seguimiento.verificado
+                                ? () => _verificarLocal(seguimiento)
+                                : null,
                           ),
                         ),
                       ),
@@ -468,12 +546,17 @@ class _SeguimientosIpercViewState extends State<_SeguimientosIpercView> {
                           padding: const EdgeInsets.only(bottom: 16),
                           child: _SeguimientoRemotoCard(
                             seguimiento: seguimiento,
-                            onEditar: () => _abrirEditarRemoto(seguimiento),
-                            onEliminar: () =>
-                                _confirmarEliminarRemoto(seguimiento),
-                            onVerificar: seguimiento.verificado
-                                ? null
-                                : () => _verificarRemoto(seguimiento),
+                            onEditar: _puedeGestionarSeguimientos
+                                ? () => _abrirEditarRemoto(seguimiento)
+                                : null,
+                            onEliminar: _puedeEliminar
+                                ? () => _confirmarEliminarRemoto(seguimiento)
+                                : null,
+                            onVerificar:
+                                _puedeGestionarSeguimientos &&
+                                    !seguimiento.verificado
+                                ? () => _verificarRemoto(seguimiento)
+                                : null,
                           ),
                         ),
                       ),
@@ -629,8 +712,8 @@ class _SeguimientoLocalCard extends StatelessWidget {
   });
 
   final SeguimientoIpercLocalModel seguimiento;
-  final VoidCallback onEditar;
-  final VoidCallback onEliminar;
+  final VoidCallback? onEditar;
+  final VoidCallback? onEliminar;
   final VoidCallback? onVerificar;
 
   @override
@@ -664,8 +747,8 @@ class _SeguimientoRemotoCard extends StatelessWidget {
   });
 
   final SeguimientoIpercModel seguimiento;
-  final VoidCallback onEditar;
-  final VoidCallback onEliminar;
+  final VoidCallback? onEditar;
+  final VoidCallback? onEliminar;
   final VoidCallback? onVerificar;
 
   @override
@@ -713,8 +796,8 @@ class _SeguimientoBaseCard extends StatelessWidget {
   final bool verificado;
   final bool sincronizado;
   final bool esLocal;
-  final VoidCallback onEditar;
-  final VoidCallback onEliminar;
+  final VoidCallback? onEditar;
+  final VoidCallback? onEliminar;
   final VoidCallback? onVerificar;
 
   @override
@@ -755,38 +838,65 @@ class _SeguimientoBaseCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (String value) {
-                    switch (value) {
-                      case 'editar':
-                        onEditar();
-                        break;
-                      case 'verificar':
-                        onVerificar?.call();
-                        break;
-                      case 'eliminar':
-                        onEliminar();
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) {
-                    return <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'editar',
-                        child: Text('Editar'),
-                      ),
-                      if (onVerificar != null)
-                        const PopupMenuItem<String>(
-                          value: 'verificar',
-                          child: Text('Verificar'),
-                        ),
-                      const PopupMenuItem<String>(
-                        value: 'eliminar',
-                        child: Text('Eliminar'),
-                      ),
-                    ];
-                  },
-                ),
+                if (onEditar != null ||
+                    onVerificar != null ||
+                    onEliminar != null)
+                  PopupMenuButton<String>(
+                    color: AppColors.surface,
+                    onSelected: (String value) {
+                      switch (value) {
+                        case 'editar':
+                          onEditar?.call();
+                          break;
+                        case 'verificar':
+                          onVerificar?.call();
+                          break;
+                        case 'eliminar':
+                          onEliminar?.call();
+                          break;
+                      }
+                    },
+                    itemBuilder: (BuildContext context) {
+                      return <PopupMenuEntry<String>>[
+                        if (onEditar != null)
+                          const PopupMenuItem<String>(
+                            value: 'editar',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.primary,
+                              ),
+                              title: Text('Editar'),
+                            ),
+                          ),
+                        if (onVerificar != null)
+                          const PopupMenuItem<String>(
+                            value: 'verificar',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                Icons.verified_outlined,
+                                color: AppColors.green,
+                              ),
+                              title: Text('Verificar'),
+                            ),
+                          ),
+                        if (onEliminar != null)
+                          const PopupMenuItem<String>(
+                            value: 'eliminar',
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(
+                                Icons.delete_outline,
+                                color: AppColors.riskOrange,
+                              ),
+                              title: Text('Eliminar'),
+                            ),
+                          ),
+                      ];
+                    },
+                  ),
               ],
             ),
             const SizedBox(height: 12),

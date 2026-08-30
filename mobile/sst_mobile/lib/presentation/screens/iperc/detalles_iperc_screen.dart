@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/security/role_permissions.dart';
@@ -8,7 +8,7 @@ import '../../../data/models/matriz_iperc_model.dart';
 import '../../../data/models/usuario_model.dart';
 import '../../providers/detalle_iperc_provider.dart';
 import '../../providers/usuario_provider.dart';
-import '../seguimientos/seguimientos_screen.dart';
+import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 import 'editar_detalle_iperc_screen.dart';
 import 'nuevo_detalle_iperc_screen.dart';
 
@@ -185,7 +185,7 @@ class _DetallesIpercViewState extends State<_DetallesIpercView> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) {
-          return SeguimientosScreen(
+          return SeguimientosIpercScreen(
             detalleIpercId: detalle.id,
             rol: widget.rol,
           );
