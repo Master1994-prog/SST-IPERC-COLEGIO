@@ -43,3 +43,6 @@ appsettings.Development.json
 Thumbs.db
 
 _backup_permisos_*/
+
+# Artefactos privados de entrega
+release_backup/
