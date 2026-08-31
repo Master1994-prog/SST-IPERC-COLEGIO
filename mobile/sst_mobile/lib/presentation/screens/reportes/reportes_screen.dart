@@ -2173,23 +2173,46 @@ class _ReportesScreenState extends State<ReportesScreen> {
 // VISTA PREVIA PDF
 // ===============================================================
 
-class _VistaPreviaPdfScreen extends StatelessWidget {
+// PDF_PREVIEW_CACHE_ROTACION_V1
+class _VistaPreviaPdfScreen extends StatefulWidget {
   const _VistaPreviaPdfScreen({required this.titulo, required this.buildPdf});
 
   final String titulo;
   final Future<Uint8List> Function() buildPdf;
 
   @override
+  State<_VistaPreviaPdfScreen> createState() {
+    return _VistaPreviaPdfScreenState();
+  }
+}
+
+class _VistaPreviaPdfScreenState extends State<_VistaPreviaPdfScreen> {
+  late final Future<Uint8List> _pdfFuture;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Generar el PDF una sola vez.
+    //
+    // PdfPreview reconstruye su interfaz cuando cambia la orientacion
+    // o el tamano disponible. Si se vuelve a ejecutar buildPdf() en
+    // cada reconstruccion, se pueden iniciar varias generaciones
+    // pesadas del mismo documento al mismo tiempo.
+    _pdfFuture = widget.buildPdf();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(titulo),
+        title: Text(widget.titulo),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
       body: PdfPreview(
-        build: (_) => buildPdf(),
+        build: (_) => _pdfFuture,
         canChangePageFormat: false,
         canChangeOrientation: false,
         allowPrinting: true,

@@ -574,24 +574,25 @@ class _NuevaMatrizIpercScreenState extends State<NuevaMatrizIpercScreen> {
   // OBTENER USUARIO AUTENTICADO
   // =============================================================
 
+  // USUARIO_OFFLINE_FALLBACK_V1
   Future<int> _obtenerUsuarioAutenticadoId() async {
-    final String usuarioTexto =
-        (await _secureStorage.getUsuarioId())?.trim() ?? '';
+    String usuarioTexto = (await _secureStorage.getUsuarioId())?.trim() ?? '';
+
+    if (usuarioTexto.isEmpty) {
+      usuarioTexto = (await _secureStorage.getOfflineUsuarioId())?.trim() ?? '';
+    }
 
     if (usuarioTexto.isEmpty) {
       throw StateError(
-        'No se encontró el usuario autenticado. '
-        'Inicie sesión nuevamente.',
+        'No se encontró un usuario autorizado para trabajar offline. '
+        'Conéctese una vez e inicie sesión nuevamente.',
       );
     }
 
     final int? usuarioId = int.tryParse(usuarioTexto);
 
     if (usuarioId == null || usuarioId <= 0) {
-      throw StateError(
-        'El identificador del usuario autenticado '
-        'no es válido: $usuarioTexto.',
-      );
+      throw StateError('El identificador del usuario autorizado no es válido.');
     }
 
     return usuarioId;
