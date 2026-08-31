@@ -1,19 +1,21 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../data/datasources/local/detalle_iperc_local_datasource.dart';
+import '../../../data/datasources/local/matriz_iperc_local_datasource.dart';
+import '../../../data/datasources/local/seguimiento_iperc_local_datasource.dart';
+import '../../../data/models/detalle_iperc_local_model.dart';
 import '../../../data/models/detalle_iperc_model.dart';
+import '../../../data/models/matriz_iperc_local_model.dart';
 import '../../../data/models/matriz_iperc_model.dart';
+import '../../../data/models/seguimiento_iperc_local_model.dart';
 import '../../../data/models/seguimiento_iperc_model.dart';
 import '../../../data/models/usuario_model.dart';
-import '../../../data/models/seguimiento_iperc_local_model.dart';
-import '../../../data/models/matriz_iperc_local_model.dart';
-import '../../../data/models/detalle_iperc_local_model.dart';
-import '../../../data/datasources/local/matriz_iperc_local_datasource.dart';
-import '../../../data/datasources/local/detalle_iperc_local_datasource.dart';
-import '../../../data/datasources/local/seguimiento_iperc_local_datasource.dart';
 import '../../../data/repositories/control_repository.dart';
 import '../../../data/repositories/detalle_iperc_repository.dart';
 import '../../../data/repositories/evaluacion_riesgo_repository.dart';
@@ -23,7 +25,6 @@ import '../../../data/repositories/usuario_repository.dart';
 import '../../../data/services/reporte_dashboard_export_service.dart';
 import '../../../data/services/reporte_especifico_profesional_service.dart';
 import '../../../data/services/reporte_export_service.dart';
-
 import '../controles/controles_screen.dart';
 import '../iperc/matrices_iperc_screen.dart';
 import '../mapas_riesgo/mapas_riesgo_screen.dart';
@@ -31,16 +32,17 @@ import '../matriz_riesgo/matriz_riesgo_screen.dart';
 import '../seguimientos_iperc/seguimientos_iperc_screen.dart';
 
 /// ===============================================================
-/// REPORTES SST/IPERC - DASHBOARD EJECUTIVO
+/// REPORTES SST/IPERC - SST EDURISK
 /// ===============================================================
 ///
-/// La parte superior funciona como vista previa interactiva.
-/// Debajo se conservan los reportes específicos PDF / Excel.
-///
-/// El informe ejecutivo permite:
-/// - A4 vertical.
-/// - A4 horizontal.
-/// - Mixto: dashboard vertical + tablas horizontales.
+/// Pantalla armonizada con la identidad visual SST EduRisk:
+/// - Azul como color principal.
+/// - Fondo claro.
+/// - Tarjetas blancas.
+/// - Verde, amarillo, naranja y rojo solo para estados/riesgos.
+/// - Gráfico lineal con datos reales.
+/// - Gráfico circular de distribución de riesgos.
+/// - Funciona con información híbrida: backend + SQLite.
 /// ===============================================================
 class ReportesScreen extends StatefulWidget {
   const ReportesScreen({required this.rol, super.key});
@@ -52,6 +54,10 @@ class ReportesScreen extends StatefulWidget {
 }
 
 class _ReportesScreenState extends State<ReportesScreen> {
+  // =============================================================
+  // REPOSITORIOS Y DATASOURCES
+  // =============================================================
+
   final MatrizIpercRepository _matrizRepository = MatrizIpercRepository();
 
   final DetalleIpercRepository _detalleRepository = DetalleIpercRepository();
@@ -63,13 +69,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
   final UsuarioRepository _usuarioRepository = UsuarioRepository();
 
-  final Map<int, String> _nombresUsuarios = <int, String>{};
+  final EvaluacionRiesgoRepository _evaluacionRepository =
+      EvaluacionRiesgoRepository();
+
+  final MatrizIpercLocalDatasource _matrizLocalDatasource =
+      MatrizIpercLocalDatasource();
+
+  final DetalleIpercLocalDatasource _detalleLocalDatasource =
+      DetalleIpercLocalDatasource();
 
   final SeguimientoIpercLocalDatasource _seguimientoLocalDatasource =
       SeguimientoIpercLocalDatasource();
-
-  final EvaluacionRiesgoRepository _evaluacionRepository =
-      EvaluacionRiesgoRepository();
 
   final ReporteExportService _reporteExportService = ReporteExportService();
 
@@ -79,33 +89,44 @@ class _ReportesScreenState extends State<ReportesScreen> {
   final ReporteEspecificoProfesionalService _reporteProfesionalService =
       ReporteEspecificoProfesionalService();
 
-  final MatrizIpercLocalDatasource _matrizLocalDatasource =
-      MatrizIpercLocalDatasource();
+  final Map<int, String> _nombresUsuarios = <int, String>{};
 
-  final DetalleIpercLocalDatasource _detalleLocalDatasource =
-      DetalleIpercLocalDatasource();
+  // =============================================================
+  // ESTADO
+  // =============================================================
 
   bool _cargando = true;
   String? _error;
 
   List<MatrizIpercModel> _matrices = <MatrizIpercModel>[];
-
   List<DetalleIpercModel> _detalles = <DetalleIpercModel>[];
+  List<SeguimientoIpercModel> _seguimientosReporte = <SeguimientoIpercModel>[];
 
   int _totalSeguimientos = 0;
   int _seguimientosVerificados = 0;
   double _avancePromedioSeguimientos = 0;
   int _seguimientosPendientesSincronizar = 0;
 
-  List<SeguimientoIpercModel> _seguimientosReporte = <SeguimientoIpercModel>[];
-
   ReportePdfFormato _formato = ReportePdfFormato.mixto;
+
+  // =============================================================
+  // COLORES DE RIESGO
+  // =============================================================
+
+  static const Color _riesgoBajo = AppColors.green;
+  static const Color _riesgoMedio = AppColors.yellow;
+  static const Color _riesgoAlto = Color(0xFFF28C28);
+  static const Color _riesgoCritico = AppColors.riskOrange;
 
   @override
   void initState() {
     super.initState();
     _cargarDashboard();
   }
+
+  // =============================================================
+  // CARGA HÍBRIDA: MATRICES
+  // =============================================================
 
   Future<List<MatrizIpercModel>> _cargarMatricesHibridas() async {
     final Map<String, MatrizIpercModel> datos = <String, MatrizIpercModel>{};
@@ -114,10 +135,12 @@ class _ReportesScreenState extends State<ReportesScreen> {
       final List<MatrizIpercModel> remotas = await _matrizRepository
           .obtenerMatrices();
 
-      for (final MatrizIpercModel m in remotas) {
-        datos['S:${m.id}'] = m;
+      for (final MatrizIpercModel matriz in remotas) {
+        datos['S:${matriz.id}'] = matriz;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Si no hay backend, se continúa con SQLite.
+    }
 
     try {
       final List<MatrizIpercLocalModel> locales = await _matrizLocalDatasource
@@ -161,7 +184,9 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
         datos[key] = convertido;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Si SQLite falla, se conserva lo remoto.
+    }
 
     final List<MatrizIpercModel> lista = datos.values.toList();
 
@@ -172,6 +197,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
     return lista;
   }
 
+  // =============================================================
+  // CARGA HÍBRIDA: DETALLES
+  // =============================================================
+
   Future<List<DetalleIpercModel>> _cargarDetallesHibridos() async {
     final Map<String, DetalleIpercModel> datos = <String, DetalleIpercModel>{};
 
@@ -179,18 +208,20 @@ class _ReportesScreenState extends State<ReportesScreen> {
       final List<DetalleIpercModel> remotos = await _detalleRepository
           .obtenerTodos();
 
-      for (final DetalleIpercModel d in remotos) {
-        datos['S:${d.id}'] = d;
+      for (final DetalleIpercModel detalle in remotos) {
+        datos['S:${detalle.id}'] = detalle;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Se continúa con SQLite.
+    }
 
     final Map<String, MatrizIpercLocalModel> matricesLocales =
         <String, MatrizIpercLocalModel>{};
 
     try {
-      for (final MatrizIpercLocalModel m
+      for (final MatrizIpercLocalModel matriz
           in await _matrizLocalDatasource.getAll()) {
-        matricesLocales[m.idLocal] = m;
+        matricesLocales[matriz.idLocal] = matriz;
       }
 
       final List<DetalleIpercLocalModel> locales = await _detalleLocalDatasource
@@ -266,12 +297,12 @@ class _ReportesScreenState extends State<ReportesScreen> {
           evaluacionResidualId: local.evaluacionResidualId,
           evaluacionResidual: residual,
           controlIds: local.controlIds
-              .map((e) => int.tryParse(e) ?? 0)
-              .where((e) => e > 0)
+              .map((String e) => int.tryParse(e) ?? 0)
+              .where((int e) => e > 0)
               .toList(),
           equipoProteccionIds: local.equipoProteccionIds
-              .map((e) => int.tryParse(e) ?? 0)
-              .where((e) => e > 0)
+              .map((String e) => int.tryParse(e) ?? 0)
+              .where((int e) => e > 0)
               .toList(),
           responsableImplementacionId: int.tryParse(
             local.responsableImplementacionId ?? '',
@@ -288,60 +319,17 @@ class _ReportesScreenState extends State<ReportesScreen> {
 
         datos[key] = convertido;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Se conserva lo obtenido del servidor.
+    }
 
     return datos.values.toList();
   }
 
-  Future<void> _cargarDashboard() async {
-    setState(() {
-      _cargando = true;
-      _error = null;
-    });
+  // =============================================================
+  // CARGA HÍBRIDA: SEGUIMIENTOS
+  // =============================================================
 
-    try {
-      final List<MatrizIpercModel> matrices = await _cargarMatricesHibridas();
-
-      final List<DetalleIpercModel> detalles = await _cargarDetallesHibridos();
-
-      final _SeguimientosReporteData seguimientoData =
-          await _cargarSeguimientosCombinados();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _matrices = matrices;
-        _detalles = detalles;
-        _seguimientosReporte = seguimientoData.seguimientos;
-        _totalSeguimientos = seguimientoData.seguimientos.length;
-        _seguimientosVerificados = seguimientoData.seguimientos
-            .where((SeguimientoIpercModel e) => e.verificado)
-            .length;
-        _avancePromedioSeguimientos = seguimientoData.avancePromedio;
-        _seguimientosPendientesSincronizar =
-            seguimientoData.pendientesSincronizar;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _error = _mensajeError(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _cargando = false;
-        });
-      }
-    }
-  }
-
-  /// Carga el catálogo de usuarios para mostrar nombres reales
-  /// en la columna Responsable del reporte.
   Future<void> _cargarNombresUsuarios() async {
     if (_nombresUsuarios.isNotEmpty) {
       return;
@@ -359,8 +347,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         }
       }
     } catch (_) {
-      // Si estamos offline, se utiliza usuarioNombre guardado
-      // dentro del propio seguimiento local/remoto.
+      // Offline: se usa el nombre almacenado en cada seguimiento.
     }
   }
 
@@ -406,10 +393,6 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  /// Combina servidor + SQLite evitando duplicados.
-  ///
-  /// Si un seguimiento local ya tiene id_servidor, reemplaza al remoto
-  /// porque puede contener un cambio offline mas reciente.
   Future<_SeguimientosReporteData> _cargarSeguimientosCombinados() async {
     await _cargarNombresUsuarios();
 
@@ -424,7 +407,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         unificados['S:${item.id}'] = _seguimientoConNombre(item);
       }
     } catch (_) {
-      // El reporte puede continuar usando SQLite.
+      // El reporte puede continuar con SQLite.
     }
 
     int pendientesSincronizar = 0;
@@ -464,7 +447,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
         );
       }
     } catch (_) {
-      // Si SQLite no esta disponible, se conserva lo obtenido del servidor.
+      // Se conserva lo remoto.
     }
 
     final List<SeguimientoIpercModel> lista = unificados.values.toList()
@@ -491,6 +474,64 @@ class _ReportesScreenState extends State<ReportesScreen> {
       pendientesSincronizar: pendientesSincronizar,
     );
   }
+
+  // =============================================================
+  // CARGA PRINCIPAL
+  // =============================================================
+
+  Future<void> _cargarDashboard() async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+
+    try {
+      final List<MatrizIpercModel> matrices = await _cargarMatricesHibridas();
+
+      final List<DetalleIpercModel> detalles = await _cargarDetallesHibridos();
+
+      final _SeguimientosReporteData seguimientos =
+          await _cargarSeguimientosCombinados();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _matrices = matrices;
+        _detalles = detalles;
+        _seguimientosReporte = seguimientos.seguimientos;
+        _totalSeguimientos = seguimientos.seguimientos.length;
+        _seguimientosVerificados = seguimientos.seguimientos
+            .where((SeguimientoIpercModel e) => e.verificado)
+            .length;
+        _avancePromedioSeguimientos = seguimientos.avancePromedio;
+        _seguimientosPendientesSincronizar = seguimientos.pendientesSincronizar;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _error = _mensajeError(error);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargando = false;
+        });
+      }
+    }
+  }
+
+  // =============================================================
+  // RESUMEN DEL DASHBOARD
+  // =============================================================
 
   _DashboardResumen get _resumen {
     int bajos = 0;
@@ -563,13 +604,20 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // INFORME EJECUTIVO
+  // =============================================================
+
   Future<Uint8List> _generarEjecutivo() {
     return _dashboardExportService.generarInformeEjecutivo(
       matrices: _matrices,
       detalles: _detalles,
+      seguimientos: _seguimientosReporte,
       formato: _formato,
       totalSeguimientos: _totalSeguimientos,
       seguimientosVerificados: _seguimientosVerificados,
+      avancePromedioSeguimientos: _avancePromedioSeguimientos,
+      seguimientosPendientesSincronizar: _seguimientosPendientesSincronizar,
     );
   }
 
@@ -601,12 +649,15 @@ class _ReportesScreenState extends State<ReportesScreen> {
       );
     } catch (error) {
       _mensaje(
-        'No se pudo generar el informe: '
-        '${_mensajeError(error)}',
+        'No se pudo generar el informe: ${_mensajeError(error)}',
         error: true,
       );
     }
   }
+
+  // =============================================================
+  // EXPORTACIONES ESPECÍFICAS
+  // =============================================================
 
   Future<void> _exportarMatricesPdf() async {
     try {
@@ -806,59 +857,76 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // BUILD
+  // =============================================================
+
   @override
   Widget build(BuildContext context) {
     final _DashboardResumen resumen = _resumen;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030812),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Reportes SST/IPERC'),
-        backgroundColor: const Color(0xFF071120),
+        backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: <Widget>[
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _cargando ? null : _cargarDashboard,
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primaryBright),
+            )
           : RefreshIndicator(
+              color: AppColors.primary,
               onRefresh: _cargarDashboard,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 30),
                 children: <Widget>[
-                  if (_error != null) _errorCard(_error!),
+                  if (_error != null) ...<Widget>[
+                    _errorCard(_error!),
+                    const SizedBox(height: 14),
+                  ],
 
                   _heroDashboard(resumen),
-                  const SizedBox(height: 14),
-                  _selectorFormato(),
-                  const SizedBox(height: 14),
-                  _gridIndicadores(resumen),
-                  const SizedBox(height: 14),
-                  _distribucionRiesgos(resumen),
-                  const SizedBox(height: 14),
-                  _comparacionRiesgo(resumen),
-                  const SizedBox(height: 14),
-                  _rankingRiesgos(),
-                  const SizedBox(height: 14),
-                  _seguimientosCard(resumen),
-                  const SizedBox(height: 18),
-                  _accionesEjecutivo(),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 16),
 
-                  const Text(
-                    'Reportes específicos',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  _selectorFormato(),
+                  const SizedBox(height: 16),
+
+                  _gridIndicadores(resumen),
+                  const SizedBox(height: 16),
+
+                  _graficosDashboard(resumen),
+                  const SizedBox(height: 16),
+
+                  _distribucionRiesgos(resumen),
+                  const SizedBox(height: 16),
+
+                  _comparacionRiesgo(resumen),
+                  const SizedBox(height: 16),
+
+                  _rankingRiesgos(),
+                  const SizedBox(height: 16),
+
+                  _seguimientosCard(resumen),
+                  const SizedBox(height: 16),
+
+                  _accionesEjecutivo(),
+                  const SizedBox(height: 30),
+
+                  _tituloSeccion(
+                    icon: Icons.folder_copy_outlined,
+                    titulo: 'Reportes específicos',
+                    subtitulo: 'Consulta, genera PDF o exporta a Excel.',
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
 
                   _reporteCard(
                     icon: Icons.assignment_outlined,
@@ -929,59 +997,120 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // HERO
+  // =============================================================
+
   Widget _heroDashboard(_DashboardResumen r) {
-    return _panel(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[AppColors.primary, AppColors.primaryBright],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.18),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: <Widget>[
               Container(
-                width: 48,
-                height: 48,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: <Color>[Color(0xFF2563EB), Color(0xFF6D5DFC)],
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.20),
                   ),
-                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
-                  Icons.health_and_safety_outlined,
+                  Icons.analytics_outlined,
                   color: Colors.white,
+                  size: 28,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(
-                      'Dashboard SST / IPERC',
+                      'Reporte general SST / IPERC',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Resumen ejecutivo de riesgos',
-                      style: TextStyle(color: Color(0xFF91A4C2)),
+                      'Resumen ejecutivo de riesgos y seguimientos',
+                      style: TextStyle(
+                        color: Color(0xFFE4EEFF),
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          _miniLineChart(),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _heroChip(
+                icon: Icons.dashboard_outlined,
+                text: '${r.totalMatrices} matrices',
+              ),
+              _heroChip(
+                icon: Icons.warning_amber_rounded,
+                text: '${r.totalRiesgos} riesgos',
+              ),
+              _heroChip(
+                icon: Icons.fact_check_outlined,
+                text: '${r.totalSeguimientos} seguimientos',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroChip({required IconData icon, required String text}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: Colors.white, size: 16),
+          const SizedBox(width: 6),
           Text(
-            '${r.totalMatrices} matrices · '
-            '${r.totalRiesgos} riesgos evaluados',
+            text,
             style: const TextStyle(
-              color: Color(0xFF9CB2D2),
-              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -989,17 +1118,46 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // SELECTOR DE FORMATO
+  // =============================================================
+
   Widget _selectorFormato() {
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Formato del informe ejecutivo',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          _panelHeader(
+            icon: Icons.description_outlined,
+            title: 'Formato del informe ejecutivo',
+            subtitle: 'El formato seleccionado se utilizará al generar el PDF.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           SegmentedButton<ReportePdfFormato>(
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              foregroundColor: WidgetStateProperty.resolveWith<Color>((
+                Set<WidgetState> states,
+              ) {
+                if (states.contains(WidgetState.selected)) {
+                  return Colors.white;
+                }
+
+                return AppColors.primary;
+              }),
+              backgroundColor: WidgetStateProperty.resolveWith<Color?>((
+                Set<WidgetState> states,
+              ) {
+                if (states.contains(WidgetState.selected)) {
+                  return AppColors.primary;
+                }
+
+                return AppColors.surface;
+              }),
+              side: WidgetStateProperty.all(
+                const BorderSide(color: AppColors.border),
+              ),
+            ),
             segments: const <ButtonSegment<ReportePdfFormato>>[
               ButtonSegment<ReportePdfFormato>(
                 value: ReportePdfFormato.vertical,
@@ -1009,7 +1167,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
               ButtonSegment<ReportePdfFormato>(
                 value: ReportePdfFormato.horizontal,
                 icon: Icon(Icons.stay_current_landscape),
-                label: Text('Horizontal'),
+                label: Text('Horiz.'),
               ),
               ButtonSegment<ReportePdfFormato>(
                 value: ReportePdfFormato.mixto,
@@ -1029,83 +1187,296 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // INDICADORES
+  // =============================================================
+
   Widget _gridIndicadores(_DashboardResumen r) {
     final List<_Kpi> items = <_Kpi>[
+      _Kpi(
+        'Matrices',
+        '${r.totalMatrices}',
+        Icons.dashboard_customize_outlined,
+        AppColors.primaryBright,
+      ),
       _Kpi(
         'Riesgos',
         '${r.totalRiesgos}',
         Icons.warning_amber_rounded,
-        const Color(0xFF579BFF),
-      ),
-      _Kpi(
-        'Críticos',
-        '${r.criticos}',
-        Icons.error_outline,
-        const Color(0xFFFF526E),
+        _riesgoAlto,
       ),
       _Kpi(
         'Controlados',
         '${r.controlados}',
         Icons.verified_outlined,
-        const Color(0xFF4BD7A5),
+        AppColors.green,
       ),
       _Kpi(
-        'Pendientes',
-        '${r.pendientes}',
-        Icons.pending_actions_outlined,
-        const Color(0xFFFFA755),
+        'Críticos',
+        '${r.criticos}',
+        Icons.priority_high_rounded,
+        AppColors.riskOrange,
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 1.9,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemBuilder: (_, int index) {
-        final _Kpi item = items[index];
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final int columnas = constraints.maxWidth >= 760 ? 4 : 2;
 
-        return _panel(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: <Widget>[
-              CircleAvatar(
-                backgroundColor: item.color.withValues(alpha: 0.15),
-                foregroundColor: item.color,
-                child: Icon(item.icon),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      item.value,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      item.label,
-                      style: const TextStyle(color: Color(0xFF9DB0CD)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columnas,
+            mainAxisExtent: 126,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
           ),
+          itemBuilder: (_, int index) {
+            final _Kpi item = items[index];
+
+            return _panel(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: item.color.withValues(alpha: 0.11),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(item.icon, color: item.color, size: 22),
+                  ),
+                  const Spacer(),
+                  Text(
+                    item.value,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 25,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.label,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
   }
+
+  // =============================================================
+  // GRÁFICOS
+  // =============================================================
+
+  Widget _graficosDashboard(_DashboardResumen r) {
+    final List<_GraficoMes> meses = _crearSerieMensual();
+
+    final Widget lineal = _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _panelHeader(
+            icon: Icons.show_chart_rounded,
+            title: 'Evolución mensual',
+            subtitle: 'Matrices IPERC y seguimientos de los últimos 6 meses.',
+          ),
+          const SizedBox(height: 14),
+          const Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: <Widget>[
+              _ChartLegendDot(
+                color: AppColors.primaryBright,
+                label: 'Matrices',
+              ),
+              _ChartLegendDot(color: AppColors.green, label: 'Seguimientos'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 150,
+            width: double.infinity,
+            child: CustomPaint(painter: _MonthlyLinePainter(datos: meses)),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: meses
+                .map(
+                  (_GraficoMes mes) => Expanded(
+                    child: Text(
+                      mes.etiqueta,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        ],
+      ),
+    );
+
+    final List<int> valores = <int>[r.bajos, r.medios, r.altos, r.criticos];
+
+    const List<Color> colores = <Color>[
+      _riesgoBajo,
+      _riesgoMedio,
+      _riesgoAlto,
+      _riesgoCritico,
+    ];
+
+    final Widget circular = _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _panelHeader(
+            icon: Icons.donut_large_rounded,
+            title: 'Distribución de riesgos',
+            subtitle: 'Participación porcentual por nivel de riesgo.',
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: SizedBox(
+              width: 174,
+              height: 174,
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  CustomPaint(
+                    size: const Size.square(174),
+                    painter: _RiskDonutPainter(
+                      valores: valores,
+                      colores: colores,
+                    ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        '${r.totalRiesgos}',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const Text(
+                        'riesgos',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 14,
+            runSpacing: 10,
+            children: <Widget>[
+              _ChartLegendDot(color: _riesgoBajo, label: 'Bajo ${r.bajos}'),
+              _ChartLegendDot(color: _riesgoMedio, label: 'Medio ${r.medios}'),
+              _ChartLegendDot(color: _riesgoAlto, label: 'Alto ${r.altos}'),
+              _ChartLegendDot(
+                color: _riesgoCritico,
+                label: 'Crítico ${r.criticos}',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        if (constraints.maxWidth >= 760) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: lineal),
+              const SizedBox(width: 14),
+              Expanded(child: circular),
+            ],
+          );
+        }
+
+        return Column(
+          children: <Widget>[lineal, const SizedBox(height: 14), circular],
+        );
+      },
+    );
+  }
+
+  List<_GraficoMes> _crearSerieMensual() {
+    final DateTime ahora = DateTime.now();
+
+    const List<String> nombres = <String>[
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
+
+    return List<_GraficoMes>.generate(6, (int index) {
+      final DateTime mes = DateTime(ahora.year, ahora.month - 5 + index, 1);
+
+      final int matrices = _matrices.where((MatrizIpercModel item) {
+        final DateTime? fecha = item.fechaRegistro ?? item.fechaEvaluacion;
+
+        return fecha != null &&
+            fecha.year == mes.year &&
+            fecha.month == mes.month;
+      }).length;
+
+      final int seguimientos = _seguimientosReporte.where((
+        SeguimientoIpercModel item,
+      ) {
+        final DateTime fecha = item.fechaSeguimiento;
+
+        return fecha.year == mes.year && fecha.month == mes.month;
+      }).length;
+
+      return _GraficoMes(
+        etiqueta: nombres[mes.month - 1],
+        matrices: matrices,
+        seguimientos: seguimientos,
+      );
+    });
+  }
+
+  // =============================================================
+  // DISTRIBUCIÓN EN BARRAS
+  // =============================================================
 
   Widget _distribucionRiesgos(_DashboardResumen r) {
     final int total = r.totalRiesgos == 0 ? 1 : r.totalRiesgos;
@@ -1114,56 +1485,57 @@ class _ReportesScreenState extends State<ReportesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Distribución de riesgos',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          _panelHeader(
+            icon: Icons.stacked_bar_chart_rounded,
+            title: 'Detalle por nivel de riesgo',
+            subtitle: 'Cantidad y proporción de riesgos evaluados.',
           ),
           const SizedBox(height: 16),
-          _nivelBar('Bajo', r.bajos, total, const Color(0xFF40D69D)),
-          _nivelBar('Medio', r.medios, total, const Color(0xFFFFD054)),
-          _nivelBar('Alto', r.altos, total, const Color(0xFFFF9650)),
-          _nivelBar('Crítico', r.criticos, total, const Color(0xFFFF506C)),
+          _nivelBar('Bajo', r.bajos, total, _riesgoBajo),
+          _nivelBar('Medio', r.medios, total, _riesgoMedio),
+          _nivelBar('Alto', r.altos, total, _riesgoAlto),
+          _nivelBar('Crítico', r.criticos, total, _riesgoCritico),
         ],
       ),
     );
   }
 
   Widget _nivelBar(String label, int value, int total, Color color) {
-    final double progress = (value / total).clamp(0, 1);
+    final double progress = (value / total).clamp(0, 1).toDouble();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 13),
       child: Row(
         children: <Widget>[
           SizedBox(
             width: 60,
             child: Text(
               label,
-              style: const TextStyle(color: Color(0xFFB8C7DD)),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Expanded(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
-                minHeight: 8,
+                minHeight: 9,
                 value: progress,
-                backgroundColor: const Color(0xFF1A2940),
+                backgroundColor: const Color(0xFFE8EDF5),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 28,
+            width: 34,
             child: Text(
               '$value',
               textAlign: TextAlign.right,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+              style: TextStyle(color: color, fontWeight: FontWeight.w800),
             ),
           ),
         ],
@@ -1171,18 +1543,19 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // EFECTIVIDAD
+  // =============================================================
+
   Widget _comparacionRiesgo(_DashboardResumen r) {
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Efectividad de controles',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          _panelHeader(
+            icon: Icons.health_and_safety_outlined,
+            title: 'Efectividad de controles',
+            subtitle: 'Comparación del riesgo inicial frente al residual.',
           ),
           const SizedBox(height: 14),
           Row(
@@ -1191,7 +1564,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 child: _metric(
                   'Inicial',
                   r.promedioInicial.toStringAsFixed(1),
-                  const Color(0xFFFF885E),
+                  _riesgoAlto,
+                  Icons.trending_up_rounded,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1199,7 +1573,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 child: _metric(
                   'Residual',
                   r.promedioResidual.toStringAsFixed(1),
-                  const Color(0xFF5AA9FF),
+                  AppColors.primaryBright,
+                  Icons.trending_down_rounded,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1207,7 +1582,8 @@ class _ReportesScreenState extends State<ReportesScreen> {
                 child: _metric(
                   'Reducción',
                   '${r.reduccion.toStringAsFixed(0)}%',
-                  const Color(0xFF54DDAE),
+                  AppColors.green,
+                  Icons.verified_outlined,
                 ),
               ),
             ],
@@ -1217,33 +1593,44 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  Widget _metric(String label, String value, Color color) {
+  Widget _metric(String label, String value, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1B30),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1D3351)),
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
       ),
       child: Column(
         children: <Widget>[
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 7),
           Text(
             value,
             style: TextStyle(
               color: color,
               fontSize: 20,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 3),
           Text(
             label,
-            style: const TextStyle(color: Color(0xFF93A8C7), fontSize: 12),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
     );
   }
+
+  // =============================================================
+  // RANKING
+  // =============================================================
 
   Widget _rankingRiesgos() {
     final List<DetalleIpercModel> top = List<DetalleIpercModel>.from(_detalles)
@@ -1256,68 +1643,94 @@ class _ReportesScreenState extends State<ReportesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Riesgos prioritarios',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          _panelHeader(
+            icon: Icons.priority_high_rounded,
+            title: 'Riesgos prioritarios',
+            subtitle: 'Los riesgos con mayor valoración actual.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (top.isEmpty)
-            const Text(
-              'No hay riesgos registrados.',
-              style: TextStyle(color: Color(0xFF93A8C7)),
+            const _EmptyReportMessage(
+              icon: Icons.shield_outlined,
+              text: 'No hay riesgos registrados.',
             )
           else
             ...top.take(5).toList().asMap().entries.map((
               MapEntry<int, DetalleIpercModel> entry,
             ) {
-              final DetalleIpercModel d = entry.value;
+              final DetalleIpercModel detalle = entry.value;
 
-              final Color color = _riskColor(d.valorRiesgoActual);
+              final Color color = _riskColor(detalle.valorRiesgoActual);
 
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 9),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
                 child: Row(
                   children: <Widget>[
-                    CircleAvatar(
-                      radius: 17,
-                      backgroundColor: color.withValues(alpha: 0.18),
-                      foregroundColor: color,
-                      child: Text('${entry.key + 1}'),
+                    Container(
+                      width: 38,
+                      height: 38,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.11),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${entry.key + 1}',
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 11),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
                           Text(
-                            d.peligroVisible,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            d.tarea,
+                            detalle.peligroVisible,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Color(0xFF8195B3),
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            detalle.tarea,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
                               fontSize: 12,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '${d.valorRiesgoActual}',
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${detalle.valorRiesgoActual}',
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ],
@@ -1329,6 +1742,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // SEGUIMIENTOS
+  // =============================================================
+
   Widget _seguimientosCard(_DashboardResumen r) {
     final double progress = r.totalSeguimientos == 0
         ? 0
@@ -1338,28 +1755,29 @@ class _ReportesScreenState extends State<ReportesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Seguimientos IPERC',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          _panelHeader(
+            icon: Icons.fact_check_outlined,
+            title: 'Seguimientos IPERC',
+            subtitle: 'Avance y estado de verificación.',
           ),
           const SizedBox(height: 14),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Text(
-                '${r.seguimientosVerificados} de '
-                '${r.totalSeguimientos} verificados',
-                style: const TextStyle(color: Color(0xFFB8C7DD)),
+              Expanded(
+                child: Text(
+                  '${r.seguimientosVerificados} de '
+                  '${r.totalSeguimientos} verificados',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               Text(
                 '${(progress * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(
-                  color: Color(0xFF50D9A8),
-                  fontWeight: FontWeight.bold,
+                  color: AppColors.green,
+                  fontWeight: FontWeight.w900,
                   fontSize: 18,
                 ),
               ),
@@ -1367,14 +1785,62 @@ class _ReportesScreenState extends State<ReportesScreen> {
           ),
           const SizedBox(height: 10),
           ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 10,
-              backgroundColor: const Color(0xFF1B2940),
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF50D9A8),
+              backgroundColor: const Color(0xFFE8EDF5),
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.green),
+            ),
+          ),
+          const SizedBox(height: 13),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _statusPill(
+                icon: Icons.percent_rounded,
+                label:
+                    'Avance ${r.avancePromedioSeguimientos.toStringAsFixed(0)}%',
+                color: AppColors.primaryBright,
               ),
+              _statusPill(
+                icon: Icons.cloud_upload_outlined,
+                label: '${r.seguimientosPendientesSincronizar} por sincronizar',
+                color: r.seguimientosPendientesSincronizar > 0
+                    ? _riesgoAlto
+                    : AppColors.green,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1382,33 +1848,50 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // ACCIONES DEL INFORME EJECUTIVO
+  // =============================================================
+
   Widget _accionesEjecutivo() {
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Text(
-            'Informe ejecutivo',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
+          _panelHeader(
+            icon: Icons.file_present_outlined,
+            title: 'Informe ejecutivo',
+            subtitle: 'Visualiza o genera el reporte general SST/IPERC.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: <Widget>[
               Expanded(
                 child: FilledButton.icon(
                   onPressed: _abrirVistaPreviaPdf,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                   icon: const Icon(Icons.visibility_outlined),
                   label: const Text('Vista previa'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: FilledButton.tonalIcon(
+                child: OutlinedButton.icon(
                   onPressed: _compartirInformeEjecutivo,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                   icon: const Icon(Icons.picture_as_pdf_outlined),
                   label: const Text('Generar PDF'),
                 ),
@@ -1419,6 +1902,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
       ),
     );
   }
+
+  // =============================================================
+  // REPORTES ESPECÍFICOS
+  // =============================================================
 
   Widget _reporteCard({
     required IconData icon,
@@ -1436,43 +1923,65 @@ class _ReportesScreenState extends State<ReportesScreen> {
           children: <Widget>[
             Row(
               children: <Widget>[
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF102D55),
-                  foregroundColor: const Color(0xFF70B3FF),
-                  child: Icon(icon),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryBright.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(icon, color: AppColors.primary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     title,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(description, style: const TextStyle(color: Color(0xFF95A9C8))),
-            const SizedBox(height: 13),
+            const SizedBox(height: 9),
+            Text(
+              description,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
                 OutlinedButton.icon(
                   onPressed: onView,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.border),
+                  ),
                   icon: const Icon(Icons.visibility_outlined),
                   label: const Text('Ver'),
                 ),
                 FilledButton.icon(
                   onPressed: onPdf,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.picture_as_pdf_outlined),
                   label: const Text('PDF'),
                 ),
                 FilledButton.tonalIcon(
                   onPressed: onExcel,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8F5EC),
+                    foregroundColor: AppColors.green,
+                  ),
                   icon: const Icon(Icons.table_view_outlined),
                   label: const Text('Excel'),
                 ),
@@ -1484,6 +1993,101 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
+  // =============================================================
+  // COMPONENTES VISUALES
+  // =============================================================
+
+  Widget _tituloSeccion({
+    required IconData icon,
+    required String titulo,
+    required String subtitulo,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppColors.primaryBright.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 22),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                titulo,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitulo,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _panelHeader({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primaryBright.withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 21),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.25,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _panel({
     required Widget child,
     EdgeInsetsGeometry padding = const EdgeInsets.all(16),
@@ -1491,14 +2095,14 @@ class _ReportesScreenState extends State<ReportesScreen> {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: const Color(0xFF081421),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF19304D)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
+            color: AppColors.primary.withValues(alpha: 0.055),
             blurRadius: 14,
-            offset: const Offset(0, 7),
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -1506,43 +2110,43 @@ class _ReportesScreenState extends State<ReportesScreen> {
     );
   }
 
-  Widget _miniLineChart() {
-    return SizedBox(
-      height: 72,
-      width: double.infinity,
-      child: CustomPaint(painter: _DashboardLinePainter()),
-    );
-  }
-
   Widget _errorCard(String message) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF35121B),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF7A263B)),
-        ),
-        child: Text(message, style: const TextStyle(color: Color(0xFFFFA4B5))),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.riskOrange.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.riskOrange.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.error_outline, color: AppColors.riskOrange),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.textPrimary),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Color _riskColor(int value) {
     if (value <= 4) {
-      return const Color(0xFF3ED69D);
+      return _riesgoBajo;
     }
 
     if (value <= 9) {
-      return const Color(0xFFFFD054);
+      return _riesgoMedio;
     }
 
     if (value <= 16) {
-      return const Color(0xFFFF9650);
+      return _riesgoAlto;
     }
 
-    return const Color(0xFFFF506C);
+    return _riesgoCritico;
   }
 
   void _mensaje(String text, {bool error = false}) {
@@ -1554,7 +2158,7 @@ class _ReportesScreenState extends State<ReportesScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: error ? Colors.red.shade700 : null,
+          backgroundColor: error ? AppColors.riskOrange : AppColors.navyDark,
           content: Text(text),
         ),
       );
@@ -1565,6 +2169,10 @@ class _ReportesScreenState extends State<ReportesScreen> {
   }
 }
 
+// ===============================================================
+// VISTA PREVIA PDF
+// ===============================================================
+
 class _VistaPreviaPdfScreen extends StatelessWidget {
   const _VistaPreviaPdfScreen({required this.titulo, required this.buildPdf});
 
@@ -1574,7 +2182,12 @@ class _VistaPreviaPdfScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(titulo)),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(titulo),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
       body: PdfPreview(
         build: (_) => buildPdf(),
         canChangePageFormat: false,
@@ -1586,6 +2199,10 @@ class _VistaPreviaPdfScreen extends StatelessWidget {
     );
   }
 }
+
+// ===============================================================
+// MODELOS AUXILIARES
+// ===============================================================
 
 class _SeguimientosReporteData {
   const _SeguimientosReporteData({
@@ -1620,15 +2237,19 @@ class _DashboardResumen {
 
   final int totalMatrices;
   final int totalRiesgos;
+
   final int bajos;
   final int medios;
   final int altos;
   final int criticos;
+
   final int controlados;
   final int pendientes;
+
   final double promedioInicial;
   final double promedioResidual;
   final double reduccion;
+
   final int totalSeguimientos;
   final int seguimientosVerificados;
   final double avancePromedioSeguimientos;
@@ -1644,60 +2265,235 @@ class _Kpi {
   final Color color;
 }
 
-class _DashboardLinePainter extends CustomPainter {
+class _GraficoMes {
+  const _GraficoMes({
+    required this.etiqueta,
+    required this.matrices,
+    required this.seguimientos,
+  });
+
+  final String etiqueta;
+  final int matrices;
+  final int seguimientos;
+}
+
+// ===============================================================
+// LEYENDA
+// ===============================================================
+
+class _ChartLegendDot extends StatelessWidget {
+  const _ChartLegendDot({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyReportMessage extends StatelessWidget {
+  const _EmptyReportMessage({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: <Widget>[
+          Icon(icon, color: AppColors.textSecondary, size: 30),
+          const SizedBox(height: 8),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===============================================================
+// GRÁFICO LINEAL
+// ===============================================================
+
+class _MonthlyLinePainter extends CustomPainter {
+  const _MonthlyLinePainter({required this.datos});
+
+  final List<_GraficoMes> datos;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final Paint glow = Paint()
-      ..color = const Color(0xFF2379FF).withValues(alpha: 0.18)
-      ..strokeWidth = 10
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+    if (datos.isEmpty) {
+      return;
+    }
 
-    final Paint line = Paint()
-      ..shader = const LinearGradient(
-        colors: <Color>[
-          Color(0xFF2563EB),
-          Color(0xFF45C7FF),
-          Color(0xFF6D5DFC),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
+    const double top = 10;
+    const double bottom = 10;
+    const double left = 8;
+    const double right = 8;
 
-    final Path path = Path()
-      ..moveTo(0, size.height * 0.75)
-      ..cubicTo(
-        size.width * 0.15,
-        size.height * 0.65,
-        size.width * 0.18,
-        size.height * 0.35,
-        size.width * 0.34,
-        size.height * 0.48,
-      )
-      ..cubicTo(
-        size.width * 0.48,
-        size.height * 0.62,
-        size.width * 0.55,
-        size.height * 0.15,
-        size.width * 0.70,
-        size.height * 0.34,
-      )
-      ..cubicTo(
-        size.width * 0.82,
-        size.height * 0.50,
-        size.width * 0.88,
-        size.height * 0.20,
-        size.width,
-        size.height * 0.10,
-      );
+    final double ancho = math.max(1, size.width - left - right);
 
-    canvas.drawPath(path, glow);
-    canvas.drawPath(path, line);
+    final double alto = math.max(1, size.height - top - bottom);
+
+    int maximo = 1;
+
+    for (final _GraficoMes mes in datos) {
+      maximo = math.max(maximo, math.max(mes.matrices, mes.seguimientos));
+    }
+
+    final Paint grid = Paint()
+      ..color = AppColors.border.withValues(alpha: 0.75)
+      ..strokeWidth = 1;
+
+    for (int i = 0; i <= 4; i++) {
+      final double y = top + (alto * i / 4);
+
+      canvas.drawLine(Offset(left, y), Offset(left + ancho, y), grid);
+    }
+
+    void dibujarSerie(int Function(_GraficoMes mes) valor, Color color) {
+      final Paint linea = Paint()
+        ..color = color
+        ..strokeWidth = 2.8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+
+      final Paint punto = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+
+      final Paint centro = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+
+      final Path path = Path();
+
+      for (int i = 0; i < datos.length; i++) {
+        final double x = datos.length == 1
+            ? left + ancho / 2
+            : left + ancho * i / (datos.length - 1);
+
+        final double ratio = valor(datos[i]) / maximo;
+
+        final double y = top + alto - (alto * ratio);
+
+        if (i == 0) {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+
+        canvas.drawCircle(Offset(x, y), 4.1, punto);
+
+        canvas.drawCircle(Offset(x, y), 1.8, centro);
+      }
+
+      canvas.drawPath(path, linea);
+    }
+
+    dibujarSerie((_GraficoMes mes) => mes.matrices, AppColors.primaryBright);
+
+    dibujarSerie((_GraficoMes mes) => mes.seguimientos, AppColors.green);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
+  bool shouldRepaint(covariant _MonthlyLinePainter oldDelegate) {
+    return oldDelegate.datos != datos;
+  }
+}
+
+// ===============================================================
+// GRÁFICO CIRCULAR
+// ===============================================================
+
+class _RiskDonutPainter extends CustomPainter {
+  const _RiskDonutPainter({required this.valores, required this.colores});
+
+  final List<int> valores;
+  final List<Color> colores;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final int total = valores.fold<int>(
+      0,
+      (int anterior, int actual) => anterior + actual,
+    );
+
+    final double lado = math.min(size.width, size.height);
+
+    final Rect rect = Rect.fromCircle(
+      center: Offset(size.width / 2, size.height / 2),
+      radius: lado * 0.37,
+    );
+
+    final Paint fondo = Paint()
+      ..color = const Color(0xFFE8EDF5)
+      ..strokeWidth = lado * 0.14
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawArc(rect, 0, math.pi * 2, false, fondo);
+
+    if (total <= 0) {
+      return;
+    }
+
+    double inicio = -math.pi / 2;
+
+    for (int i = 0; i < valores.length && i < colores.length; i++) {
+      final int valor = valores[i];
+
+      if (valor <= 0) {
+        continue;
+      }
+
+      final double barrido = math.pi * 2 * valor / total;
+
+      final Paint segmento = Paint()
+        ..color = colores[i]
+        ..strokeWidth = lado * 0.14
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.butt;
+
+      canvas.drawArc(rect, inicio, barrido, false, segmento);
+
+      inicio += barrido;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RiskDonutPainter oldDelegate) {
+    return oldDelegate.valores != valores || oldDelegate.colores != colores;
   }
 }

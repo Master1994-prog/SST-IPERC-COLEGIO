@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:pdf/pdf.dart';
@@ -6,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../models/detalle_iperc_model.dart';
 import '../models/matriz_iperc_model.dart';
+import '../models/seguimiento_iperc_model.dart';
 
 /// Formato de pagina para el informe ejecutivo.
 enum ReportePdfFormato { vertical, horizontal, mixto }
@@ -16,11 +18,13 @@ enum ReportePdfFormato { vertical, horizontal, mixto }
 /// Los textos estaticos con acentos usan escapes Unicode.
 /// Esto evita problemas de codificacion al copiar el archivo
 /// desde Windows/PowerShell.
+// PDF_EDURISK_LIGHT_V1
 class ReporteDashboardExportService {
   Future<Uint8List> generarInformeEjecutivo({
     required List<MatrizIpercModel> matrices,
     required List<DetalleIpercModel> detalles,
     required ReportePdfFormato formato,
+    List<SeguimientoIpercModel> seguimientos = const <SeguimientoIpercModel>[],
     int totalSeguimientos = 0,
     int seguimientosVerificados = 0,
     double avancePromedioSeguimientos = 0,
@@ -49,6 +53,8 @@ class ReporteDashboardExportService {
           pageFormat: PdfPageFormat.a4,
           resumen: resumen,
           detalles: detalles,
+          matrices: matrices,
+          seguimientos: seguimientos,
         ),
       );
 
@@ -69,6 +75,8 @@ class ReporteDashboardExportService {
           pageFormat: pageFormat,
           resumen: resumen,
           detalles: detalles,
+          matrices: matrices,
+          seguimientos: seguimientos,
         ),
       );
 
@@ -88,6 +96,8 @@ class ReporteDashboardExportService {
     required PdfPageFormat pageFormat,
     required _ResumenRiesgo resumen,
     required List<DetalleIpercModel> detalles,
+    required List<MatrizIpercModel> matrices,
+    required List<SeguimientoIpercModel> seguimientos,
   }) {
     final bool horizontal = pageFormat.width > pageFormat.height;
 
@@ -96,7 +106,7 @@ class ReporteDashboardExportService {
       margin: pw.EdgeInsets.zero,
       build: (_) {
         return pw.Container(
-          color: const PdfColor.fromInt(0xFF06101F),
+          color: const PdfColor.fromInt(0xFFF6F8FC),
           padding: const pw.EdgeInsets.all(24),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -106,6 +116,13 @@ class ReporteDashboardExportService {
               _tarjetasResumen(resumen),
               pw.SizedBox(height: 12),
 
+              // GRAFICOS_PDF_REPORTE_GENERAL_V1
+              _seccionGraficos(
+                resumen,
+                matrices: matrices,
+                seguimientos: seguimientos,
+              ),
+              pw.SizedBox(height: 10),
               if (horizontal)
                 pw.Expanded(
                   child: pw.Row(
@@ -114,31 +131,23 @@ class ReporteDashboardExportService {
                       pw.Expanded(
                         child: pw.Column(
                           children: <pw.Widget>[
-                            _seccionDistribucion(resumen, barWidth: 260),
-                            pw.SizedBox(height: 10),
                             _seccionComparacion(resumen),
-                          ],
-                        ),
-                      ),
-                      pw.SizedBox(width: 10),
-                      pw.Expanded(
-                        child: pw.Column(
-                          children: <pw.Widget>[
-                            _seccionCriticos(detalles, maxItems: 4),
                             pw.SizedBox(height: 10),
                             _seccionSeguimientos(resumen),
                           ],
                         ),
                       ),
+                      pw.SizedBox(width: 10),
+                      pw.Expanded(
+                        child: _seccionCriticos(detalles, maxItems: 4),
+                      ),
                     ],
                   ),
                 )
               else ...<pw.Widget>[
-                _seccionDistribucion(resumen, barWidth: 250),
-                pw.SizedBox(height: 11),
                 _seccionComparacion(resumen),
                 pw.SizedBox(height: 11),
-                _seccionCriticos(detalles, maxItems: 5),
+                _seccionCriticos(detalles, maxItems: 4),
                 pw.SizedBox(height: 11),
                 _seccionSeguimientos(resumen),
               ],
@@ -215,7 +224,7 @@ class ReporteDashboardExportService {
               fontSize: 7,
             ),
             headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.blueGrey800,
+              color: PdfColor.fromInt(0xFF083F85),
             ),
             cellStyle: const pw.TextStyle(fontSize: 6.4),
             cellAlignment: pw.Alignment.centerLeft,
@@ -259,7 +268,7 @@ class ReporteDashboardExportService {
               fontSize: 7,
             ),
             headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.blueGrey800,
+              color: PdfColor.fromInt(0xFF083F85),
             ),
             cellStyle: const pw.TextStyle(fontSize: 6.1),
             cellAlignment: pw.Alignment.centerLeft,
@@ -274,9 +283,9 @@ class ReporteDashboardExportService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(15),
       decoration: pw.BoxDecoration(
-        color: const PdfColor.fromInt(0xFF0A1830),
+        color: const PdfColor.fromInt(0xFF083F85),
         borderRadius: pw.BorderRadius.circular(10),
-        border: pw.Border.all(color: const PdfColor.fromInt(0xFF214C86)),
+        border: pw.Border.all(color: const PdfColor.fromInt(0xFF0D60D6)),
       ),
       child: pw.Row(
         children: <pw.Widget>[
@@ -296,7 +305,7 @@ class ReporteDashboardExportService {
                 pw.Text(
                   'Dashboard de riesgos, controles y seguimiento',
                   style: const pw.TextStyle(
-                    color: PdfColor.fromInt(0xFF9EB5D5),
+                    color: PdfColor.fromInt(0xFFE6F0FF),
                     fontSize: 8.5,
                   ),
                 ),
@@ -306,7 +315,7 @@ class ReporteDashboardExportService {
           pw.Container(
             padding: const pw.EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: pw.BoxDecoration(
-              color: const PdfColor.fromInt(0xFF10294C),
+              color: const PdfColor.fromInt(0xFF0D60D6),
               borderRadius: pw.BorderRadius.circular(7),
             ),
             child: pw.Text(
@@ -330,7 +339,7 @@ class ReporteDashboardExportService {
           child: _tarjetaDato(
             titulo: 'Riesgos',
             valor: resumen.totalRiesgos.toString(),
-            color: const PdfColor.fromInt(0xFF4B8DFF),
+            color: const PdfColor.fromInt(0xFF0D60D6),
           ),
         ),
         pw.SizedBox(width: 7),
@@ -338,7 +347,7 @@ class ReporteDashboardExportService {
           child: _tarjetaDato(
             titulo: 'Cr\u00EDticos',
             valor: resumen.criticos.toString(),
-            color: const PdfColor.fromInt(0xFFFF4B65),
+            color: const PdfColor.fromInt(0xFFEC490F),
           ),
         ),
         pw.SizedBox(width: 7),
@@ -346,7 +355,7 @@ class ReporteDashboardExportService {
           child: _tarjetaDato(
             titulo: 'Controlados',
             valor: resumen.controlados.toString(),
-            color: const PdfColor.fromInt(0xFF37D39B),
+            color: const PdfColor.fromInt(0xFF1DA041),
           ),
         ),
         pw.SizedBox(width: 7),
@@ -354,7 +363,7 @@ class ReporteDashboardExportService {
           child: _tarjetaDato(
             titulo: 'Pendientes',
             valor: resumen.pendientes.toString(),
-            color: const PdfColor.fromInt(0xFFFFAE57),
+            color: const PdfColor.fromInt(0xFFFEB81C),
           ),
         ),
       ],
@@ -369,9 +378,9 @@ class ReporteDashboardExportService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(11),
       decoration: pw.BoxDecoration(
-        color: const PdfColor.fromInt(0xFF0B172A),
+        color: const PdfColor.fromInt(0xFFFFFFFF),
         borderRadius: pw.BorderRadius.circular(8),
-        border: pw.Border.all(color: const PdfColor.fromInt(0xFF203652)),
+        border: pw.Border.all(color: const PdfColor.fromInt(0xFFD5DCE8)),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -379,7 +388,7 @@ class ReporteDashboardExportService {
           pw.Text(
             valor,
             style: pw.TextStyle(
-              color: PdfColors.white,
+              color: const PdfColor.fromInt(0xFF172033),
               fontSize: 20,
               fontWeight: pw.FontWeight.bold,
             ),
@@ -398,11 +407,313 @@ class ReporteDashboardExportService {
     );
   }
 
+  // GRAFICOS_PDF_REPORTE_GENERAL_V1
+  pw.Widget _seccionGraficos(
+    _ResumenRiesgo resumen, {
+    required List<MatrizIpercModel> matrices,
+    required List<SeguimientoIpercModel> seguimientos,
+  }) {
+    final List<_GraficoMesPdf> meses = _crearSerieMensual(
+      matrices: matrices,
+      seguimientos: seguimientos,
+    );
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: <pw.Widget>[
+        pw.Expanded(
+          child: _panelOscuro(
+            titulo: 'Evoluci\u00F3n mensual',
+            child: pw.SvgImage(
+              svg: _svgGraficoLineal(meses),
+              height: 115,
+              fit: pw.BoxFit.contain,
+            ),
+          ),
+        ),
+        pw.SizedBox(width: 10),
+        pw.Expanded(
+          child: _panelOscuro(
+            titulo: 'Distribuci\u00F3n circular',
+            child: pw.SvgImage(
+              svg: _svgGraficoCircular(resumen),
+              height: 115,
+              fit: pw.BoxFit.contain,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_GraficoMesPdf> _crearSerieMensual({
+    required List<MatrizIpercModel> matrices,
+    required List<SeguimientoIpercModel> seguimientos,
+  }) {
+    final DateTime ahora = DateTime.now();
+
+    const List<String> nombres = <String>[
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
+
+    return List<_GraficoMesPdf>.generate(6, (int index) {
+      final DateTime mes = DateTime(ahora.year, ahora.month - 5 + index, 1);
+
+      final int totalMatrices = matrices.where((MatrizIpercModel item) {
+        final DateTime? fecha = item.fechaRegistro ?? item.fechaEvaluacion;
+
+        return fecha != null &&
+            fecha.year == mes.year &&
+            fecha.month == mes.month;
+      }).length;
+
+      final int totalSeguimientos = seguimientos.where((
+        SeguimientoIpercModel item,
+      ) {
+        final DateTime fecha = item.fechaSeguimiento;
+
+        return fecha.year == mes.year && fecha.month == mes.month;
+      }).length;
+
+      return _GraficoMesPdf(
+        etiqueta: nombres[mes.month - 1],
+        matrices: totalMatrices,
+        seguimientos: totalSeguimientos,
+      );
+    });
+  }
+
+  String _svgGraficoLineal(List<_GraficoMesPdf> datos) {
+    const double width = 330;
+    const double height = 115;
+    const double left = 24;
+    const double right = 8;
+    const double top = 20;
+    const double bottom = 24;
+
+    final double plotWidth = width - left - right;
+    final double plotHeight = height - top - bottom;
+
+    int maximo = 1;
+
+    for (final _GraficoMesPdf mes in datos) {
+      maximo = math.max(maximo, math.max(mes.matrices, mes.seguimientos));
+    }
+
+    String puntos(int Function(_GraficoMesPdf mes) valor) {
+      final List<String> salida = <String>[];
+
+      for (int i = 0; i < datos.length; i++) {
+        final double x = datos.length == 1
+            ? left + plotWidth / 2
+            : left + plotWidth * i / (datos.length - 1);
+
+        final double y =
+            top + plotHeight - (plotHeight * valor(datos[i]) / maximo);
+
+        salida.add('${x.toStringAsFixed(1)},${y.toStringAsFixed(1)}');
+      }
+
+      return salida.join(' ');
+    }
+
+    final StringBuffer svg = StringBuffer()
+      ..writeln(
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'viewBox="0 0 $width $height">',
+      )
+      ..writeln(
+        '<rect width="$width" height="$height" rx="8" fill="#FFFFFF"/>',
+      );
+
+    for (int i = 0; i <= 4; i++) {
+      final double y = top + plotHeight * i / 4;
+
+      svg.writeln(
+        '<line x1="$left" y1="${y.toStringAsFixed(1)}" '
+        'x2="${(left + plotWidth).toStringAsFixed(1)}" '
+        'y2="${y.toStringAsFixed(1)}" '
+        'stroke="#D5DCE8" stroke-width="0.8"/>',
+      );
+    }
+
+    svg
+      ..writeln(
+        '<circle cx="30" cy="10" r="3" fill="#0D60D6"/>'
+        '<text x="37" y="13" fill="#5E687A" '
+        'font-size="8">Matrices</text>',
+      )
+      ..writeln(
+        '<circle cx="100" cy="10" r="3" fill="#1DA041"/>'
+        '<text x="107" y="13" fill="#5E687A" '
+        'font-size="8">Seguimientos</text>',
+      )
+      ..writeln(
+        '<polyline fill="none" stroke="#0D60D6" stroke-width="2.4" '
+        'stroke-linecap="round" stroke-linejoin="round" '
+        'points="${puntos((_GraficoMesPdf e) => e.matrices)}"/>',
+      )
+      ..writeln(
+        '<polyline fill="none" stroke="#1DA041" stroke-width="2.4" '
+        'stroke-linecap="round" stroke-linejoin="round" '
+        'points="${puntos((_GraficoMesPdf e) => e.seguimientos)}"/>',
+      );
+
+    for (int i = 0; i < datos.length; i++) {
+      final double x = datos.length == 1
+          ? left + plotWidth / 2
+          : left + plotWidth * i / (datos.length - 1);
+
+      final double yM =
+          top + plotHeight - (plotHeight * datos[i].matrices / maximo);
+
+      final double yS =
+          top + plotHeight - (plotHeight * datos[i].seguimientos / maximo);
+
+      svg
+        ..writeln(
+          '<circle cx="${x.toStringAsFixed(1)}" '
+          'cy="${yM.toStringAsFixed(1)}" r="2.6" fill="#0D60D6"/>',
+        )
+        ..writeln(
+          '<circle cx="${x.toStringAsFixed(1)}" '
+          'cy="${yS.toStringAsFixed(1)}" r="2.6" fill="#1DA041"/>',
+        )
+        ..writeln(
+          '<text x="${x.toStringAsFixed(1)}" y="108" '
+          'text-anchor="middle" fill="#5E687A" '
+          'font-size="7.5">${datos[i].etiqueta}</text>',
+        );
+    }
+
+    svg.writeln('</svg>');
+
+    return svg.toString();
+  }
+
+  String _svgGraficoCircular(_ResumenRiesgo resumen) {
+    const double width = 330;
+    const double height = 115;
+    const double cx = 68;
+    const double cy = 58;
+    const double radius = 43;
+    const double innerRadius = 25;
+
+    final List<int> valores = <int>[
+      resumen.bajos,
+      resumen.medios,
+      resumen.altos,
+      resumen.criticos,
+    ];
+
+    const List<String> colores = <String>[
+      '#1DA041',
+      '#FEB81C',
+      '#EC7A18',
+      '#EC490F',
+    ];
+
+    const List<String> etiquetas = <String>['Bajo', 'Medio', 'Alto', 'Critico'];
+
+    final int total = valores.fold<int>(
+      0,
+      (int anterior, int actual) => anterior + actual,
+    );
+
+    final StringBuffer svg = StringBuffer()
+      ..writeln(
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'viewBox="0 0 $width $height">',
+      )
+      ..writeln(
+        '<rect width="$width" height="$height" rx="8" fill="#FFFFFF"/>',
+      );
+
+    if (total <= 0) {
+      svg.writeln('<circle cx="$cx" cy="$cy" r="$radius" fill="#E8EDF5"/>');
+    } else {
+      double inicio = -math.pi / 2;
+
+      for (int i = 0; i < valores.length; i++) {
+        final int valor = valores[i];
+
+        if (valor <= 0) {
+          continue;
+        }
+
+        final double barrido = math.pi * 2 * valor / total;
+        final double fin = inicio + barrido;
+
+        final double x1 = cx + radius * math.cos(inicio);
+        final double y1 = cy + radius * math.sin(inicio);
+        final double x2 = cx + radius * math.cos(fin);
+        final double y2 = cy + radius * math.sin(fin);
+
+        final int arcoGrande = barrido > math.pi ? 1 : 0;
+
+        svg.writeln(
+          '<path d="M $cx $cy '
+          'L ${x1.toStringAsFixed(2)} ${y1.toStringAsFixed(2)} '
+          'A $radius $radius 0 $arcoGrande 1 '
+          '${x2.toStringAsFixed(2)} ${y2.toStringAsFixed(2)} Z" '
+          'fill="${colores[i]}"/>',
+        );
+
+        inicio = fin;
+      }
+    }
+
+    svg
+      ..writeln('<circle cx="$cx" cy="$cy" r="$innerRadius" fill="#FFFFFF"/>')
+      ..writeln(
+        '<text x="$cx" y="56" text-anchor="middle" fill="#FFFFFF" '
+        'font-size="14" font-weight="700">$total</text>',
+      )
+      ..writeln(
+        '<text x="$cx" y="68" text-anchor="middle" fill="#5E687A" '
+        'font-size="7">riesgos</text>',
+      );
+
+    for (int i = 0; i < etiquetas.length; i++) {
+      final double y = 24 + i * 22;
+      final double porcentaje = total <= 0 ? 0 : valores[i] * 100 / total;
+
+      svg
+        ..writeln(
+          '<rect x="140" y="${(y - 7).toStringAsFixed(1)}" '
+          'width="9" height="9" rx="2" fill="${colores[i]}"/>',
+        )
+        ..writeln(
+          '<text x="156" y="$y" fill="#172033" font-size="8">'
+          '${etiquetas[i]}: ${valores[i]} '
+          '(${porcentaje.toStringAsFixed(0)}%)'
+          '</text>',
+        );
+    }
+
+    svg.writeln('</svg>');
+
+    return svg.toString();
+  }
+
   /// Distribucion rehecha:
   /// - muestra cantidad;
   /// - muestra porcentaje;
   /// - usa una barra rectangular limpia;
   /// - no usa Stack ni FractionallySizedBox.
+
+  // ignore: unused_element
   pw.Widget _seccionDistribucion(
     _ResumenRiesgo resumen, {
     required double barWidth,
@@ -417,7 +728,7 @@ class ReporteDashboardExportService {
             nombre: 'Bajo',
             cantidad: resumen.bajos,
             total: total,
-            color: const PdfColor.fromInt(0xFF3BD89F),
+            color: const PdfColor.fromInt(0xFF1DA041),
             barWidth: barWidth,
           ),
           pw.SizedBox(height: 7),
@@ -425,7 +736,7 @@ class ReporteDashboardExportService {
             nombre: 'Medio',
             cantidad: resumen.medios,
             total: total,
-            color: const PdfColor.fromInt(0xFFFFD35A),
+            color: const PdfColor.fromInt(0xFFFEB81C),
             barWidth: barWidth,
           ),
           pw.SizedBox(height: 7),
@@ -433,7 +744,7 @@ class ReporteDashboardExportService {
             nombre: 'Alto',
             cantidad: resumen.altos,
             total: total,
-            color: const PdfColor.fromInt(0xFFFF934B),
+            color: const PdfColor.fromInt(0xFFF28C28),
             barWidth: barWidth,
           ),
           pw.SizedBox(height: 7),
@@ -441,7 +752,7 @@ class ReporteDashboardExportService {
             nombre: 'Cr\u00EDtico',
             cantidad: resumen.criticos,
             total: total,
-            color: const PdfColor.fromInt(0xFFFF4B65),
+            color: const PdfColor.fromInt(0xFFEC490F),
             barWidth: barWidth,
           ),
         ],
@@ -467,7 +778,7 @@ class ReporteDashboardExportService {
           child: pw.Text(
             nombre,
             style: const pw.TextStyle(
-              color: PdfColor.fromInt(0xFFD9E6F7),
+              color: PdfColor.fromInt(0xFF172033),
               fontSize: 8,
             ),
           ),
@@ -477,7 +788,7 @@ class ReporteDashboardExportService {
           width: barWidth,
           height: 8,
           decoration: pw.BoxDecoration(
-            color: const PdfColor.fromInt(0xFF20324C),
+            color: const PdfColor.fromInt(0xFFE8EDF5),
             borderRadius: pw.BorderRadius.circular(4),
           ),
           child: pw.Align(
@@ -512,7 +823,7 @@ class ReporteDashboardExportService {
             porcentaje,
             textAlign: pw.TextAlign.right,
             style: const pw.TextStyle(
-              color: PdfColor.fromInt(0xFF9EB5D5),
+              color: PdfColor.fromInt(0xFF5E687A),
               fontSize: 7.5,
             ),
           ),
@@ -530,7 +841,7 @@ class ReporteDashboardExportService {
             child: _indicadorGrande(
               'Riesgo inicial promedio',
               resumen.promedioInicial.toStringAsFixed(1),
-              const PdfColor.fromInt(0xFFFF7D55),
+              const PdfColor.fromInt(0xFFF28C28),
             ),
           ),
           pw.SizedBox(width: 8),
@@ -538,7 +849,7 @@ class ReporteDashboardExportService {
             child: _indicadorGrande(
               'Riesgo residual promedio',
               resumen.promedioResidual.toStringAsFixed(1),
-              const PdfColor.fromInt(0xFF53A6FF),
+              const PdfColor.fromInt(0xFF0D60D6),
             ),
           ),
           pw.SizedBox(width: 8),
@@ -546,7 +857,7 @@ class ReporteDashboardExportService {
             child: _indicadorGrande(
               'Reducci\u00F3n estimada',
               '${resumen.reduccionPorcentaje.toStringAsFixed(0)}%',
-              const PdfColor.fromInt(0xFF56DEB2),
+              const PdfColor.fromInt(0xFF1DA041),
             ),
           ),
         ],
@@ -558,7 +869,7 @@ class ReporteDashboardExportService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
-        color: const PdfColor.fromInt(0xFF102039),
+        color: const PdfColor.fromInt(0xFFF6F8FC),
         borderRadius: pw.BorderRadius.circular(7),
       ),
       child: pw.Column(
@@ -576,7 +887,7 @@ class ReporteDashboardExportService {
           pw.Text(
             titulo,
             style: const pw.TextStyle(
-              color: PdfColor.fromInt(0xFFAFC1D9),
+              color: PdfColor.fromInt(0xFF5E687A),
               fontSize: 7,
             ),
           ),
@@ -605,7 +916,7 @@ class ReporteDashboardExportService {
           ? pw.Text(
               'No hay riesgos registrados.',
               style: const pw.TextStyle(
-                color: PdfColor.fromInt(0xFFAFC1D9),
+                color: PdfColor.fromInt(0xFF5E687A),
                 fontSize: 8,
               ),
             )
@@ -646,7 +957,7 @@ class ReporteDashboardExportService {
                           maxLines: 1,
                           overflow: pw.TextOverflow.clip,
                           style: const pw.TextStyle(
-                            color: PdfColor.fromInt(0xFFE7F0FA),
+                            color: PdfColor.fromInt(0xFF172033),
                             fontSize: 7.4,
                           ),
                         ),
@@ -699,7 +1010,7 @@ class ReporteDashboardExportService {
                 child: _miniSeguimiento(
                   titulo: 'Total',
                   valor: '$total',
-                  color: const PdfColor.fromInt(0xFF53A6FF),
+                  color: const PdfColor.fromInt(0xFF0D60D6),
                 ),
               ),
               pw.SizedBox(width: 6),
@@ -707,7 +1018,7 @@ class ReporteDashboardExportService {
                 child: _miniSeguimiento(
                   titulo: 'Verificados',
                   valor: '$verificados',
-                  color: const PdfColor.fromInt(0xFF56DEB2),
+                  color: const PdfColor.fromInt(0xFF1DA041),
                 ),
               ),
               pw.SizedBox(width: 6),
@@ -715,7 +1026,7 @@ class ReporteDashboardExportService {
                 child: _miniSeguimiento(
                   titulo: 'Pendientes',
                   valor: '$pendientes',
-                  color: const PdfColor.fromInt(0xFFFFAE57),
+                  color: const PdfColor.fromInt(0xFFFEB81C),
                 ),
               ),
               pw.SizedBox(width: 6),
@@ -724,7 +1035,7 @@ class ReporteDashboardExportService {
                   titulo: 'Avance promedio',
                   valor:
                       '${resumen.avancePromedioSeguimientos.toStringAsFixed(0)}%',
-                  color: const PdfColor.fromInt(0xFFB889FF),
+                  color: const PdfColor.fromInt(0xFF0D60D6),
                 ),
               ),
             ],
@@ -736,14 +1047,14 @@ class ReporteDashboardExportService {
               pw.Text(
                 'Cumplimiento de verificaci\u00F3n',
                 style: const pw.TextStyle(
-                  color: PdfColor.fromInt(0xFFD9E6F7),
+                  color: PdfColor.fromInt(0xFF172033),
                   fontSize: 7.5,
                 ),
               ),
               pw.Text(
                 '${(cumplimiento * 100).toStringAsFixed(0)}%',
                 style: pw.TextStyle(
-                  color: const PdfColor.fromInt(0xFF56DEB2),
+                  color: const PdfColor.fromInt(0xFF1DA041),
                   fontSize: 9,
                   fontWeight: pw.FontWeight.bold,
                 ),
@@ -755,7 +1066,7 @@ class ReporteDashboardExportService {
             width: barWidth,
             height: 8,
             decoration: pw.BoxDecoration(
-              color: const PdfColor.fromInt(0xFF20324C),
+              color: const PdfColor.fromInt(0xFFE8EDF5),
               borderRadius: pw.BorderRadius.circular(4),
             ),
             child: pw.Align(
@@ -764,7 +1075,7 @@ class ReporteDashboardExportService {
                 width: barWidth * cumplimiento,
                 height: 8,
                 decoration: pw.BoxDecoration(
-                  color: const PdfColor.fromInt(0xFF56DEB2),
+                  color: const PdfColor.fromInt(0xFF1DA041),
                   borderRadius: pw.BorderRadius.circular(4),
                 ),
               ),
@@ -776,7 +1087,7 @@ class ReporteDashboardExportService {
               '${resumen.seguimientosPendientesSincronizar} '
               'seguimiento(s) pendiente(s) de sincronizar',
               style: const pw.TextStyle(
-                color: PdfColor.fromInt(0xFFFFC36D),
+                color: PdfColor.fromInt(0xFFF28C28),
                 fontSize: 7.2,
               ),
             ),
@@ -794,7 +1105,7 @@ class ReporteDashboardExportService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(7),
       decoration: pw.BoxDecoration(
-        color: const PdfColor.fromInt(0xFF102039),
+        color: const PdfColor.fromInt(0xFFF6F8FC),
         borderRadius: pw.BorderRadius.circular(6),
       ),
       child: pw.Column(
@@ -813,7 +1124,7 @@ class ReporteDashboardExportService {
             titulo,
             maxLines: 1,
             style: const pw.TextStyle(
-              color: PdfColor.fromInt(0xFFAFC1D9),
+              color: PdfColor.fromInt(0xFF5E687A),
               fontSize: 6,
             ),
           ),
@@ -827,9 +1138,9 @@ class ReporteDashboardExportService {
       width: double.infinity,
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
-        color: const PdfColor.fromInt(0xFF0B172A),
+        color: const PdfColor.fromInt(0xFFFFFFFF),
         borderRadius: pw.BorderRadius.circular(9),
-        border: pw.Border.all(color: const PdfColor.fromInt(0xFF203652)),
+        border: pw.Border.all(color: const PdfColor.fromInt(0xFFD5DCE8)),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -837,7 +1148,7 @@ class ReporteDashboardExportService {
           pw.Text(
             titulo,
             style: pw.TextStyle(
-              color: PdfColors.white,
+              color: const PdfColor.fromInt(0xFF172033),
               fontSize: 9.5,
               fontWeight: pw.FontWeight.bold,
             ),
@@ -1003,19 +1314,31 @@ class ReporteDashboardExportService {
 
   PdfColor _colorPorValor(int valor) {
     if (valor <= 4) {
-      return const PdfColor.fromInt(0xFF3BD89F);
+      return const PdfColor.fromInt(0xFF1DA041);
     }
 
     if (valor <= 9) {
-      return const PdfColor.fromInt(0xFFFFD35A);
+      return const PdfColor.fromInt(0xFFFEB81C);
     }
 
     if (valor <= 16) {
-      return const PdfColor.fromInt(0xFFFF934B);
+      return const PdfColor.fromInt(0xFFF28C28);
     }
 
-    return const PdfColor.fromInt(0xFFFF4B65);
+    return const PdfColor.fromInt(0xFFEC490F);
   }
+}
+
+class _GraficoMesPdf {
+  const _GraficoMesPdf({
+    required this.etiqueta,
+    required this.matrices,
+    required this.seguimientos,
+  });
+
+  final String etiqueta;
+  final int matrices;
+  final int seguimientos;
 }
 
 class _ResumenRiesgo {
