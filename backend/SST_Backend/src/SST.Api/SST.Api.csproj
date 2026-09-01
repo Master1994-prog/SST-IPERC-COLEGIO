@@ -29,4 +29,11 @@
     <ProjectReference Include="..\SST.Infrastructure\SST.Infrastructure.csproj" />
   </ItemGroup>
 
+	<ItemGroup>
+		<!-- Nunca publicar la configuración privada de desarrollo -->
+		<Content Update="appsettings.Development.json">
+			<CopyToPublishDirectory>Never</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
+
 </Project>
