@@ -84,3 +84,27 @@ release_backup/
 ```
 
 `release_backup/` está excluido de Git.
+
+## URL del backend en el artefacto release
+
+<!-- API_BASE_URL_DART_DEFINE_RELEASE_V1 -->
+
+El APK/AAB incorpora la URL indicada al compilar.
+
+Desarrollo LAN:
+
+```powershell
+flutter build apk --release
+```
+
+Producción:
+
+```powershell
+flutter build apk --release `
+  --dart-define=API_BASE_URL=https://api.example.com/api
+
+flutter build appbundle --release `
+  --dart-define=API_BASE_URL=https://api.example.com/api
+```
+
+Antes de publicar un AAB se debe comprobar qué endpoint se está usando. Un AAB compilado sin `--dart-define=API_BASE_URL=...` seguirá utilizando la IP LAN de desarrollo por defecto.

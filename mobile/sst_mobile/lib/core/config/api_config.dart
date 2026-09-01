@@ -1,7 +1,23 @@
 class ApiConfig {
   ApiConfig._();
 
-  static const String baseUrl = 'http://192.168.18.23:5006/api';
+  // API_BASE_URL_DART_DEFINE_V1
+  //
+  // Desarrollo/pruebas LAN:
+  //   flutter run
+  //
+  // Otro backend:
+  //   flutter run --dart-define=API_BASE_URL=https://servidor.example.com/api
+  //
+  // Release de producción:
+  //   flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com/api
+  //   flutter build appbundle --release --dart-define=API_BASE_URL=https://api.example.com/api
+  //
+  // El valor por defecto conserva el servidor LAN usado durante las pruebas.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://192.168.18.23:5006/api',
+  );
 
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);

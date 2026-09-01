@@ -44,3 +44,26 @@ Si un registro no sincroniza:
 6. Corregir la causa.
 7. Reintentar sincronización.
 8. Verificar MySQL.
+
+## Configuración de API por ambiente
+
+<!-- API_BASE_URL_DART_DEFINE_OPERACION_V1 -->
+
+`ApiConfig.baseUrl` utiliza la variable de compilación `API_BASE_URL`.
+
+Ejemplos:
+
+```powershell
+# Desarrollo LAN actual
+flutter run
+
+# Servidor de pruebas
+flutter run --dart-define=API_BASE_URL=https://pruebas.example.com/api
+
+# Producción
+flutter run --release --dart-define=API_BASE_URL=https://api.example.com/api
+```
+
+Esto evita modificar el código fuente cada vez que cambia el servidor.
+
+Para un despliegue real, no utilizar la IP privada LAN como endpoint de producción.

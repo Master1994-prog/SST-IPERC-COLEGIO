@@ -98,3 +98,30 @@ La clave de firma original debe mantenerse en respaldo seguro. Las futuras actua
 ## Documentación
 
 Consultar la carpeta `docs/` para arquitectura, instalación, base de datos, modo offline, roles, seguridad, pruebas, operación, release, respaldo y checklist de entrega.
+
+## Configuración del backend por entorno
+
+<!-- API_BASE_URL_DART_DEFINE_DOC_V1 -->
+
+La URL del backend se define en compilación mediante `API_BASE_URL`.
+
+Sin parámetro, la aplicación conserva el backend LAN de desarrollo:
+
+```text
+http://192.168.18.23:5006/api
+```
+
+Para ejecutar contra otro servidor:
+
+```powershell
+flutter run --dart-define=API_BASE_URL=https://servidor.example.com/api
+```
+
+Para generar un release de producción:
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com/api
+flutter build appbundle --release --dart-define=API_BASE_URL=https://api.example.com/api
+```
+
+La URL de producción debe usar HTTPS y ser accesible desde los dispositivos donde se instalará SST EduRisk.
