@@ -46,3 +46,9 @@ _backup_permisos_*/
 
 # Artefactos privados de entrega
 release_backup/
+
+# Publicacion local del backend
+/backend/SST_Backend/publish/
+
+# Respaldo local de la base de datos de produccion
+/database/sst_colegio_cloud.sql
