@@ -179,10 +179,19 @@ class _SeguimientoIpercFormScreenState
       return;
     }
 
-    final String? usuarioIdTexto = await SecureStorageService.instance
-        .getUsuarioId();
+    final SecureStorageService secureStorage = SecureStorageService.instance;
 
-    final int usuarioId = int.tryParse(usuarioIdTexto ?? '') ?? 0;
+    // Primero intenta obtener el usuario de la sesión online.
+    String usuarioIdTexto = (await secureStorage.getUsuarioId())?.trim() ?? '';
+
+    // Si no existe sesión online, utiliza el usuario almacenado
+    // para funcionamiento offline.
+    if (usuarioIdTexto.isEmpty) {
+      usuarioIdTexto =
+          (await secureStorage.getOfflineUsuarioId())?.trim() ?? '';
+    }
+
+    final int usuarioId = int.tryParse(usuarioIdTexto) ?? 0;
 
     if (!mounted) {
       return;
